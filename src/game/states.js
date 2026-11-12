@@ -20,7 +20,7 @@ const MARGIN = 2; // 카메라: 커서를 화면 가장자리에서 최소 이 �
 
 const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
-export function createGame({ rng }) {
+export function createGame({ rng, map, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0;
@@ -28,8 +28,8 @@ export function createGame({ rng }) {
   const facing = {};
 
   function reset() {
-    st = createBattle();
-    mode = 'title';
+    st = map ? createBattle(map) : createBattle();
+    mode = 'banner';
     cursor = { x: 2, y: 5 };
     sel = walk = anim = banner = pause = focus = null;
     for (const u of st.units) facing[u.id] = u.side === 'ally' ? DIR.Right : DIR.Left;
@@ -196,11 +196,11 @@ export function createGame({ rng }) {
   function handle(ev) {
     const tile = ev.px !== undefined ? toTile(ev) : null;
     switch (mode) {
-      case 'title':
-        if (ev.type === 'confirm' || ev.type === 'click') playerPhase();
-        return;
       case 'result':
-        if ((ev.type === 'confirm' || ev.type === 'click') && resultT >= RESULT_LOCK) { reset(); playerPhase(); }
+        if ((ev.type === 'confirm' || ev.type === 'click') && resultT >= RESULT_LOCK) {
+          if (onExit) onExit(st.result);
+          else { reset(); playerPhase(); }
+        }
         return;
       case 'anim':
         if ((ev.type === 'confirm' || ev.type === 'click') && anim) anim.advance();
@@ -418,21 +418,10 @@ export function createGame({ rng }) {
     if (mode === 'target') drawForecast(ctx, sel, targets[tIdx], move);
     if (banner) ui.drawBanner(ctx, banner.text, banner.sub, banner.color, Math.min(1, banner.t));
     if (anim) anim.drawScreen(ctx);
-    if (mode === 'title') drawTitle(ctx, time);
     if (mode === 'result') drawResult(ctx, time);
   }
 
   const centered = (ctx, text, y, color, shadow) => drawText(ctx, text, Math.floor((W - textWidth(text)) / 2), y, color, shadow);
-
-  function drawTitle(ctx, time) {
-    ctx.fillStyle = 'rgba(16,24,40,0.55)';
-    ctx.fillRect(0, 0, W, H);
-    ui.drawWindow(ctx, 24, 44, 208, 96);
-    ui.bigText(ctx, '포켓몬 택틱스', W / 2, 54, '#304878', '#a8c0e0');
-    centered(ctx, '- 신오 대결전 -', 86, '#606878');
-    if (Math.floor(time * 2) % 2 === 0) centered(ctx, 'Z 키 또는 클릭', 112, '#e04040');
-    centered(ctx, '비공식 팬 데모', 174, '#c8d0e0', null);
-  }
 
   function drawResult(ctx, time) {
     ctx.fillStyle = 'rgba(16,16,24,0.6)';
@@ -441,8 +430,10 @@ export function createGame({ rng }) {
     ui.drawWindow(ctx, 40, 52, 176, 88);
     ui.bigText(ctx, win ? '승리!' : '패배...', W / 2, 62, win ? '#d8a000' : '#c03030', '#d8d8d0');
     if (win) centered(ctx, `${st.turn}턴 만에 클리어`, 94);
-    if (resultT >= RESULT_LOCK && Math.floor(time * 2) % 2 === 0) centered(ctx, 'Z 키로 다시 하기', 116, '#606878');
+    if (resultT >= RESULT_LOCK && Math.floor(time * 2) % 2 === 0) centered(ctx, onExit ? 'Z 키로 마을로 돌아가기' : 'Z 키로 다시 하기', 116, '#606878');
   }
+
+  playerPhase();
 
   return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get camera() { return { ...cam }; } };
 }

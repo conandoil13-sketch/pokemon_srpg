@@ -41,6 +41,10 @@ export function bindInput(canvas, getScale, onEvent) {
     if (!ev) return;
     e.preventDefault();
     if (e.repeat && ev.type !== 'dir') return;
-    onEvent(ev);
+    onEvent(e.repeat ? { ...ev, repeat: true } : ev); // 마을은 repeat 대신 release 로 '계속 누름'을 판단
+  });
+  addEventListener('keyup', (e) => {
+    const ev = KEYS[e.key];
+    if (ev?.type === 'dir') onEvent({ type: 'release', dx: ev.dx, dy: ev.dy });
   });
 }
