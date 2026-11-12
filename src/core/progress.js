@@ -2,8 +2,9 @@
 import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
-import { expForLevel } from './stats.js';
-import { startingMoves } from './learn.js';
+import { expForLevel, levelForExp, statsAt, MAX_LEVEL } from './stats.js';
+import { startingMoves, movesLearnedBetween, learnOutcome } from './learn.js';
+import { levelEvolutionReady, stoneEvolutionReady } from './evolution.js';
 
 export const STARTERS = ['chimchar', 'piplup', 'turtwig', 'shinx'];
 
@@ -14,3 +15,48 @@ export function newMember(species, level = BALANCE.startLevel) {
 }
 
 export const newParty = () => STARTERS.map((sp) => newMember(sp));
+
+// 기술 목록을 멤버에게 적용: 4개 미만이면 바로 배움, 이미 알면 skip, 꽉 차면 choose(UI 가 resolveChoice)
+function learnEvents(member, moves) {
+  return moves.map((move) => {
+    const outcome = learnOutcome(member.moves, move);
+    if (outcome === 'known') return { type: 'skip', species: member.species, move };
+    if (outcome === 'learn') { member.moves.push(move); return { type: 'learned', species: member.species, move }; }
+    return { type: 'choose', species: member.species, move };
+  });
+}
+
+// expBySpecies: 전투 로그 { [species]: exp }. 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
+export function applyExp(party, expBySpecies) {
+  const events = [];
+  for (const m of party) {
+    const gain = expBySpecies[m.species];
+    if (!gain) continue;
+    const s = SPECIES[m.species];
+    m.exp = Math.min(m.exp + gain, expForLevel(s.growth, MAX_LEVEL));
+    const to = levelForExp(s.growth, m.exp);
+    if (to <= m.level) continue;
+    const from = m.level;
+    events.push({ type: 'level', species: m.species, from, to, before: statsAt(s.base, from), after: statsAt(s.base, to) });
+    m.level = to;
+    events.push(...learnEvents(m, movesLearnedBetween(s.learnset, from, to, MOVES)));
+    if (levelEvolutionReady(s, to)) events.push({ type: 'evolve', species: m.species, to: s.evolution.to });
+  }
+  return events;
+}
+
+// forgetIndex: 잊을 기술 위치, null 이면 배우지 않음
+export function resolveChoice(member, move, forgetIndex) {
+  if (forgetIndex === null || forgetIndex === undefined) return;
+  member.moves[forgetIndex] = move;
+}
+
+// 진화: 종족 교체 후 새 종족이 '현재 레벨'에 배우는 기술 처리
+export function evolveMember(member, to) {
+  member.species = to;
+  const s = SPECIES[to];
+  const moves = s.learnset.filter(([lv, mv]) => lv === member.level && MOVES[mv]?.learnable).map(([, mv]) => mv);
+  return learnEvents(member, moves);
+}
+
+export const stoneTargets = (party) => party.filter((m) => stoneEvolutionReady(SPECIES[m.species]));

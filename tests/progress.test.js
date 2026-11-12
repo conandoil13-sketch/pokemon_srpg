@@ -1,0 +1,78 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { newParty, newMember, applyExp, resolveChoice, evolveMember, stoneTargets } from '../src/core/progress.js';
+import { expForLevel } from '../src/core/stats.js';
+import { movesLearnedBetween } from '../src/core/learn.js';
+import { SPECIES } from '../src/data/species.js';
+import { MOVES } from '../src/data/moves.js';
+
+const need = (m, level) => expForLevel(SPECIES[m.species].growth, level) - m.exp;
+
+test('level up without evolution', () => {
+  const party = newParty();
+  const m = party[0]; // chimchar Lv8
+  const ev = applyExp(party, { chimchar: need(m, 13) });
+  assert.equal(m.level, 13);
+  assert.deepEqual(ev[0].type, 'level');
+  assert.deepEqual([ev[0].from, ev[0].to], [8, 13]);
+  assert.ok(ev[0].after.hp > ev[0].before.hp);
+  assert.equal(ev.some((e) => e.type === 'evolve'), false);
+  const expected = movesLearnedBetween(SPECIES.chimchar.learnset, 8, 13, MOVES);
+  assert.deepEqual(ev.filter((e) => e.type === 'learned').map((e) => e.move), expected);
+});
+
+test('several levels crossing evolution: level → moves → evolve last', () => {
+  const party = newParty();
+  const m = party[0];
+  const ev = applyExp(party, { chimchar: need(m, 15) });
+  assert.equal(ev[0].type, 'level');
+  assert.equal(ev.at(-1).type, 'evolve');
+  assert.equal(ev.at(-1).to, 'monferno');
+  assert.ok(ev.slice(1, -1).every((e) => ['learned', 'choose', 'skip'].includes(e.type)));
+  // 진화 후: 새 종족의 현재 레벨(15)에서 배우는 기술만
+  const after = evolveMember(m, 'monferno');
+  assert.equal(m.species, 'monferno');
+  const atLevel = SPECIES.monferno.learnset.filter(([lv, mv]) => lv === 15 && MOVES[mv].learnable).map(([, mv]) => mv);
+  assert.deepEqual(after.map((e) => e.move), atLevel); // 같은 레벨 기술만, 순서대로 (learned/choose/skip 중 하나)
+});
+
+test('events follow party order', () => {
+  const party = newParty();
+  const ev = applyExp(party, { piplup: need(party[1], 10), chimchar: need(party[0], 10) });
+  const levels = ev.filter((e) => e.type === 'level').map((e) => e.species);
+  assert.deepEqual(levels, ['chimchar', 'piplup']);
+});
+
+test('full moveset → choose; resolveChoice replaces or keeps', () => {
+  const m = newMember('chimchar', 8);
+  m.moves = ['scratch', 'ember', 'tackle', 'peck'];
+  const ev = applyExp([m], { chimchar: need(m, 15) });
+  const c = ev.find((e) => e.type === 'choose');
+  assert.ok(c, 'choose event');
+  assert.deepEqual(m.moves, ['scratch', 'ember', 'tackle', 'peck']);
+  resolveChoice(m, c.move, 0);
+  assert.deepEqual(m.moves, [c.move, 'ember', 'tackle', 'peck']);
+  resolveChoice(m, 'flamethrower', null);
+  assert.equal(m.moves.includes('flamethrower'), false);
+});
+
+test('already known move → skip', () => {
+  const m = newMember('chimchar', 8);
+  const next = movesLearnedBetween(SPECIES.chimchar.learnset, 8, 15, MOVES)[0];
+  m.moves = ['scratch', 'ember', next];
+  const ev = applyExp([m], { chimchar: need(m, 15) });
+  assert.ok(ev.some((e) => e.type === 'skip' && e.move === next));
+  assert.equal(m.moves.filter((x) => x === next).length, 1);
+});
+
+test('level cap 100', () => {
+  const m = newMember('chimchar', 8);
+  applyExp([m], { chimchar: 1e12 });
+  assert.equal(m.level, 100);
+});
+
+test('stoneTargets', () => {
+  assert.deepEqual(stoneTargets(newParty()), []);
+  const party = [...newParty(), newMember('roselia', 20)];
+  assert.deepEqual(stoneTargets(party).map((m) => m.species), ['roselia']);
+});
