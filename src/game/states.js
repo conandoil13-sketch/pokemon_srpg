@@ -4,36 +4,58 @@ import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js'
 import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
-import { drawMap } from '../render/tiles.js';
-import { drawIcon } from '../render/sprites.js';
+import { drawMap, TILE } from '../render/tiles.js';
+import { drawUnitSprite, drawShadow, DIR } from '../render/sprites.js';
+import { dirFromDelta } from '../render/pmdData.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
-import { W } from '../render/screen.js';
+import { W, H } from '../render/screen.js';
 import { createAttackAnim } from './attackAnim.js';
 
-const STEP = 0.07; // 타일당 이동 시간(초)
+const STEP = 0.11; // 타일당 이동 시간(초)
 const BANNER = 1.4;
 const RESULT_LOCK = 0.8; // 결과 화면 입력 잠금(초)
 const BLUE = 'rgba(64,128,248,0.45)', RED = 'rgba(248,64,64,0.38)';
+const MARGIN = 2; // 카메라: 커서를 화면 가장자리에서 최소 이 칸만큼 안쪽에
 
 const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
 export function createGame({ rng }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
-  let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, ptr;
-  let resultT = 0;
+  let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
+  let resultT = 0, clock = 0;
+  const cam = { x: 0, y: 0 };
+  const facing = {};
 
   function reset() {
     st = createBattle();
     mode = 'title';
     cursor = { x: 2, y: 5 };
-    sel = walk = anim = banner = pause = null;
-    ptr = null;
+    sel = walk = anim = banner = pause = focus = null;
+    for (const u of st.units) facing[u.id] = u.side === 'ally' ? DIR.Right : DIR.Left;
+    const t = camTarget(cursor);
+    cam.x = t.x; cam.y = t.y;
   }
+
+  const mapW = () => st.width * TILE, mapH = () => st.height * TILE;
+  const clampCam = (x, y) => ({ x: Math.max(0, Math.min(mapW() - W, x)), y: Math.max(0, Math.min(mapH() - H, y)) });
+
+  // 대상 타일이 화면 가장자리 MARGIN 칸 안쪽에 오도록 하는 카메라 목표
+  function camTarget(t) {
+    let { x, y } = cam;
+    const px = t.x * TILE, py = t.y * TILE, m = MARGIN * TILE;
+    if (px - x < m) x = px - m;
+    if (px + TILE - x > W - m) x = px + TILE - W + m;
+    if (py - y < m) y = py - m;
+    if (py + TILE - y > H - m) y = py + TILE - H + m;
+    return clampCam(x, y);
+  }
+
   reset();
 
   const allyUnits = () => st.units.filter((u) => u.side === 'ally');
   const inMap = (x, y) => x >= 0 && y >= 0 && x < st.width && y < st.height;
+  const toTile = (ev) => ({ x: Math.floor((ev.px + Math.round(cam.x)) / TILE), y: Math.floor((ev.py + Math.round(cam.y)) / TILE) });
 
   function targetsFor(unit, moveId) {
     const [min, max] = MOVES[moveId].range;
@@ -59,12 +81,12 @@ export function createGame({ rng }) {
     mode = 'banner';
   }
 
-  const playerPhase = () => showBanner('PLAYER PHASE', `Turn ${st.turn}`, '#4080f8', () => { mode = 'idle'; });
+  const playerPhase = () => showBanner('아군 턴', `${st.turn}턴째`, '#4080f8', () => { mode = 'idle'; focus = null; });
 
   function enemyPhase() {
     sel = null;
     endPhase(st);
-    showBanner('ENEMY PHASE', null, '#f84040', () => {
+    showBanner('상대 턴', null, '#f84040', () => {
       enemyQueue = enemyTurnOrder(st).map((u) => u.id);
       mode = 'enemy';
       nextEnemy();
@@ -76,19 +98,21 @@ export function createGame({ rng }) {
     const id = enemyQueue.shift();
     if (!id) {
       endPhase(st);
+      cursor = { ...(allyUnits()[0] ?? cursor) };
       playerPhase();
       return;
     }
     const u = st.units.find((o) => o.id === id);
     if (!u) { nextEnemy(); return; }
     const plan = planEnemyAction(st, u);
+    focus = u;
     cursor = { x: u.x, y: u.y };
     pause = { t: 0.35, fn: () => {
       startWalk(u, pathTo(st.grid, st.units, u, plan.moveTo.x, plan.moveTo.y), () => {
         cursor = { ...plan.moveTo };
         if (plan.attack) {
           const target = st.units.find((o) => o.id === plan.attack.targetId);
-          pause = { t: 0.25, fn: () => doAttack(u, target, plan.attack.moveId, nextEnemy) };
+          pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, nextEnemy) };
         } else {
           u.acted = true;
           pause = { t: 0.2, fn: nextEnemy };
@@ -98,35 +122,40 @@ export function createGame({ rng }) {
   }
 
   function startWalk(unit, path, onDone) {
-    const prevMode = mode;
-    walk = { unit, path, t: 0, onDone, prevMode };
+    walk = { unit, path, t: 0, onDone, prevMode: mode };
     mode = 'walking';
   }
 
   function doAttack(attacker, target, moveId, then) {
     const hpBefore = target.hp;
+    facing[attacker.id] = dirFromDelta(target.x - attacker.x, target.y - attacker.y);
+    facing[target.id] = dirFromDelta(attacker.x - target.x, attacker.y - target.y);
     const result = applyAttack(st, attacker.id, target.id, moveId, rng);
     anim = createAttackAnim({ attacker, defender: target, move: MOVES[moveId], result, hpBefore });
     animThen = then;
+    focus = target;
     mode = 'anim';
   }
 
   function select(u) {
     sel = u;
-    origin = { x: u.x, y: u.y };
+    origin = { x: u.x, y: u.y, facing: facing[u.id] };
     reach = reachable(st.grid, st.units, u);
     atkTiles = attackTilesFrom(u, reach);
     mode = 'selected';
   }
 
+  // 메뉴는 유닛의 화면 위치 반대편 모서리 (FE식)
+  function cornerFor(unit, w) {
+    const sx = unit.x * TILE - Math.round(cam.x);
+    return { x: sx < W / 2 ? W - w - 2 : 2, y: 2 };
+  }
+
   function openAction() {
     menu = spec(sel).moves.map((m) => ({ label: MOVES[m].name, enabled: targetsFor(sel, m).length > 0, moveId: m }));
-    menu.push({ label: 'Wait', enabled: true });
+    menu.push({ label: '대기', enabled: true });
     menuSel = Math.max(0, menu.findIndex((i) => i.enabled));
-    // FE식: 유닛 반대편 화면 모서리에 메뉴, 그 아래 기술 정보
-    const r = ui.menuRect(menu, 0, 0);
-    const w = Math.max(r.w, 104);
-    menuBox = { x: sel.x < 8 ? W - w - 2 : 2, y: 2 };
+    menuBox = cornerFor(sel, ui.menuRect(menu, 0, 0).w);
     mode = 'action';
   }
 
@@ -138,9 +167,9 @@ export function createGame({ rng }) {
   }
 
   function openEndMenu() {
-    menu = [{ label: 'End Turn', enabled: true }, { label: 'Cancel', enabled: true }];
+    menu = [{ label: '턴 종료', enabled: true }, { label: '취소', enabled: true }];
     menuSel = 0;
-    menuBox = { x: Math.min(cursor.x * 16 + 20, W - 108), y: Math.min(cursor.y * 16, 150) };
+    menuBox = cornerFor(cursor, ui.menuRect(menu, 0, 0).w);
     mode = 'endMenu';
   }
 
@@ -148,10 +177,10 @@ export function createGame({ rng }) {
     const it = menu[menuSel];
     if (!it?.enabled) return;
     if (mode === 'endMenu') {
-      if (it.label === 'End Turn') enemyPhase(); else mode = 'idle';
+      if (menuSel === 0) enemyPhase(); else mode = 'idle';
       return;
     }
-    if (!it.moveId) { // Wait
+    if (!it.moveId) { // 대기
       sel.acted = true; sel.moved = true;
       finishAllyAction();
       return;
@@ -165,20 +194,19 @@ export function createGame({ rng }) {
 
   // ---------- 입력 ----------
   function handle(ev) {
-    if (ev.type === 'cursor') ptr = ev;
+    const tile = ev.px !== undefined ? toTile(ev) : null;
     switch (mode) {
       case 'title':
         if (ev.type === 'confirm' || ev.type === 'click') playerPhase();
         return;
       case 'result':
-        // 메시지 넘기던 연타로 결과 화면이 바로 스킵되지 않게 잠깐 입력을 막는다
         if ((ev.type === 'confirm' || ev.type === 'click') && resultT >= RESULT_LOCK) { reset(); playerPhase(); }
         return;
       case 'anim':
         if ((ev.type === 'confirm' || ev.type === 'click') && anim) anim.advance();
         return;
       case 'idle': case 'selected': {
-        if (ev.type === 'cursor') cursor = { x: ev.x, y: ev.y };
+        if (tile && (ev.type === 'cursor' || ev.type === 'click') && inMap(tile.x, tile.y)) cursor = tile;
         if (ev.type === 'dir' && inMap(cursor.x + ev.dx, cursor.y + ev.dy)) cursor = { x: cursor.x + ev.dx, y: cursor.y + ev.dy };
         const pick = ev.type === 'confirm' || ev.type === 'click';
         if (mode === 'idle') {
@@ -211,7 +239,8 @@ export function createGame({ rng }) {
         if (ev.type === 'cancel') {
           if (mode === 'endMenu') { mode = 'idle'; return; }
           sel.x = origin.x; sel.y = origin.y; sel.moved = false;
-          cursor = { ...origin };
+          facing[sel.id] = origin.facing;
+          cursor = { x: origin.x, y: origin.y };
           mode = 'selected';
         }
         return;
@@ -221,10 +250,10 @@ export function createGame({ rng }) {
           tIdx = (tIdx + (ev.dx + ev.dy > 0 ? 1 : -1) + targets.length) % targets.length;
           cursor = { x: targets[tIdx].x, y: targets[tIdx].y };
         }
-        if (ev.type === 'cursor' || ev.type === 'click') {
-          const i = targets.findIndex((t) => t.x === ev.x && t.y === ev.y);
+        if (tile && (ev.type === 'cursor' || ev.type === 'click')) {
+          const i = targets.findIndex((t) => t.x === tile.x && t.y === tile.y);
           if (i >= 0) {
-            tIdx = i; cursor = { x: ev.x, y: ev.y };
+            tIdx = i; cursor = { ...tile };
             if (ev.type === 'click') doAttack(sel, targets[tIdx], move, finishAllyAction);
           }
           return;
@@ -239,7 +268,9 @@ export function createGame({ rng }) {
 
   // ---------- 갱신 ----------
   function update(dt) {
+    clock += dt;
     resultT = mode === 'result' ? resultT + dt : 0;
+    updateCamera(dt);
     if (pause) {
       pause.t -= dt;
       if (pause.t <= 0) { const fn = pause.fn; pause = null; fn(); }
@@ -250,6 +281,11 @@ export function createGame({ rng }) {
       if (banner.t >= 1) { const next = banner.next; banner = null; next(); }
     } else if (mode === 'walking') {
       walk.t += dt;
+      const i = Math.min(Math.floor(walk.t / STEP), walk.path.length - 2);
+      if (i >= 0) {
+        const a = walk.path[i], b = walk.path[i + 1];
+        facing[walk.unit.id] = dirFromDelta(b.x - a.x, b.y - a.y);
+      }
       if (walk.t >= STEP * (walk.path.length - 1)) {
         const { onDone, prevMode, unit, path } = walk;
         walk = null;
@@ -262,38 +298,56 @@ export function createGame({ rng }) {
       anim.update(dt);
       if (anim.done) {
         anim = null;
-        // 다음 행동 전 대기(pause) 동안에도 'anim' 에 머물지 않도록 먼저 모드를 되돌린다
+        // 다음 행동 전 대기(pause) 동안 'anim' 에 머물지 않도록 먼저 모드를 되돌린다
         mode = st.result ? 'result' : st.phase === 'enemy' ? 'enemy' : 'idle';
         if (!st.result) animThen();
       }
     }
   }
 
+  function updateCamera(dt) {
+    let t;
+    if (walk) { const p = unitWorld(walk.unit); t = camTarget({ x: p.x / TILE, y: p.y / TILE }); }
+    else if (focus && (mode === 'anim' || mode === 'enemy')) t = camTarget(focus);
+    else t = camTarget(cursor);
+    const k = Math.min(1, dt * 10);
+    cam.x += (t.x - cam.x) * k;
+    cam.y += (t.y - cam.y) * k;
+    if (Math.abs(t.x - cam.x) < 0.5) cam.x = t.x;
+    if (Math.abs(t.y - cam.y) < 0.5) cam.y = t.y;
+  }
+
   // ---------- 그리기 ----------
-  function unitPos(u) {
+  // 유닛의 월드 좌표 (타일 왼쪽 위)
+  function unitWorld(u) {
     if (walk && walk.unit === u) {
       const f = walk.t / STEP;
       const i = Math.min(Math.floor(f), walk.path.length - 1);
       const a = walk.path[i], b = walk.path[Math.min(i + 1, walk.path.length - 1)];
       const k = f - i;
-      return { px: Math.round((a.x + (b.x - a.x) * k) * 16), py: Math.round((a.y + (b.y - a.y) * k) * 16) };
+      return { x: Math.round((a.x + (b.x - a.x) * k) * TILE), y: Math.round((a.y + (b.y - a.y) * k) * TILE) };
     }
-    return { px: u.x * 16, py: u.y * 16 };
+    return { x: u.x * TILE, y: u.y * TILE };
   }
 
-  function drawUnits(ctx, time) {
+  function drawUnits(ctx) {
     const list = [...st.units];
     if (anim && !st.units.includes(anim.defender)) list.push(anim.defender); // 기절 연출 중
-    list.sort((a, b) => unitPos(a).py - unitPos(b).py);
-    const frame = Math.floor(time / 0.5) % 2;
+    list.sort((a, b) => unitWorld(a).y - unitWorld(b).y);
     for (const u of list) {
-      const { px, py } = unitPos(u);
-      ctx.fillStyle = u.side === 'ally' ? 'rgba(56,112,248,0.75)' : 'rgba(248,56,56,0.75)';
-      ctx.fillRect(px + 3, py + 13, 10, 2);
-      ctx.fillRect(px + 2, py + 14, 12, 1);
-      const grey = u.acted && st.phase === (u.side === 'ally' ? 'player' : 'enemy');
-      if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.8)'; }
-      drawIcon(ctx, u.species, px, py, grey ? 0 : frame);
+      const p = unitWorld(u);
+      const cx = p.x + TILE / 2, cy = p.y + TILE / 2;
+      const pose = anim?.unitPose(u);
+      if (pose?.hidden) continue;
+      drawShadow(ctx, cx, cy, u.side === 'ally' ? 'rgba(40,80,200,0.45)' : 'rgba(200,40,40,0.45)');
+      const grey = u.acted && !pose && st.phase === (u.side === 'ally' ? 'player' : 'enemy');
+      const walking = walk && walk.unit === u;
+      const a = pose?.anim ?? (walking ? 'Walk' : 'Idle');
+      const t = pose ? pose.t : walking ? walk.t : clock;
+      if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.85)'; }
+      if (pose?.flash) { ctx.save(); ctx.filter = 'brightness(3)'; }
+      drawUnitSprite(ctx, u.species, a, pose?.dir ?? facing[u.id], grey ? 0 : t, cx + (pose?.dx ?? 0), cy + (pose?.dy ?? 0), pose ? pose.loop : true);
+      if (pose?.flash) ctx.restore();
       if (grey) ctx.restore();
     }
   }
@@ -304,106 +358,91 @@ export function createGame({ rng }) {
     const hit = hitChance(a, d, mv, tile);
     const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile });
     const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile });
-    const y = d.y >= 7 ? 2 : 146;
-    ui.drawWindow(ctx, 2, y, W - 4, 44);
-    drawText(ctx, `${spec(a).name} > ${spec(d).name}`, 10, y + 6);
-    drawText(ctx, mv.name, 10, y + 18);
-    drawText(ctx, `HIT ${hit}%`, 10, y + 30);
-    const dmg = min.typeMult === 0 ? '0' : `${min.damage}-${max.damage}`;
-    drawText(ctx, `DMG ${dmg}`, 64, y + 30);
-    const ko = min.damage >= d.hp && hit === 100 ? 'KO!' : max.damage >= d.hp ? 'KO?' : '';
-    if (ko) drawText(ctx, ko, 140, y + 30, '#e03030');
+    const y = (d.y * TILE - cam.y) > H / 2 ? 2 : H - 54;
+    ui.drawWindow(ctx, 2, y, W - 4, 52);
+    drawText(ctx, `${spec(a).name} → ${spec(d).name}`, 10, y + 5);
+    ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
+    drawText(ctx, mv.name, 10, y + 20);
     const tm = min.typeMult;
-    const eff = tm === 0 ? ['No effect', '#808080'] : tm > 1 ? ['Super effective!', '#20a020'] : tm < 1 ? ['Not very effective', '#c07020'] : null;
-    if (eff) drawText(ctx, eff[0], W - 12 - textWidth(eff[0]), y + 18, eff[1]);
-    ui.drawTypeBadge(ctx, mv.type, W - 40, y + 5);
-    ui.drawHpBar(ctx, 164, y + 32, 80, Math.max(0, d.hp - max.damage), d.maxHp);
+    const eff = tm === 0 ? ['효과 없음', '#808080'] : tm > 1 ? ['효과 굉장', '#20a020'] : tm < 1 ? ['효과 별로', '#c07020'] : null;
+    if (eff) drawText(ctx, eff[0], W - 12 - textWidth(eff[0]), y + 20, eff[1]);
+    drawText(ctx, `명중 ${tm === 0 ? '-' : `${hit}%`}`, 10, y + 35);
+    drawText(ctx, `데미지 ${tm === 0 ? 0 : `${min.damage}~${max.damage}`}`, 72, y + 35);
+    const ko = tm === 0 ? '' : min.damage >= d.hp && hit === 100 ? '기절!' : max.damage >= d.hp ? '기절?' : '';
+    if (ko) drawText(ctx, ko, 172, y + 35, '#e03030');
+    ui.drawHpBar(ctx, 206, y + 39, 40, Math.max(0, d.hp - max.damage), d.maxHp);
   }
 
   function drawMoveInfo(ctx, moveId) {
     const mv = MOVES[moveId];
     const r = ui.menuRect(menu, menuBox.x, menuBox.y);
-    const w = 104, h = 44;
+    const w = r.w, h = 50;
     const x = r.x, y = r.y + r.h + 2;
     ui.drawWindow(ctx, x, y, w, h);
     ui.drawTypeBadge(ctx, mv.type, x + 6, y + 5);
-    drawText(ctx, mv.category === 'physical' ? 'PHYS' : 'SPEC', x + 40, y + 6);
-    drawText(ctx, `PWR ${mv.power}`, x + 6, y + 18);
-    drawText(ctx, `ACC ${mv.accuracy}`, x + 54, y + 18);
-    drawText(ctx, `RANGE ${mv.range[0]}-${mv.range[1]}`, x + 6, y + 30);
+    drawText(ctx, mv.category === 'physical' ? '물리' : '특수', x + 44, y + 4);
+    drawText(ctx, `위력 ${mv.power}`, x + 6, y + 19);
+    drawText(ctx, `명중 ${mv.accuracy}`, x + 60, y + 19);
+    drawText(ctx, `사거리 ${mv.range[0]}~${mv.range[1]}`, x + 6, y + 33);
   }
 
-  function draw(ctx, time) {
-    drawMap(ctx, st.grid, time);
+  const toPts = (m) => [...m.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; });
 
+  function draw(ctx, time) {
+    const cx = Math.round(cam.x), cy = Math.round(cam.y);
+    ctx.fillStyle = '#101018';
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.translate(-cx, -cy);
+    drawMap(ctx, st.grid, time, cx, cy, W, H);
     if (mode === 'selected') {
-      ui.drawHighlights(ctx, [...reach.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; }), BLUE);
+      ui.drawHighlights(ctx, toPts(reach), BLUE);
       ui.drawHighlights(ctx, atkTiles, RED);
     }
-    if (mode === 'action' && menu[menuSel]?.moveId) {
-      ui.drawHighlights(ctx, tilesInRange(sel.x, sel.y, MOVES[menu[menuSel].moveId].range, st.width, st.height), RED);
-    }
+    if (mode === 'action' && menu[menuSel]?.moveId) ui.drawHighlights(ctx, tilesInRange(sel.x, sel.y, MOVES[menu[menuSel].moveId].range, st.width, st.height), RED);
     if (mode === 'target') ui.drawHighlights(ctx, tilesInRange(sel.x, sel.y, MOVES[move].range, st.width, st.height), RED);
+    drawUnits(ctx);
+    if (['idle', 'selected', 'target'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
+    if (anim) anim.drawWorld(ctx);
+    ctx.restore();
 
-    drawUnits(ctx, time);
-
-    if (['idle', 'selected', 'target', 'enemy'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
-
-    if (mode === 'idle' || mode === 'selected') {
+    const onLeft = cursor.x * TILE - cx < W / 2;
+    if (mode === 'idle' || mode === 'selected' || mode === 'enemy') {
       const u = unitAt(st, cursor.x, cursor.y);
-      if (u) ui.drawUnitInfo(ctx, u, cursor.x);
+      if (u) ui.drawUnitInfo(ctx, u, onLeft);
     }
     if (mode === 'action' || mode === 'endMenu') {
       ui.drawMenu(ctx, menu, menuSel, menuBox.x, menuBox.y);
       if (mode === 'action' && menu[menuSel]?.moveId) drawMoveInfo(ctx, menu[menuSel].moveId);
     }
     if (mode === 'target') drawForecast(ctx, sel, targets[tIdx], move);
-    if (mode === 'enemy') {
-      const u = unitAt(st, cursor.x, cursor.y);
-      if (u) ui.drawUnitInfo(ctx, u, cursor.x);
-    }
     if (banner) ui.drawBanner(ctx, banner.text, banner.sub, banner.color, Math.min(1, banner.t));
-    if (anim) anim.draw(ctx, time);
+    if (anim) anim.drawScreen(ctx);
     if (mode === 'title') drawTitle(ctx, time);
     if (mode === 'result') drawResult(ctx, time);
   }
 
-  function bigText(ctx, text, y, color, shadow) {
-    ctx.save();
-    ctx.translate(Math.floor((W - textWidth(text) * 2) / 2), y);
-    ctx.scale(2, 2);
-    drawText(ctx, text, 0, 0, color, shadow);
-    ctx.restore();
-  }
+  const centered = (ctx, text, y, color, shadow) => drawText(ctx, text, Math.floor((W - textWidth(text)) / 2), y, color, shadow);
 
   function drawTitle(ctx, time) {
     ctx.fillStyle = 'rgba(16,24,40,0.55)';
-    ctx.fillRect(0, 0, W, 192);
-    ui.drawWindow(ctx, 24, 48, 208, 84);
-    bigText(ctx, 'POKEMON TACTICS', 60, '#304878', '#a8c0e0');
-    const sub = '- Sinnoh Skirmish -';
-    drawText(ctx, sub, Math.floor((W - textWidth(sub)) / 2), 86, '#606878');
-    if (Math.floor(time * 2) % 2 === 0) {
-      const p = 'Press Z or Click';
-      drawText(ctx, p, Math.floor((W - textWidth(p)) / 2), 108, '#e04040');
-    }
-    const fan = 'Unofficial fan demo';
-    drawText(ctx, fan, Math.floor((W - textWidth(fan)) / 2), 178, '#c8d0e0', null);
+    ctx.fillRect(0, 0, W, H);
+    ui.drawWindow(ctx, 24, 44, 208, 96);
+    ui.bigText(ctx, '포켓몬 택틱스', W / 2, 54, '#304878', '#a8c0e0');
+    centered(ctx, '- 신오 대결전 -', 86, '#606878');
+    if (Math.floor(time * 2) % 2 === 0) centered(ctx, 'Z 키 또는 클릭', 112, '#e04040');
+    centered(ctx, '비공식 팬 데모', 174, '#c8d0e0', null);
   }
 
   function drawResult(ctx, time) {
     ctx.fillStyle = 'rgba(16,16,24,0.6)';
-    ctx.fillRect(0, 0, W, 192);
+    ctx.fillRect(0, 0, W, H);
     const win = st.result === 'win';
-    ui.drawWindow(ctx, 40, 56, 176, 76);
-    bigText(ctx, win ? 'VICTORY!' : 'DEFEAT...', 68, win ? '#d8a000' : '#c03030', '#d0d0d0');
-    const t = `Cleared on turn ${st.turn}`;
-    if (win) drawText(ctx, t, Math.floor((W - textWidth(t)) / 2), 94);
-    if (Math.floor(time * 2) % 2 === 0) {
-      const p = 'Press Z to play again';
-      drawText(ctx, p, Math.floor((W - textWidth(p)) / 2), 112, '#606878');
-    }
+    ui.drawWindow(ctx, 40, 52, 176, 88);
+    ui.bigText(ctx, win ? '승리!' : '패배...', W / 2, 62, win ? '#d8a000' : '#c03030', '#d8d8d0');
+    if (win) centered(ctx, `${st.turn}턴 만에 클리어`, 94);
+    if (resultT >= RESULT_LOCK && Math.floor(time * 2) % 2 === 0) centered(ctx, 'Z 키로 다시 하기', 116, '#606878');
   }
 
-  return { handle, update, draw, get state() { return st; }, get mode() { return mode; } };
+  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get camera() { return { ...cam }; } };
 }

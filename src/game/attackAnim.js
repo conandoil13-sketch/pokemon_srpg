@@ -1,4 +1,4 @@
-// 공격 연출 선택 지점: 배틀 컷인 사용
-import { createCutin } from '../render/cutin.js';
+// 공격 연출 선택 지점: 맵 위 PMD식 연출
+import { createMapAttack } from '../render/mapAttack.js';
 
-export const createAttackAnim = createCutin;
+export const createAttackAnim = createMapAttack;

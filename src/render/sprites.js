@@ -1,12 +1,22 @@
-// 스프라이트 등록소: 사용자 스프라이트 팩 → 없으면 오리지널 임시 도트
+// 스프라이트 등록소
+// 1순위: PMD Sprite Collab 폴더 (assets/sprites/pmd/sprite/0392/AnimData.xml + *-Anim.png,
+//        assets/sprites/pmd/portrait/0392/Normal.png …) — 사용자가 직접 받아 넣는다.
+// 없으면: 코드로 그린 오리지널 임시 도트.
 import { SPECIES } from '../data/species.js';
 import { TYPE_COLORS } from '../data/types.js';
 import { shade, hash } from './pixels.js';
+import { parseAnimData, frameAt, animLength, DIR } from './pmdData.js';
 
-const KINDS = ['icons', 'front', 'back'];
-const images = {}; // `${kind}/${key}` → HTMLImageElement | null
-const fallback = {}; // `${kind}/${key}/${size}` → canvas
+export const PMD_BASE = 'assets/sprites/pmd';
+const WANT_ANIMS = ['Idle', 'Walk', 'Attack', 'Strike', 'Shoot', 'Hurt'];
+const EMOTIONS = ['Normal', 'Determined', 'Pain', 'Happy'];
+
+const pmd = {};       // key → { data, sheets: {sheet: img} } | null
+const portraits = {}; // `${key}/${emotion}` → img | null
+const fallback = {};
 let warned = false;
+
+const pad4 = (n) => String(n).padStart(4, '0');
 
 function loadImage(src) {
   return new Promise((resolve) => {
@@ -17,135 +27,143 @@ function loadImage(src) {
   });
 }
 
-export async function loadSprites(speciesKeys) {
-  const jobs = [];
-  for (const key of speciesKeys) {
-    for (const kind of KINDS) {
-      jobs.push(loadImage(`assets/sprites/${kind}/${SPECIES[key].dex}.png`).then((img) => {
-        images[`${kind}/${key}`] = img;
-        if (!img && !warned) {
-          warned = true;
-          console.warn('[sprites] Sprite pack not found (or incomplete) — using placeholder pixel art.');
-        }
-      }));
-    }
+async function loadPmd(key) {
+  const dir = `${PMD_BASE}/sprite/${pad4(SPECIES[key].dex)}`;
+  let data;
+  try {
+    const res = await fetch(`${dir}/AnimData.xml`);
+    if (!res.ok) return null;
+    data = parseAnimData(await res.text());
+  } catch {
+    return null;
   }
-  await Promise.all(jobs);
+  const sheets = {};
+  const names = new Set(WANT_ANIMS.map((n) => data.anims[n]?.sheet).filter(Boolean));
+  await Promise.all([...names].map(async (s) => { sheets[s] = await loadImage(`${dir}/${s}-Anim.png`); }));
+  if (!data.anims.Idle || !sheets[data.anims.Idle.sheet]) return null;
+  return { data, sheets };
 }
 
-// ---------- 오리지널 임시 도트 생성 ----------
-// N×N 격자에 타입 색 기반 생물 실루엣을 찍는다. back=true 면 뒷모습(눈 없음).
-function makeCreature(key, N, back) {
+export async function loadSprites(keys) {
+  await Promise.all(keys.map(async (key) => {
+    pmd[key] = await loadPmd(key);
+    const dir = `${PMD_BASE}/portrait/${pad4(SPECIES[key].dex)}`;
+    await Promise.all(EMOTIONS.map(async (e) => { portraits[`${key}/${e}`] = await loadImage(`${dir}/${e}.png`); }));
+    if (!pmd[key] && !warned) {
+      warned = true;
+      console.warn('[sprites] PMD sprite folder not found for some Pokémon — using placeholder pixel art.');
+    }
+  }));
+}
+
+export const hasPmd = (key) => !!pmd[key];
+
+// 애니메이션이 없으면 대체: Attack ← Strike, Shoot ← Attack, Walk ← Idle
+function pickAnim(p, name) {
+  const order = { Attack: ['Attack', 'Strike'], Shoot: ['Shoot', 'Attack', 'Strike'], Walk: ['Walk', 'Idle'], Hurt: ['Hurt', 'Idle'] }[name] ?? [name, 'Idle'];
+  for (const n of order) {
+    const a = p.data.anims[n];
+    if (a && p.sheets[a.sheet]) return a;
+  }
+  return p.data.anims.Idle;
+}
+
+// 애니메이션 길이(초)와 타격 시점(초). 임시 도트는 고정값
+export function animTiming(key, name) {
+  const p = pmd[key];
+  if (!p) return { length: 0.45, hit: 0.22 };
+  const a = pickAnim(p, name);
+  const len = animLength(a) / 60;
+  const hitTicks = a.hitFrame === null ? animLength(a) / 2 : a.durations.slice(0, a.hitFrame).reduce((s, d) => s + d, 0);
+  return { length: len, hit: hitTicks / 60 };
+}
+
+// ---------- 임시 도트 ----------
+function makeCreature(key, N) {
   const s = SPECIES[key];
   const c1 = TYPE_COLORS[s.types[0]];
   const c2 = s.types[1] ? TYPE_COLORS[s.types[1]] : shade(c1, 1.45);
   const variant = Math.floor(hash(key) * 4);
   const grid = Array.from({ length: N }, () => new Array(N).fill(null));
   const put = (x, y, col) => { if (x >= 0 && y >= 0 && x < N && y < N) grid[y][x] = col; };
-
   const cx = (N - 1) / 2, cy = N * 0.62, rx = N * 0.32, ry = N * 0.28;
-  // 귀/뿔/지느러미
   const earH = Math.round(N * 0.22);
   for (let i = 0; i < earH; i++) {
     const w = variant === 1 ? Math.round(earH * 0.5) : Math.max(1, Math.round((i / earH) * earH * 0.6));
     const top = Math.round(cy - ry) - earH + i + 1;
-    if (variant === 2) { // 가운데 뿔
-      for (let dx = -Math.floor(w / 2); dx <= Math.floor(w / 2); dx++) put(Math.round(cx) + dx, top, c2);
-    } else if (variant === 3) { // 볏
-      for (let k = -1; k <= 1; k++) if (i >= Math.abs(k) * 2) put(Math.round(cx + k * N * 0.12), top, c2);
-    } else {
-      for (let dx = 0; dx < w; dx++) {
-        put(Math.round(cx - rx * 0.6) + dx - Math.floor(w / 2), top, c1);
-        put(Math.round(cx + rx * 0.6) + dx - Math.floor(w / 2), top, c1);
-      }
-    }
+    if (variant === 2) for (let dx = -Math.floor(w / 2); dx <= Math.floor(w / 2); dx++) put(Math.round(cx) + dx, top, c2);
+    else if (variant === 3) { for (let k = -1; k <= 1; k++) if (i >= Math.abs(k) * 2) put(Math.round(cx + k * N * 0.12), top, c2); }
+    else for (let dx = 0; dx < w; dx++) { put(Math.round(cx - rx * 0.6) + dx - Math.floor(w / 2), top, c1); put(Math.round(cx + rx * 0.6) + dx - Math.floor(w / 2), top, c1); }
   }
-  // 꼬리
   const tailX = Math.round(cx + rx) - 1, tailY = Math.round(cy);
-  for (let i = 0; i < Math.round(N * 0.18); i++) {
-    put(tailX + i, tailY - i, c2);
-    put(tailX + i, tailY - i - 1, c2);
+  for (let i = 0; i < Math.round(N * 0.18); i++) { put(tailX + i, tailY - i, c2); put(tailX + i, tailY - i - 1, c2); }
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const nx = (x - cx) / rx, ny = (y - cy) / ry;
+    if (nx * nx + ny * ny > 1) continue;
+    let col = c1;
+    if (nx * 0.7 + ny * 0.7 > 0.55) col = shade(c1, 0.75);
+    else if (nx * nx + (ny + 0.45) ** 2 < 0.08 && nx < 0) col = shade(c1, 1.4);
+    put(x, y, col);
   }
-  // 몸통 (명암 포함)
-  for (let y = 0; y < N; y++) {
-    for (let x = 0; x < N; x++) {
-      const nx = (x - cx) / rx, ny = (y - cy) / ry;
-      if (nx * nx + ny * ny > 1) continue;
-      let col = c1;
-      if (nx * 0.7 + ny * 0.7 > 0.55) col = shade(c1, 0.75);
-      else if (nx * nx + (ny + 0.45) ** 2 < 0.08 && nx < 0) col = shade(c1, 1.4);
-      put(x, y, col);
-    }
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const nx = (x - cx) / (rx * 0.5), ny = (y - (cy + ry * 0.35)) / (ry * 0.5);
+    if (nx * nx + ny * ny <= 1) put(x, y, c2);
   }
-  // 배 (앞모습)
-  if (!back) {
-    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-      const nx = (x - cx) / (rx * 0.5), ny = (y - (cy + ry * 0.35)) / (ry * 0.5);
-      if (nx * nx + ny * ny <= 1) put(x, y, c2);
-    }
-  }
-  // 발
   const footY = Math.round(cy + ry) - 1;
-  for (const fx of [cx - rx * 0.5, cx + rx * 0.5]) {
-    for (let dx = -1; dx <= 1; dx++) { put(Math.round(fx) + dx, footY, shade(c1, 0.6)); put(Math.round(fx) + dx, footY + 1, shade(c1, 0.6)); }
-  }
-  // 외곽선
+  for (const fx of [cx - rx * 0.5, cx + rx * 0.5]) for (let dx = -1; dx <= 1; dx++) { put(Math.round(fx) + dx, footY, shade(c1, 0.6)); put(Math.round(fx) + dx, footY + 1, shade(c1, 0.6)); }
   const outline = shade(c1, 0.3);
   const filled = grid.map((r) => r.map((v) => v !== null));
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
-    if (filled[y][x]) continue;
-    if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => filled[y + dy]?.[x + dx])) grid[y][x] = outline;
+    if (!filled[y][x] && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => filled[y + dy]?.[x + dx])) grid[y][x] = outline;
   }
-  // 눈
-  if (!back) {
-    const ey = Math.round(cy - ry * 0.3), eh = Math.max(2, Math.round(N / 12));
-    for (const ex of [Math.round(cx - rx * 0.38), Math.round(cx + rx * 0.38)]) {
-      for (let dy = 0; dy < eh; dy++) put(ex, ey + dy, '#202020');
-      put(ex, ey, '#ffffff');
-    }
-  }
-
+  const ey = Math.round(cy - ry * 0.3), eh = Math.max(2, Math.round(N / 12));
+  for (const ex of [Math.round(cx - rx * 0.38), Math.round(cx + rx * 0.38)]) { for (let dy = 0; dy < eh; dy++) put(ex, ey + dy, '#202020'); put(ex, ey, '#ffffff'); }
   const c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d');
   grid.forEach((row, y) => row.forEach((col, x) => { if (col) { g.fillStyle = col; g.fillRect(x, y, 1, 1); } }));
   return c;
 }
+const creature = (key, N) => (fallback[`${key}/${N}`] ??= makeCreature(key, N));
 
-function fallbackCanvas(kind, key, N) {
-  const k = `${kind}/${key}/${N}`;
-  return (fallback[k] ??= makeCreature(key, N, kind === 'back'));
-}
-
-// 맵 아이콘: (px,py) = 칸 왼쪽 위, 발을 칸 하단 중앙에 맞춤
-export function drawIcon(ctx, key, px, py, frame) {
-  const img = images[`icons/${key}`];
-  if (img) {
-    const fs = img.height, frames = Math.max(1, Math.floor(img.width / fs));
-    const k = fs <= 32 ? 1 : Math.ceil(fs / 32);
-    const d = Math.floor(fs / k);
-    ctx.drawImage(img, (frame % frames) * fs, 0, fs, fs, px + 8 - d / 2, py + 16 - d, d, d);
+// ---------- 그리기 ----------
+// (cx, cy) = 타일 중심(월드 좌표). anim: 'Idle'|'Walk'|'Attack'|'Shoot'|'Hurt', dir: DIR, t: 경과 초
+export function drawUnitSprite(ctx, key, anim, dir, t, cx, cy, loop = true) {
+  const p = pmd[key];
+  if (p) {
+    const a = pickAnim(p, anim);
+    const img = p.sheets[a.sheet];
+    const rows = Math.max(1, Math.round(img.height / a.frameH));
+    const f = frameAt(a, Math.floor(t * 60), loop);
+    const row = rows >= 8 ? dir : 0;
+    ctx.drawImage(img, f * a.frameW, row * a.frameH, a.frameW, a.frameH,
+      Math.round(cx - a.frameW / 2), Math.round(cy - a.frameH / 2), a.frameW, a.frameH);
     return;
   }
-  const c = fallbackCanvas('icons', key, 20);
-  ctx.drawImage(c, px - 2, py - 5 + (frame ? 1 : 0));
+  // 임시 도트: 22px, 좌측을 볼 때 좌우 반전, Idle 은 살짝 들썩임
+  const c = creature(key, 22);
+  const bob = anim === 'Idle' ? (Math.floor(t / 0.5) % 2) : anim === 'Walk' ? (Math.floor(t / 0.12) % 2) : 0;
+  const flip = dir === DIR.Left || dir === DIR.UpLeft || dir === DIR.DownLeft;
+  ctx.save();
+  ctx.translate(Math.round(cx), Math.round(cy + 8 - 22 + bob));
+  if (flip) ctx.scale(-1, 1);
+  ctx.drawImage(c, -11, 0);
+  ctx.restore();
 }
 
-// 원본 크기 h 를 size 이하로 맞춘 정수 배율 결과 크기 (작으면 정수 확대, 크면 정수 축소)
-export function battleSpriteSize(h, size) {
-  if (h <= size) return h * Math.max(1, Math.floor(size / h));
-  return Math.floor(h / Math.ceil(h / size));
+export function drawShadow(ctx, cx, cy, color = 'rgba(0,0,0,0.28)') {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(cx) - 6, Math.round(cy) + 6, 12, 3);
+  ctx.fillRect(Math.round(cx) - 8, Math.round(cy) + 7, 16, 1);
 }
 
-// 배틀 스프라이트: (cx, bottomY) = 하단 중앙
-export function drawBattleSprite(ctx, key, kind, cx, bottomY, size = 96) {
-  const img = images[`${kind}/${key}`];
-  if (img) {
-    const h = battleSpriteSize(img.height, size);
-    const w = Math.round(img.width * h / img.height);
-    ctx.drawImage(img, Math.round(cx - w / 2), Math.round(bottomY - h), w, h);
-    return;
-  }
-  const c = fallbackCanvas(kind, key, 32);
-  ctx.drawImage(c, Math.round(cx - 32), Math.round(bottomY - 64), 64, 64);
+// 40×40 초상화. emotion 이 없으면 Normal, 그것도 없으면 임시 도트
+export function drawPortrait(ctx, key, emotion, x, y) {
+  const img = portraits[`${key}/${emotion}`] ?? portraits[`${key}/Normal`];
+  if (img) { ctx.drawImage(img, 0, 0, 40, 40, x, y, 40, 40); return; }
+  ctx.fillStyle = shade(TYPE_COLORS[SPECIES[key].types[0]], 1.6);
+  ctx.fillRect(x, y, 40, 40);
+  ctx.drawImage(creature(key, 32), x + 4, y + 6);
 }
+
+export { DIR };

@@ -38,7 +38,7 @@ test('mashing confirm right after the last KO does not skip the result screen', 
   s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-lucario');
   const L = s.units.find((u) => u.id === 'enemy-lucario');
   L.x = 3; L.y = 5; L.hp = 1;
-  const at = (x, y) => [{ type: 'cursor', x, y, px: x * 16 + 8, py: y * 16 + 8 }, { type: 'confirm' }];
+  const at = (x, y) => [{ type: 'cursor', x, y, px: x * 24 + 12, py: y * 24 + 12 }, { type: 'confirm' }];
   for (const e of [...at(2, 5), ...at(2, 5)]) game.handle(e);
   assert.ok(run(game, (m) => m === 'action'));
   game.handle({ type: 'confirm' }); // 첫 기술

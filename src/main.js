@@ -4,12 +4,13 @@ import { loadSprites } from './render/sprites.js';
 import { bindInput } from './game/input.js';
 import { createGame } from './game/states.js';
 import { createRng } from './core/rng.js';
+import { loadFonts } from './render/font.js';
 import { SPECIES, validateData } from './data/species.js';
 
 validateData();
 const canvas = document.getElementById('game');
 const { ctx, getScale } = createScreen(canvas);
-await loadSprites(Object.keys(SPECIES));
+await Promise.all([loadFonts(), loadSprites(Object.keys(SPECIES))]);
 
 const game = createGame({ rng: createRng(Date.now() & 0xffffffff) });
 window.__game = game; // 디버그용

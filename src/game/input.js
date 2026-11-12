@@ -16,7 +16,7 @@ export function bindInput(canvas, getScale, onEvent) {
     const px = Math.floor((e.clientX - r.left) / r.width * W);
     const py = Math.floor((e.clientY - r.top) / r.height * H);
     if (px < 0 || py < 0 || px >= W || py >= H) return null;
-    return { px, py, x: Math.floor(px / 16), y: Math.floor(py / 16) };
+    return { px, py };
   };
   let last = '';
   canvas.addEventListener('mousemove', (e) => {

@@ -1,56 +1,77 @@
-// 내장 5×8 비트맵 폰트 (4~5세대풍 그림자 텍스트)
-// 각 글리프 = 행 비트마스크 배열 (16 8 4 2 1 = 왼→오), 7행 + 하강부 1행
-const G = {
-  A: [14, 17, 17, 31, 17, 17, 17], B: [30, 17, 17, 30, 17, 17, 30], C: [14, 17, 16, 16, 16, 17, 14],
-  D: [30, 17, 17, 17, 17, 17, 30], E: [31, 16, 16, 30, 16, 16, 31], F: [31, 16, 16, 30, 16, 16, 16],
-  G: [14, 17, 16, 23, 17, 17, 15], H: [17, 17, 17, 31, 17, 17, 17], I: [14, 4, 4, 4, 4, 4, 14],
-  J: [7, 2, 2, 2, 2, 18, 12], K: [17, 18, 20, 24, 20, 18, 17], L: [16, 16, 16, 16, 16, 16, 31],
-  M: [17, 27, 21, 21, 17, 17, 17], N: [17, 25, 21, 19, 17, 17, 17], O: [14, 17, 17, 17, 17, 17, 14],
-  P: [30, 17, 17, 30, 16, 16, 16], Q: [14, 17, 17, 17, 21, 18, 13], R: [30, 17, 17, 30, 20, 18, 17],
-  S: [15, 16, 16, 14, 1, 1, 30], T: [31, 4, 4, 4, 4, 4, 4], U: [17, 17, 17, 17, 17, 17, 14],
-  V: [17, 17, 17, 17, 17, 10, 4], W: [17, 17, 17, 21, 21, 21, 10], X: [17, 17, 10, 4, 10, 17, 17],
-  Y: [17, 17, 10, 4, 4, 4, 4], Z: [31, 1, 2, 4, 8, 16, 31],
-  a: [0, 0, 14, 1, 15, 17, 15], b: [16, 16, 22, 25, 17, 17, 30], c: [0, 0, 14, 16, 16, 17, 14],
-  d: [1, 1, 13, 19, 17, 17, 15], e: [0, 0, 14, 17, 31, 16, 14], f: [6, 9, 8, 28, 8, 8, 8],
-  g: [0, 0, 15, 17, 17, 15, 1, 14], h: [16, 16, 22, 25, 17, 17, 17], i: [4, 0, 12, 4, 4, 4, 14],
-  j: [2, 0, 6, 2, 2, 2, 18, 12], k: [16, 16, 18, 20, 24, 20, 18], l: [12, 4, 4, 4, 4, 4, 14],
-  m: [0, 0, 26, 21, 21, 17, 17], n: [0, 0, 22, 25, 17, 17, 17], o: [0, 0, 14, 17, 17, 17, 14],
-  p: [0, 0, 30, 17, 17, 30, 16, 16], q: [0, 0, 15, 17, 17, 15, 1, 1], r: [0, 0, 22, 25, 16, 16, 16],
-  s: [0, 0, 15, 16, 14, 1, 30], t: [8, 8, 28, 8, 8, 9, 6], u: [0, 0, 17, 17, 17, 19, 13],
-  v: [0, 0, 17, 17, 17, 10, 4], w: [0, 0, 17, 17, 21, 21, 10], x: [0, 0, 17, 10, 4, 10, 17],
-  y: [0, 0, 17, 17, 17, 15, 1, 14], z: [0, 0, 31, 2, 4, 8, 31],
-  0: [14, 17, 19, 21, 25, 17, 14], 1: [4, 12, 4, 4, 4, 4, 14], 2: [14, 17, 1, 2, 4, 8, 31],
-  3: [31, 2, 4, 2, 1, 17, 14], 4: [2, 6, 10, 18, 31, 2, 2], 5: [31, 16, 30, 1, 1, 17, 14],
-  6: [6, 8, 16, 30, 17, 17, 14], 7: [31, 1, 2, 4, 8, 8, 8], 8: [14, 17, 17, 14, 17, 17, 14],
-  9: [14, 17, 17, 15, 1, 2, 12],
-  '.': [0, 0, 0, 0, 0, 12, 12], ',': [0, 0, 0, 0, 12, 12, 4, 8], '!': [4, 4, 4, 4, 4, 0, 4],
-  '?': [14, 17, 1, 2, 4, 0, 4], "'": [4, 4, 8, 0, 0, 0, 0], '-': [0, 0, 0, 14, 0, 0, 0],
-  ':': [0, 12, 12, 0, 12, 12, 0], '/': [1, 1, 2, 4, 8, 16, 16], '(': [2, 4, 8, 8, 8, 4, 2],
-  ')': [8, 4, 2, 2, 2, 4, 8], '%': [24, 25, 2, 4, 8, 19, 3], '>': [8, 4, 2, 1, 2, 4, 8],
-  '+': [0, 4, 4, 31, 4, 4, 0], ' ': [],
+// 갈무리(Galmuri, OFL) 픽셀 폰트 텍스트 렌더러
+// 캔버스 fillText 는 안티에일리어싱을 하므로, 한 번 그린 뒤 알파를 임계값으로 잘라
+// 완전한 도트로 만든다. (문자열·색 조합별 캐시)
+
+export const FONTS = {
+  main: { family: 'Galmuri11', file: 'Galmuri11', size: 12, ascent: 11, height: 14 },
+  small: { family: 'Galmuri9', file: 'Galmuri9', size: 10, ascent: 9, height: 12 },
 };
+export const LINE_H = 14;
 
-export const CHAR_W = 6;
-export const LINE_H = 10;
+const hasDom = typeof document !== 'undefined';
+let measureCtx = null;
+const cache = new Map();
 
-export const textWidth = (text) => text.length * CHAR_W - 1;
-
-function glyph(ctx, rows, x, y, color) {
-  ctx.fillStyle = color;
-  rows.forEach((bits, r) => {
-    for (let c = 0; c < 5; c++) if (bits & (16 >> c)) ctx.fillRect(x + c, y + r, 1, 1);
-  });
+export async function loadFonts(base = 'assets/fonts/galmuri') {
+  if (!hasDom) return;
+  await Promise.all(Object.values(FONTS).map(async (f) => {
+    const face = new FontFace(f.family, `url(${base}/${f.file}.woff2)`);
+    await face.load();
+    document.fonts.add(face);
+  }));
+  cache.clear();
 }
 
-export function drawText(ctx, text, x, y, color = '#303030', shadow = '#d0d0d0') {
-  x = Math.round(x); y = Math.round(y);
-  for (let i = 0; i < text.length; i++) {
-    const rows = G[text[i]] ?? G['?'];
-    if (shadow) {
-      glyph(ctx, rows, x + i * CHAR_W + 1, y, shadow);
-      glyph(ctx, rows, x + i * CHAR_W, y + 1, shadow);
-      glyph(ctx, rows, x + i * CHAR_W + 1, y + 1, shadow);
+// DOM 이 없을 때(테스트)의 근사 폭
+function estimate(text, f) {
+  let w = 0;
+  for (const ch of text) w += ch.charCodeAt(0) > 0x1100 ? f.size : Math.round(f.size * 0.6);
+  return w;
+}
+
+export function textWidth(text, style = 'main') {
+  const f = FONTS[style];
+  if (!hasDom) return estimate(text, f);
+  measureCtx ??= document.createElement('canvas').getContext('2d');
+  measureCtx.font = `${f.size}px ${f.family}`;
+  return Math.ceil(measureCtx.measureText(text).width);
+}
+
+const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+
+function render(text, style, color, shadow) {
+  const key = `${style}|${color}|${shadow}|${text}`;
+  const hit = cache.get(key);
+  if (hit) return hit;
+  const f = FONTS[style];
+  const w = Math.max(1, textWidth(text, style)) + 2, h = f.height + 1;
+  const src = document.createElement('canvas');
+  src.width = w; src.height = h;
+  const g = src.getContext('2d');
+  g.font = `${f.size}px ${f.family}`;
+  g.textBaseline = 'alphabetic';
+  g.fillStyle = '#000';
+  g.fillText(text, 0, f.ascent);
+  const mask = g.getImageData(0, 0, w, h).data;
+  const out = g.createImageData(w, h);
+  const on = (x, y) => x >= 0 && y >= 0 && x < w && y < h && mask[(y * w + x) * 4 + 3] >= 128;
+  const [cr, cg, cb] = rgb(color);
+  const [sr, sg, sb] = shadow ? rgb(shadow) : [0, 0, 0];
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      if (on(x, y)) { out.data.set([cr, cg, cb, 255], i); continue; }
+      if (shadow && (on(x - 1, y) || on(x, y - 1) || on(x - 1, y - 1))) out.data.set([sr, sg, sb, 255], i);
     }
-    glyph(ctx, rows, x + i * CHAR_W, y, color);
   }
+  g.clearRect(0, 0, w, h);
+  g.putImageData(out, 0, 0);
+  if (cache.size > 600) cache.clear();
+  cache.set(key, src);
+  return src;
+}
+
+export function drawText(ctx, text, x, y, color = '#383838', shadow = '#d8d8d0', style = 'main') {
+  if (!text) return;
+  ctx.drawImage(render(String(text), style, color, shadow), Math.round(x), Math.round(y));
 }
