@@ -18,7 +18,7 @@ test('korean labels exist for all types, species and moves', () => {
   for (const t of TYPES) assert.ok(TYPE_KO[t], t);
   assert.equal(SPECIES.infernape.name, '초염몽');
   assert.equal(SPECIES.garchomp.name, '한카리아스');
-  assert.equal(MOVES.thunderbolt.name, '10만볼트');
+  assert.equal(MOVES['close-combat'].name, '인파이트');
   for (const s of Object.values(SPECIES)) assert.match(s.name, /[가-힣]/);
   for (const m of Object.values(MOVES)) assert.match(m.name, /[가-힣]/);
 });

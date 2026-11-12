@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { TYPES, TYPE_COLORS, typeMultiplier } from '../src/data/types.js';
 import { SPECIES, validateData } from '../src/data/species.js';
 import { MAP } from '../src/data/map.js';
+import { MOVES } from '../src/data/moves.js';
+import { startingMoves } from '../src/core/learn.js';
 
 test('typeMultiplier: 단일/이중/무효', () => {
   assert.equal(typeMultiplier('fire', ['grass']), 2);
@@ -23,8 +25,40 @@ test('validateData passes', () => {
   assert.doesNotThrow(() => validateData());
 });
 
-test('infernape real stats at Lv50', () => {
-  assert.deepEqual(SPECIES.infernape.stats, { hp: 151, atk: 124, def: 91, spa: 124, spd: 91, spe: 128 });
+test('generated data: 24 species with base stats, learnsets and starting moves', () => {
+  assert.equal(Object.keys(SPECIES).length, 24);
+  assert.deepEqual(SPECIES.infernape.base, { hp: 76, atk: 104, def: 71, spa: 104, spd: 71, spe: 108 });
+  for (const s of Object.values(SPECIES)) {
+    assert.ok(s.learnset.length > 0, s.key);
+    assert.ok(startingMoves(s.learnset, 8, MOVES).length > 0, s.key);
+    assert.ok(s.baseExp > 0 && s.growth, s.key);
+  }
+});
+
+test('evolution rules match the verified table (spec §4)', () => {
+  const lv = (k) => SPECIES[k].evolution?.rule;
+  assert.deepEqual(lv('chimchar'), { kind: 'level', level: 14, source: 'original' });
+  assert.equal(lv('monferno').level, 36);
+  assert.deepEqual(lv('riolu'), { kind: 'level', level: 20, source: 'friendship' });
+  assert.deepEqual(lv('murkrow'), { kind: 'stone' });
+  assert.deepEqual(lv('budew'), { kind: 'level', level: 16, source: 'friendship' });
+  assert.deepEqual(lv('roselia'), { kind: 'stone' });
+  assert.equal(lv('bronzor').level, 33);
+  assert.equal(lv('gabite').level, 48);
+  for (const k of ['infernape', 'empoleon', 'torterra', 'luxray', 'lucario', 'garchomp', 'honchkrow', 'roserade', 'bronzong']) assert.equal(SPECIES[k].evolution, null, k);
+});
+
+test('korean names, learnable flags, movement and range rules', () => {
+  assert.equal(SPECIES.chimchar.name, '불꽃숭이');
+  assert.equal(MOVES['close-combat'].name, '인파이트');
+  assert.equal(MOVES.growl.learnable, false);
+  assert.equal(SPECIES.bronzor.move, 3);
+  assert.equal(SPECIES.gible.move, 3);
+  assert.equal(SPECIES.chimchar.move, 4);
+  assert.equal(SPECIES.murkrow.move, 6);
+  assert.deepEqual(MOVES['aura-sphere'].range, [2, 3]);
+  assert.deepEqual(MOVES.scratch.range, [1, 1]);
+  assert.deepEqual(MOVES.ember.range, [1, 2]);
 });
 
 test('map shape and chars', () => {
@@ -47,11 +81,7 @@ test('placements on walkable unique tiles', () => {
   }
 });
 
-import { MOVES } from '../src/data/moves.js';
-
-test('every move and species carries a PokeAPI identifier (for future learnsets)', () => {
-  for (const m of Object.values(MOVES)) assert.match(m.api, /^[a-z]+(-[a-z]+)*$/, m.id);
-  assert.equal(MOVES.closecombat.api, 'close-combat');
-  assert.equal(MOVES.thunderbolt.api, 'thunderbolt');
-  for (const s of Object.values(SPECIES)) assert.equal(s.api, s.key);
+test('every move and species is keyed by its PokeAPI identifier', () => {
+  for (const [k, m] of Object.entries(MOVES)) assert.equal(m.api, k);
+  for (const [k, s] of Object.entries(SPECIES)) assert.equal(s.api, k);
 });
