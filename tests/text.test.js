@@ -12,6 +12,12 @@ test('josa picks particle by final consonant', () => {
   assert.equal(josa('동탁군', '이/가'), '동탁군이');
   assert.equal(josa('지진', '을/를'), '지진을');
   assert.equal(josa('10만볼트', '을/를'), '10만볼트를');
+  assert.equal(josa('파이숭이', '으로/로'), '파이숭이로');
+  assert.equal(josa('한바이트', '으로/로'), '한바이트로');
+  assert.equal(josa('동탁군', '으로/로'), '동탁군으로');
+  assert.equal(josa('렌트라', '으로/로'), '렌트라로');
+  assert.equal(josa('얼음', '으로/로'), '얼음으로');
+  assert.equal(josa('물', '으로/로'), '물로'); // ㄹ 받침은 '로'
 });
 
 test('korean labels exist for all types, species and moves', () => {
