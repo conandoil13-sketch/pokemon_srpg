@@ -23,7 +23,7 @@ export const SPECIES = Object.fromEntries(
   RAW.trim().split('\n').map((line) => {
     const [key, dex, name, types, base, move, moves] = line.split('|');
     return [key, {
-      key, dex: +dex, name,
+      key, api: key, dex: +dex, name, // api: PokeAPI 포켓몬 식별자 (습득 기술 조회용)
       types: types.split(','),
       stats: realStats(base.split('-').map(Number)),
       move: +move,

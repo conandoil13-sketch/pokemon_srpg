@@ -7,7 +7,8 @@ import { TYPE_COLORS } from '../data/types.js';
 import { shade, hash } from './pixels.js';
 import { parseAnimData, frameAt, animLength, DIR } from './pmdData.js';
 
-export const PMD_BASE = 'assets/sprites/pmd';
+// 앞에서부터 찾는다: 직접 넣은 폴더 → 저장소 통째로 받은 폴더
+export const PMD_BASES = ['assets/sprites/pmd', 'SpriteCollab-master'];
 const WANT_ANIMS = ['Idle', 'Walk', 'Attack', 'Strike', 'Shoot', 'Hurt'];
 const EMOTIONS = ['Normal', 'Determined', 'Pain', 'Happy'];
 
@@ -28,26 +29,29 @@ function loadImage(src) {
 }
 
 async function loadPmd(key) {
-  const dir = `${PMD_BASE}/sprite/${pad4(SPECIES[key].dex)}`;
-  let data;
-  try {
-    const res = await fetch(`${dir}/AnimData.xml`);
-    if (!res.ok) return null;
-    data = parseAnimData(await res.text());
-  } catch {
-    return null;
+  let data, dir, base;
+  for (const b of PMD_BASES) {
+    const d = `${b}/sprite/${pad4(SPECIES[key].dex)}`;
+    try {
+      const res = await fetch(`${d}/AnimData.xml`);
+      if (!res.ok) continue;
+      data = parseAnimData(await res.text());
+      dir = d; base = b;
+      break;
+    } catch { /* 다음 위치 */ }
   }
+  if (!data) return null;
   const sheets = {};
   const names = new Set(WANT_ANIMS.map((n) => data.anims[n]?.sheet).filter(Boolean));
   await Promise.all([...names].map(async (s) => { sheets[s] = await loadImage(`${dir}/${s}-Anim.png`); }));
   if (!data.anims.Idle || !sheets[data.anims.Idle.sheet]) return null;
-  return { data, sheets };
+  return { data, sheets, base };
 }
 
 export async function loadSprites(keys) {
   await Promise.all(keys.map(async (key) => {
     pmd[key] = await loadPmd(key);
-    const dir = `${PMD_BASE}/portrait/${pad4(SPECIES[key].dex)}`;
+    const dir = `${pmd[key]?.base ?? PMD_BASES[0]}/portrait/${pad4(SPECIES[key].dex)}`;
     await Promise.all(EMOTIONS.map(async (e) => { portraits[`${key}/${e}`] = await loadImage(`${dir}/${e}.png`); }));
     if (!pmd[key] && !warned) {
       warned = true;

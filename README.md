@@ -37,10 +37,20 @@ assets/sprites/pmd/sprite/0392/AnimData.xml, Idle-Anim.png, Walk-Anim.png, Attac
 assets/sprites/pmd/portrait/0392/Normal.png  (선택: Determined.png, Pain.png)
 ```
 
+- 저장소를 통째로 받았다면 `SpriteCollab-master/` 를 프로젝트 맨 위에 두기만 해도 됩니다 (`assets/sprites/pmd/` 를 먼저 찾고, 없으면 여기서 찾음). 이 폴더도 git 에서 제외됩니다.
 - 폴더 이름은 전국도감 번호 4자리: 0392 초염몽 · 0395 엠페르트 · 0389 토대부기 · 0405 렌트라 · 0448 루카리오 · 0445 한카리아스 · 0430 돈크로우 · 0407 로즈레이드 · 0437 동탁군
 - 쓰는 애니메이션: Idle(대기) · Walk(이동, 8방향) · Attack(물리) · Shoot(특수) · Hurt(피격). 없는 동작은 비슷한 동작으로 대체합니다.
 - 초상화는 정보창과 대사창에 쓰입니다 (공격 시 Determined, 피격 시 Pain).
 - **라이선스**: 커뮤니티 제작분은 CC BY-NC 4.0 (비상업 + 출처 표기, 각 폴더의 `credits.txt`). `CHUNSOFT` 로 표기된 부분은 원작 게임 스프라이트입니다. 이 폴더는 git 에 올라가지 않도록 설정되어 있습니다.
+
+## 기술 데이터 (PokeAPI)
+
+기술의 한국어 이름·타입·물리/특수·위력·명중과 포켓몬 한국어 이름은 [PokeAPI](https://pokeapi.co) 와 일치시켜 두었습니다. 사거리는 SRPG 전용 값입니다.
+각 기술·포켓몬에 PokeAPI 식별자(`api`)가 있어, 나중에 레벨업 습득 기술을 같은 식별자로 붙일 수 있습니다.
+
+```bash
+node tools/check-pokeapi.js   # 데이터가 PokeAPI 와 같은지 확인 (네트워크 필요)
+```
 
 ## 폰트
 

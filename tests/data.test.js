@@ -46,3 +46,12 @@ test('placements on walkable unique tiles', () => {
     assert.ok(SPECIES[p.species], p.species);
   }
 });
+
+import { MOVES } from '../src/data/moves.js';
+
+test('every move and species carries a PokeAPI identifier (for future learnsets)', () => {
+  for (const m of Object.values(MOVES)) assert.match(m.api, /^[a-z]+(-[a-z]+)*$/, m.id);
+  assert.equal(MOVES.closecombat.api, 'close-combat');
+  assert.equal(MOVES.thunderbolt.api, 'thunderbolt');
+  for (const s of Object.values(SPECIES)) assert.equal(s.api, s.key);
+});
