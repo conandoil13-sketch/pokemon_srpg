@@ -1,0 +1,8 @@
+# 개발 작업 기록 (스크래치)
+.superpowers/
+.DS_Store
+node_modules/
+
+# 사용자 스프라이트 팩은 커밋하지 않는다 (공식 스프라이트 포함 금지)
+assets/sprites/**/*.png
+!assets/sprites/**/.gitkeep
