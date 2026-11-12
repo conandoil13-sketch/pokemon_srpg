@@ -28,7 +28,7 @@ test('lose: no stone, exp still applied', () => {
   assert.equal(game.party[1].level, 10);
 });
 
-test('choose menu: mashing during the lock does nothing; then pick replaces a move', () => {
+test('choose menu: mashing Z (even after the lock) never forgets or gives up a move', () => {
   const game = newGame();
   const m = game.party[0];
   m.moves = ['scratch', 'ember', 'tackle', 'peck'];
@@ -37,13 +37,45 @@ test('choose menu: mashing during the lock does nothing; then pick replaces a mo
   r.handle({ type: 'confirm' });
   for (let i = 0; i < 40 && r.pending?.type !== 'choose'; i++) { tick(r, 0.3); r.handle({ type: 'confirm' }); }
   assert.equal(r.pending.type, 'choose');
+  for (let i = 0; i < 60; i++) { tick(r, 0.1); r.handle({ type: 'confirm' }); r.handle({ type: 'click', px: 5, py: 5 }); }
+  assert.equal(r.pending.type, 'choose', 'still deciding');
+  assert.deepEqual(m.moves, ['scratch', 'ember', 'tackle', 'peck']);
+  assert.equal(done, 0);
+});
+
+test('choose menu: pick a move → confirm 예 → replaced', () => {
+  const game = newGame();
+  const m = game.party[0];
+  m.moves = ['scratch', 'ember', 'tackle', 'peck'];
+  const r = createResults({ game, result: 'win', log: { exp: { chimchar: toLevel(m, 15) } }, firstClear: false, onDone() {} });
+  r.handle({ type: 'confirm' });
+  for (let i = 0; i < 40 && r.pending?.type !== 'choose'; i++) { tick(r, 0.3); r.handle({ type: 'confirm' }); }
   const wanted = r.pending.move;
-  for (let i = 0; i < 10; i++) r.handle({ type: 'confirm' }); // 잠금 중 연타
-  assert.equal(r.pending.type, 'choose');
+  tick(r, CHOICE_LOCK + 0.05);
+  // 커서는 '배우지 않는다'(맨 아래)에서 시작 → 위로 4번 = 0번(scratch), 아래로 1번 = ember
+  for (let i = 0; i < 4; i++) r.handle({ type: 'dir', dx: 0, dy: -1 });
+  r.handle({ type: 'dir', dx: 0, dy: 1 });
+  r.handle({ type: 'confirm' });           // 확인창 (기본 아니요)
   assert.deepEqual(m.moves, ['scratch', 'ember', 'tackle', 'peck']);
   tick(r, CHOICE_LOCK + 0.05);
-  r.handle({ type: 'dir', dx: 0, dy: 1 }); // 1번(ember) 선택
+  r.handle({ type: 'dir', dx: 0, dy: -1 }); // 예
   r.handle({ type: 'confirm' });
   assert.deepEqual(m.moves, ['scratch', wanted, 'tackle', 'peck']);
-  assert.equal(done, 0);
+});
+
+test('choose menu: clicking a menu row picks it, clicking elsewhere does nothing', async () => {
+  const { W, H } = await import('../src/render/screen.js');
+  const game = newGame();
+  const m = game.party[0];
+  m.moves = ['scratch', 'ember', 'tackle', 'peck'];
+  const r = createResults({ game, result: 'win', log: { exp: { chimchar: toLevel(m, 15) } }, firstClear: false, onDone() {} });
+  r.handle({ type: 'confirm' });
+  for (let i = 0; i < 40 && r.pending?.type !== 'choose'; i++) { tick(r, 0.3); r.handle({ type: 'confirm' }); }
+  tick(r, CHOICE_LOCK + 0.05);
+  r.handle({ type: 'click', px: 5, py: 5 });
+  assert.equal(r.pending.confirming, false, 'outside click ignored');
+  // 메뉴: 5줄(기술 4 + 배우지 않는다), 오른쪽 아래. 1번째 줄(scratch) 클릭
+  const menuH = 5 * 16 + 8, x = W - 120 - 4 + 10, y = H - 54 - menuH + 4 + 8;
+  r.handle({ type: 'click', px: x, py: y });
+  assert.equal(r.pending.confirming, true);
 });

@@ -64,3 +64,24 @@ test('storage exceptions are contained', () => {
   assert.equal(loadGame(bad), null);
   assert.equal(saveGame(bad, newGame()), false);
 });
+
+test('prototype-key species / moves never crash loading', () => {
+  for (const sp of ['constructor', '__proto__', 'toString']) {
+    const st = memStore();
+    const g = newGame();
+    g.party.push({ species: sp, level: 5, exp: 0, moves: ['constructor'] });
+    g.party[0].moves = ['toString', 'scratch'];
+    st.setItem(SAVE_KEY, JSON.stringify(g));
+    let back;
+    assert.doesNotThrow(() => { back = loadGame(st); }, sp);
+    assert.equal(back.party.length, 4, sp);
+    assert.deepEqual(back.party[0].moves, ['scratch']);
+  }
+});
+
+test('any unexpected shape returns null instead of throwing', () => {
+  const st = memStore();
+  st.setItem(SAVE_KEY, JSON.stringify({ version: 1, party: [null, 5, 'x'], cleared: 'nope', items: null }));
+  assert.doesNotThrow(() => loadGame(st));
+  assert.equal(loadGame(st), null);
+});

@@ -15,13 +15,15 @@ export const newGame = () => ({ version: VERSION, party: newParty(), cleared: []
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
 
+const own = (obj, k) => typeof k === 'string' && Object.hasOwn(obj, k);
+
 function cleanMember(m) {
-  const s = SPECIES[m?.species];
-  if (!s) return null;
+  if (!m || typeof m !== 'object' || !own(SPECIES, m.species)) return null;
+  const s = SPECIES[m.species];
   const level = clampInt(m.level, 1, MAX_LEVEL);
   const lo = expForLevel(s.growth, level);
   const hi = level >= MAX_LEVEL ? lo : expForLevel(s.growth, level + 1) - 1;
-  let moves = (Array.isArray(m.moves) ? m.moves : []).filter((mv) => MOVES[mv]?.learnable || mv === 'tackle');
+  let moves = (Array.isArray(m.moves) ? m.moves : []).filter((mv) => own(MOVES, mv) && (MOVES[mv].learnable || mv === 'tackle'));
   moves = [...new Set(moves)].slice(0, 4);
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES);
   return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves };
@@ -44,14 +46,19 @@ export function loadGame(storage) {
     return null;
   }
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
-  const party = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
-  if (!party.length) return null;
-  return {
-    version: VERSION,
-    party,
-    cleared: (Array.isArray(data.cleared) ? data.cleared : []).filter((x) => typeof x === 'string'),
-    items: { evoStone: clampInt(data.items?.evoStone, 0, 999) },
-  };
+  try {
+    const party = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
+    if (!party.length) return null;
+    return {
+      version: VERSION,
+      party,
+      cleared: (Array.isArray(data.cleared) ? data.cleared : []).filter((x) => typeof x === 'string'),
+      items: { evoStone: clampInt(data.items?.evoStone, 0, 999) },
+    };
+  } catch (e) {
+    warn(`invalid save ignored: ${e.message}`); // 어떤 이상한 형태든 부팅을 막지 않는다
+    return null;
+  }
 }
 
 export function saveGame(storage, game) {
