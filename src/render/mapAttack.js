@@ -129,6 +129,12 @@ export function createMapAttack({ attacker, defender, move, result, hpBefore }) 
         ctx.fillRect(Math.round(d.x - bw / 2) - 1, Math.round(d.y + 10), bw + 2, 7);
         drawHpBar(ctx, Math.round(d.x - bw / 2), Math.round(d.y + 11), bw, shownHp(), defender.maxHp);
       }
+      // 경험치 (적을 쓰러뜨린 아군 위)
+      const exp = result.expGained?.[attacker.species];
+      if (exp && (passed('impact') || s.k === 'impact')) {
+        const label = `+${exp} EXP`;
+        drawText(ctx, label, Math.round(a.x - textWidth(label, 'small') / 2), Math.round(a.y - 32), '#f8d030', '#202020', 'small');
+      }
     },
 
     // 화면 좌표 대사 창

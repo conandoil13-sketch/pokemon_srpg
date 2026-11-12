@@ -10,7 +10,7 @@ const THREAT_WEIGHT = 0.5;
 export function enemyTurnOrder(state) {
   return state.units
     .filter((u) => u.side === 'enemy')
-    .sort((a, b) => SPECIES[b.species].stats.spe - SPECIES[a.species].stats.spe);
+    .sort((a, b) => b.stats.spe - a.stats.spe);
 }
 
 const parse = (k) => { const [x, y] = k.split(',').map(Number); return { x, y }; };
@@ -22,7 +22,7 @@ function threatMap(state, unit) {
     const attackable = new Map(); // "x,y" → Set<moveId>
     for (const k of reachable(state.grid, state.units, ally).keys()) {
       const p = parse(k);
-      for (const mid of SPECIES[ally.species].moves) {
+      for (const mid of ally.moves) {
         for (const t of tilesInRange(p.x, p.y, MOVES[mid].range, state.width, state.height)) {
           const tk = `${t.x},${t.y}`;
           if (!attackable.has(tk)) attackable.set(tk, new Set());
@@ -55,7 +55,7 @@ export function planEnemyAction(state, unit) {
     const p = parse(k);
     const ghost = { ...unit, x: p.x, y: p.y };
     const risk = THREAT_WEIGHT * threatAt(threats, ghost, p.x, p.y, state.grid[p.y][p.x]);
-    for (const mid of SPECIES[unit.species].moves) {
+    for (const mid of unit.moves) {
       const move = MOVES[mid];
       for (const foe of foes) {
         const d = manhattan(p, foe);

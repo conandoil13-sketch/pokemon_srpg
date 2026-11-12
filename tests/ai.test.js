@@ -2,12 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { enemyTurnOrder, planEnemyAction } from '../src/core/ai.js';
 import { createBattle } from '../src/core/battle.js';
-import { SPECIES } from '../src/data/species.js';
+import { makeUnit } from '../src/core/battle.js';
 import { manhattan } from '../src/core/pathfind.js';
 
+const MOVESET = { garchomp: ['earthquake', 'dragon-claw', 'crunch'], bronzong: ['tackle'], torterra: ['razor-leaf'] };
 const mk = (species, side, x, y, hp) => {
-  const max = SPECIES[species].stats.hp;
-  return { id: `${side}-${species}`, species, side, x, y, hp: hp ?? max, maxHp: max, moved: false, acted: false };
+  const u = makeUnit({ species, side, x, y, level: 50, moves: MOVESET[species] ?? ['tackle'] });
+  if (hp !== undefined) u.hp = hp;
+  return u;
 };
 const state = (w, h, units) => ({
   grid: Array.from({ length: h }, () => '.'.repeat(w)), width: w, height: h, units, phase: 'enemy', turn: 1, result: null,
@@ -28,7 +30,7 @@ test('never picks a zero-damage (immune) move', () => {
   const s = state(6, 5, [foe, bird]);
   const plan = planEnemyAction(s, foe);
   assert.ok(plan.attack);
-  assert.ok(['crunch', 'dragonclaw'].includes(plan.attack.moveId), plan.attack.moveId);
+  assert.ok(['crunch', 'dragon-claw'].includes(plan.attack.moveId), plan.attack.moveId);
 });
 
 test('approaches when nothing is in range', () => {
@@ -40,8 +42,10 @@ test('approaches when nothing is in range', () => {
   assert.ok(manhattan(plan.moveTo, ally) < manhattan(foe, ally));
 });
 
-test('turn order: garchomp first', () => {
-  assert.equal(enemyTurnOrder(createBattle())[0].species, 'garchomp');
+test('turn order: fastest enemy first (by its own stats)', () => {
+  const order = enemyTurnOrder(createBattle());
+  for (let i = 1; i < order.length; i++) assert.ok(order[i - 1].stats.spe >= order[i].stats.spe);
+  assert.equal(order[0].species, 'murkrow');
 });
 
 test('approach uses walking distance, not straight-line distance across water', () => {

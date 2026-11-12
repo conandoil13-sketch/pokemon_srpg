@@ -2,13 +2,12 @@
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 
-const LEVEL = 50;
 const CRIT_RATE = 1 / 16;
 
 const sp = (unit) => SPECIES[unit.species];
 
 export function hitChance(attacker, defender, move, defTile) {
-  const speGap = Math.floor((sp(defender).stats.spe - sp(attacker).stats.spe) / 10);
+  const speGap = Math.floor((defender.stats.spe - attacker.stats.spe) / 10);
   const evasion = Math.min(30, (defTile === '"' ? 15 : 0) + Math.max(0, speGap));
   return Math.max(0, Math.min(100, move.accuracy - evasion));
 }
@@ -17,10 +16,10 @@ export function hitChance(attacker, defender, move, defTile) {
 function baseDamage(attacker, defender, move, defTile) {
   const a = sp(attacker), d = sp(defender);
   const physical = move.category === 'physical';
-  const A = physical ? a.stats.atk : a.stats.spa;
-  let D = physical ? d.stats.def : d.stats.spd;
+  const A = physical ? attacker.stats.atk : attacker.stats.spa;
+  let D = physical ? defender.stats.def : defender.stats.spd;
   if (defTile === '^') D *= 1.2;
-  const base = Math.floor(Math.floor((2 * LEVEL / 5 + 2) * move.power * A / D) / 50) + 2;
+  const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;
   const stab = a.types.includes(move.type) ? 1.5 : 1;
   const typeMult = typeMultiplier(move.type, d.types);
   return { raw: base * stab * typeMult, typeMult };

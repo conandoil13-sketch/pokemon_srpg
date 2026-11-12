@@ -14,17 +14,18 @@ export const MAP = {
     '.""...~~~...""..',
     '......~~~.......',
   ],
-  allies: [
-    { species: 'infernape', x: 2, y: 5 },
-    { species: 'empoleon', x: 1, y: 3 },
-    { species: 'torterra', x: 1, y: 7 },
-    { species: 'luxray', x: 2, y: 8 },
+  // 아군 출격 위치 (파티 순서대로)
+  allySlots: [
+    { x: 2, y: 5 },
+    { x: 1, y: 3 },
+    { x: 1, y: 7 },
+    { x: 2, y: 8 },
   ],
   enemies: [
-    { species: 'lucario', x: 13, y: 5 },
-    { species: 'garchomp', x: 12, y: 3 },
-    { species: 'honchkrow', x: 14, y: 1 },
-    { species: 'roserade', x: 13, y: 9 },
-    { species: 'bronzong', x: 12, y: 7 },
+    { species: 'riolu', level: 8, x: 13, y: 5 },
+    { species: 'gible', level: 9, x: 12, y: 3 },
+    { species: 'murkrow', level: 8, x: 14, y: 1 },
+    { species: 'budew', level: 7, x: 13, y: 9 },
+    { species: 'bronzor', level: 9, x: 12, y: 7 },
   ],
 };

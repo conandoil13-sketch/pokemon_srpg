@@ -11,8 +11,8 @@ test('tile costs', () => {
 });
 
 test('open field: diamond of radius = move', () => {
-  // torterra 이동력 3, 7x7 중앙
-  const u = unit('torterra', 'ally', 3, 3);
+  // bronzor 이동력 3, 7x7 중앙
+  const u = unit('bronzor', 'ally', 3, 3);
   const r = reachable(open(7, 7), [u], u);
   assert.equal(r.size, 25); // 1+4+8+12
   assert.equal(r.get('3,3'), 0);
@@ -20,7 +20,7 @@ test('open field: diamond of radius = move', () => {
 
 test('mountain costs 2', () => {
   const grid = ['.....', '.....', '..^..', '.....', '.....'];
-  const u = unit('torterra', 'ally', 2, 3);
+  const u = unit('bronzor', 'ally', 2, 3);
   assert.equal(reachable(grid, [u], u).get('2,2'), 2);
 });
 
@@ -76,7 +76,7 @@ import { pathTo } from '../src/core/pathfind.js';
 
 test('pathTo walks around walls, through allies, step by step', () => {
   const grid = ['.#...', '.#...', '.....'];
-  const u = unit('honchkrow', 'ally', 0, 0); // 이동력 6
+  const u = unit('murkrow', 'ally', 0, 0); // 이동력 6 (비행 +1)
   const friend = unit('torterra', 'ally', 1, 2);
   const path = pathTo(grid, [u, friend], u, 2, 0);
   assert.deepEqual(path[0], { x: 0, y: 0 });

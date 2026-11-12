@@ -20,7 +20,7 @@ const MARGIN = 2; // 카메라: 커서를 화면 가장자리에서 최소 이 �
 
 const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
-export function createGame({ rng, map, onExit }) {
+export function createGame({ rng, map, party, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0;
@@ -28,7 +28,7 @@ export function createGame({ rng, map, onExit }) {
   const facing = {};
 
   function reset() {
-    st = map ? createBattle(map) : createBattle();
+    st = createBattle(map, party);
     mode = 'banner';
     cursor = { x: 2, y: 5 };
     sel = walk = anim = banner = pause = focus = null;
@@ -63,7 +63,7 @@ export function createGame({ rng, map, onExit }) {
   }
 
   function attackTilesFrom(unit, tiles) {
-    const maxR = Math.max(...spec(unit).moves.map((m) => MOVES[m].range[1]));
+    const maxR = Math.max(...unit.moves.map((m) => MOVES[m].range[1]));
     const set = new Map();
     for (const k of tiles.keys()) {
       const [x, y] = k.split(',').map(Number);
@@ -152,7 +152,7 @@ export function createGame({ rng, map, onExit }) {
   }
 
   function openAction() {
-    menu = spec(sel).moves.map((m) => ({ label: MOVES[m].name, enabled: targetsFor(sel, m).length > 0, moveId: m }));
+    menu = sel.moves.map((m) => ({ label: MOVES[m].name, enabled: targetsFor(sel, m).length > 0, moveId: m }));
     menu.push({ label: '대기', enabled: true });
     menuSel = Math.max(0, menu.findIndex((i) => i.enabled));
     menuBox = cornerFor(sel, ui.menuRect(menu, 0, 0).w);
@@ -198,7 +198,7 @@ export function createGame({ rng, map, onExit }) {
     switch (mode) {
       case 'result':
         if ((ev.type === 'confirm' || ev.type === 'click') && resultT >= RESULT_LOCK) {
-          if (onExit) onExit(st.result);
+          if (onExit) onExit(st.result, st.log);
           else { reset(); playerPhase(); }
         }
         return;

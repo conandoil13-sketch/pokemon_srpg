@@ -19,7 +19,7 @@ test('mashing confirm/click through a whole enemy phase never throws', () => {
   assert.ok(run(game, (m) => m === 'idle'));
   // 적이 바로 공격할 수 있게 아군을 강 건너 적 앞에 배치
   const s = game.state;
-  const pos = { 'ally-infernape': [11, 5], 'ally-luxray': [12, 6], 'ally-empoleon': [11, 3], 'ally-torterra': [12, 8] };
+  const pos = { 'ally-chimchar': [11, 5], 'ally-shinx': [12, 6], 'ally-piplup': [11, 3], 'ally-turtwig': [12, 8] };
   for (const u of s.units) if (pos[u.id]) [u.x, u.y] = pos[u.id];
   game.handle({ type: 'endTurn' });
   const spam = [{ type: 'confirm' }, { type: 'click', x: 0, y: 0, px: 0, py: 0 }, { type: 'cancel' }, { type: 'dir', dx: 1, dy: 0 }];
@@ -35,8 +35,8 @@ test('mashing confirm right after the last KO does not skip the result screen', 
   game.handle({ type: 'confirm' });
   assert.ok(run(game, (m) => m === 'idle'));
   const s = game.state;
-  s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-lucario');
-  const L = s.units.find((u) => u.id === 'enemy-lucario');
+  s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-riolu');
+  const L = s.units.find((u) => u.id === 'enemy-riolu');
   L.x = 3; L.y = 5; L.hp = 1;
   const at = (x, y) => [{ type: 'cursor', x, y, px: x * 24 + 12, py: y * 24 + 12 }, { type: 'confirm' }];
   for (const e of [...at(2, 5), ...at(2, 5)]) game.handle(e);

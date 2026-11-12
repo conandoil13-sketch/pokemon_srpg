@@ -72,8 +72,8 @@ test('battle starts without a title and exits to the lobby with the result', () 
   tick(game, 2);
   assert.equal(game.mode, 'idle');
   const s = game.state;
-  s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-lucario');
-  const L = s.units.find((u) => u.id === 'enemy-lucario');
+  s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-riolu');
+  const L = s.units.find((u) => u.id === 'enemy-riolu');
   L.x = 3; L.y = 5; L.hp = 1;
   const at = (x, y) => [{ type: 'cursor', px: x * 24 + 12, py: y * 24 + 12 }, { type: 'confirm' }];
   for (const e of [...at(2, 5), ...at(2, 5)]) game.handle(e);

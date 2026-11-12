@@ -71,7 +71,7 @@ test('map shape and chars', () => {
 
 test('placements on walkable unique tiles', () => {
   const seen = new Set();
-  for (const p of [...MAP.allies, ...MAP.enemies]) {
+  for (const p of [...MAP.allySlots.map((q) => ({ ...q, species: 'chimchar' })), ...MAP.enemies]) {
     const t = MAP.tiles[p.y][p.x];
     assert.ok(t !== '#' && t !== '~', `${p.species} on ${t}`);
     const k = `${p.x},${p.y}`;
@@ -79,6 +79,8 @@ test('placements on walkable unique tiles', () => {
     seen.add(k);
     assert.ok(SPECIES[p.species], p.species);
   }
+  assert.equal(MAP.allySlots.length, 4);
+  for (const e of MAP.enemies) assert.ok(Number.isInteger(e.level) && e.level >= 1, e.species);
 });
 
 test('every move and species is keyed by its PokeAPI identifier', () => {
