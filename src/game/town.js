@@ -12,7 +12,7 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, spawn = TOWN.start, message = null }) {
+export function createTown({ onSortie, onParty, spawn = TOWN.start, message = null, leader = TOWN.leader }) {
   const map = TOWN;
   const width = map.tiles[0].length, height = map.tiles.length;
   const player = { x: spawn.x, y: spawn.y, facing: spawn.facing ?? 'down' };
@@ -40,7 +40,8 @@ export function createTown({ onSortie, spawn = TOWN.start, message = null }) {
     const o = objectAt(player.x + dx, player.y + dy);
     if (!o) return;
     if (o.kind === 'npc') npcFacing[o.id] = nameOf(-dx, -dy);
-    msg = { lines: o.lines, who: o.kind === 'npc' ? o : null, then: o.action === 'sortie' ? onSortie : null };
+    const then = o.action === 'sortie' ? onSortie : o.action === 'party' ? onParty : null;
+    msg = { lines: o.lines, who: o.kind === 'npc' ? o : null, then };
   }
 
   // BFS: 클릭한 칸(또는 클릭한 오브젝트 옆 칸)까지의 경로
@@ -90,6 +91,7 @@ export function createTown({ onSortie, spawn = TOWN.start, message = null }) {
 
   return {
     get player() { return player; },
+    get leader() { return leader; },
     get message() { return msg; },
 
     handle(ev) {
@@ -150,7 +152,7 @@ export function createTown({ onSortie, spawn = TOWN.start, message = null }) {
       const p = this.playerWorld();
       const items = [
         ...map.objects.map((o) => ({ y: o.y * TILE, draw: () => (o.kind === 'sign' ? drawSign(ctx, o) : drawPokemon(ctx, o.species, 'Idle', TO_DIR[npcFacing[o.id]], clock, o.x * TILE, o.y * TILE)) })),
-        { y: p.y, draw: () => drawPokemon(ctx, map.leader, walk ? 'Walk' : 'Idle', TO_DIR[player.facing], clock, p.x, p.y) },
+        { y: p.y, draw: () => drawPokemon(ctx, leader, walk ? 'Walk' : 'Idle', TO_DIR[player.facing], clock, p.x, p.y) },
       ].sort((a, b) => a.y - b.y);
       for (const it of items) it.draw();
       ctx.restore();

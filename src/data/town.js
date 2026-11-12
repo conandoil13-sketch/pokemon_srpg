@@ -20,14 +20,16 @@ export const TOWN = {
   // 상호작용 오브젝트 (지나갈 수 없음). kind: sign(표지판) | npc(포켓몬)
   objects: [
     { id: 'board', kind: 'sign', x: 9, y: 6, action: 'sortie', lines: ['출격 게시판이다.', '전투에 나갈까?'] },
-    { id: 'team', kind: 'sign', x: 4, y: 3, action: 'soon', lines: ['편성소 (준비 중)', '아직 문이 닫혀 있다.'] },
+    { id: 'team', kind: 'sign', x: 4, y: 3, action: 'party', lines: ['편성소다.', '파티를 확인할까?'] },
     { id: 'dex', kind: 'sign', x: 13, y: 3, action: 'soon', lines: ['도감 연구소 (준비 중)', '아직 문이 닫혀 있다.'] },
-    { id: 'npc-empoleon', kind: 'npc', species: 'empoleon', x: 16, y: 6, lines: ['강 건너에 적들이 모여 있다더군.', '게시판에서 출격하자!'] },
-    { id: 'npc-torterra', kind: 'npc', species: 'torterra', x: 3, y: 10, lines: ['바위산 위에서는 단단해지지.', '지형을 잘 써 보자.'] },
-    { id: 'npc-luxray', kind: 'npc', species: 'luxray', x: 7, y: 8, lines: ['수풀에 숨으면 잘 안 맞아!'] },
+    { id: 'npc-piplup', kind: 'npc', species: 'piplup', x: 16, y: 6, lines: ['강 건너에 적들이 모여 있대.', '게시판에서 출격하자!'] },
+    { id: 'npc-turtwig', kind: 'npc', species: 'turtwig', x: 3, y: 10, lines: ['바위산 위에서는 단단해져.', '지형을 잘 써 보자.'] },
+    { id: 'npc-shinx', kind: 'npc', species: 'shinx', x: 7, y: 8, lines: ['수풀에 숨으면 잘 안 맞아!', '강해지면 진화할 수 있대!'] },
   ],
-  leader: 'infernape',
+  leader: 'chimchar', // 기본 리더 (실제로는 파티 첫 멤버)
   start: { x: 9, y: 9, facing: 'up' },
   // 전투에서 돌아왔을 때 위치 (게시판 앞)
   returnSpot: { x: 9, y: 7, facing: 'up' },
+  // 편성소에서 나왔을 때 위치 (편성소 표지판 앞)
+  partySpot: { x: 4, y: 4, facing: 'up' },
 };

@@ -104,3 +104,15 @@ test('clicking an object walks next to it and examines it', () => {
   town.handle({ type: 'confirm' });
   assert.equal(sortie, 1);
 });
+
+test('party office sign opens the party screen; leader is the first party member', () => {
+  let opened = 0;
+  const town = createTown({ onSortie() {}, onParty() { opened++; }, leader: 'piplup' });
+  assert.equal(town.leader, 'piplup');
+  const sign = TOWN.objects.find((o) => o.action === 'party');
+  assert.ok(sign, 'party sign exists');
+  town.player.x = sign.x; town.player.y = sign.y + 1; town.player.facing = 'up';
+  town.handle({ type: 'confirm' });
+  town.handle({ type: 'confirm' });
+  assert.equal(opened, 1);
+});
