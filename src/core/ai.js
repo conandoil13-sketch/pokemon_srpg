@@ -7,6 +7,7 @@ import { expectedDamage, hitChance } from './damage.js';
 import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { canInflict } from './status.js';
+import { immunity, has } from './abilities.js';
 import { aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
 
@@ -151,7 +152,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
 const SLEEP_LOCK = 2;
 function ailmentValue(state, user, r, move) {
   const a = move.ailment;
-  if (!a || !canInflict(r, a, move).ok) return 0;
+  if (!a || !canInflict(r, a, move, W, { breaker: has(user, 'mold-breaker') }).ok) return 0;
   if (a === 'sleep') {
     // 상대 편이 이미 2마리 이상 쉬고 있거나, 깨어 있는 마지막 하나라면 재우지 않는다 (소수 편성 보호)
     const side = state.units.filter((u) => u.side === r.side);
@@ -208,6 +209,7 @@ function positionalStatus(state, unit, ghost, move, foes) {
   const acc = { ...move, accuracy: move.accuracy ?? 100 };
   const valueOn = (r) => {
     const same = r.side === unit.side;
+    if (!same && immunity(ghost, r, move)) return 0; // 축전에 전기자석파·방음에 노래 등은 쓰지 않는다
     const v = ch.reduce((s, c) => s + changeValue(ghost, foes, same, r, c), 0) + (same ? 0 : ailmentValue(state, ghost, r, move));
     return same ? v : v * hitChance(ghost, r, acc, tile(r), W) / 100;
   };

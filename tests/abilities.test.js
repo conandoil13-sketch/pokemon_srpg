@@ -289,7 +289,56 @@ test('plus/minus with a partner; flower gift in sun; bad dreams; synchronize', (
 
 test('pickup sometimes finds loot after a floor', () => {
   const members = [{ species: 'meowth', abilitySlot: 0 }];
-  assert.deepEqual(pickupLoot(members, seq([0.05, 0.2])), ['coins']);
+  assert.deepEqual(pickupLoot(members, seq([0.05, 0.2])), ['pickupCoins']);
   assert.deepEqual(pickupLoot(members, seq([0.05, 0.8])), ['candy']);
   assert.deepEqual(pickupLoot(members, seq([0.5])), []);
+});
+
+test('review fixes: rod pulls moves from its own side and status moves out of range', () => {
+  { // 아군 마중물이 아군의 물 기술을 끌어온다
+    const { s, r } = duel();
+    const g = s.units.find((u) => u.id === 'enemy-gible');
+    Object.assign(g, { side: 'ally', ability: 'storm-drain', x: 6, y: 6 });
+    const hp = r.hp;
+    const out = applyMove(s, 'ally-chimchar', 'water-gun', 'enemy-riolu', () => 0.5);
+    assert.equal(r.hp, hp);
+    assert.equal(g.stages.spa, 1);
+    assert.equal(out.redirected, g.id);
+    assert.deepEqual(out.abilityEvents.map((e) => e.ability), ['storm-drain']);
+  }
+  { // 사거리 밖 피뢰침이 전기자석파를 끌어온다
+    const { s, r } = duel();
+    const g = s.units.find((u) => u.id === 'enemy-gible');
+    Object.assign(g, { ability: 'lightning-rod', x: 8, y: 5 });
+    const out = applyMove(s, 'ally-chimchar', 'thunder-wave', 'enemy-riolu', () => 0.5);
+    assert.equal(r.status, null);
+    assert.equal(g.stages.spa, 1);
+    assert.equal(out.abilityEvents.length, 1);
+  }
+});
+
+test('review fixes: status moves report ability events; mold breaker ignores guards; magic guard confusion', () => {
+  {
+    const { s } = duel(null, 'volt-absorb');
+    const out = applyMove(s, 'ally-chimchar', 'thunder-wave', 'enemy-riolu', () => 0.5);
+    assert.deepEqual(out.abilityEvents.map((e) => e.ability), ['volt-absorb']);
+  }
+  {
+    const { s, r } = duel('mold-breaker', 'clear-body');
+    applyMove(s, 'ally-chimchar', 'screech', 'enemy-riolu', () => 0.1);
+    assert.equal(r.stages.def, -2);
+  }
+  {
+    const { s, r } = duel('mold-breaker', 'limber');
+    applyMove(s, 'ally-chimchar', 'thunder-wave', 'enemy-riolu', () => 0.1);
+    assert.equal(r.status, 'paralysis');
+  }
+  {
+    const { s, c } = duel('magic-guard');
+    c.confusion = 3;
+    const hp = c.hp;
+    const out = applyMove(s, 'ally-chimchar', 'scratch', 'enemy-riolu', () => 0.1);
+    assert.equal(out.blocked, 'confusion');
+    assert.equal(c.hp, hp);
+  }
 });

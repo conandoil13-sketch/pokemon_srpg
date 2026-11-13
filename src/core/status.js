@@ -19,17 +19,17 @@ export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0 });
 const types = (unit) => SPECIES[unit.species].types;
 
 // move: 거는 기술 (전기자석파처럼 기술 타입 상성으로 무효가 되는 경우)
-export function canInflict(unit, ailment, move, weather = null) {
+export function canInflict(unit, ailment, move, weather = null, { breaker = false } = {}) {
   if (weatherBlocksAilment(weather, ailment)) return { ok: false, reason: 'weather' }; // 쾌청엔 얼지 않는다
-  if (blocksAilment(unit, ailment, weather)) return { ok: false, reason: 'ability' }; // 면역·불면·리프가드 …
+  if (!breaker && blocksAilment(unit, ailment, weather)) return { ok: false, reason: 'ability' }; // 면역·불면·리프가드 …
   if (IMMUNE[ailment]?.some((t) => types(unit).includes(t))) return { ok: false, reason: 'immune' };
   if (move?.id === 'thunder-wave' && typeMultiplier(move.type, types(unit)) === 0) return { ok: false, reason: 'immune' };
   if (ailment === 'confusion') return unit.confusion > 0 ? { ok: false, reason: 'already' } : { ok: true };
   return unit.status ? { ok: false, reason: 'already' } : { ok: true };
 }
 
-export function inflict(unit, ailment, rng, move, weather = null) {
-  const r = canInflict(unit, ailment, move, weather);
+export function inflict(unit, ailment, rng, move, weather = null, opts = {}) {
+  const r = canInflict(unit, ailment, move, weather, opts);
   if (!r.ok) return r;
   if (ailment === 'confusion') { unit.confusion = 1 + Math.floor(rng() * 4); return r; }
   unit.status = ailment;
@@ -65,7 +65,7 @@ export function phaseStart(unit, rng) {
 // 그 편 페이즈 끝: 지속 데미지(HP 적용은 호출 측), 맹독 증가, 혼란 감소
 export function phaseEnd(unit) {
   let damage = 0, kind;
-  if (unit.status === 'poison' || unit.status === 'burn') { damage = Math.max(1, Math.floor(unit.maxHp / 8)); kind = unit.status; }
+  if (unit.status === 'poison' || unit.status === 'burn') { damage = Math.max(1, Math.floor(unit.maxHp / (unit.status === 'burn' && has(unit, 'heatproof') ? 16 : 8))); kind = unit.status; } // 내열: 화상 피해 절반
   if (unit.status === 'toxic') {
     damage = Math.max(1, Math.floor(unit.maxHp * unit.statusTurns / 16)); kind = 'toxic';
     unit.statusTurns = Math.min(TOXIC_MAX, unit.statusTurns + 1);

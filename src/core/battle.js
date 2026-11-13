@@ -75,7 +75,7 @@ function floorStartAbilities(state) {
   const nearestFoe = (u) => state.units.filter((o) => o.side !== u.side).sort((p, q) => dist(p, u) - dist(q, u))[0];
   for (const u of state.units) if (has(u, 'trace')) {
     const f = nearestFoe(u);
-    if (f && f.ability && !['trace', 'multitype'].includes(f.ability)) { u.ability = f.ability; log.push({ unitId: u.id, ability: 'trace', copied: f.ability }); }
+    if (f && f.ability && !['trace', 'multitype', 'wonder-guard'].includes(f.ability)) { u.ability = f.ability; log.push({ unitId: u.id, ability: 'trace', copied: f.ability }); }
   }
   if (state.weather !== 'fog') {
     const setters = state.units.filter((u) => WEATHER_SETTER[u.ability]).sort((p, q) => effectiveStat(q, 'spe') - effectiveStat(p, 'spe'));
@@ -95,10 +95,11 @@ const byId = (state, id) => state.units.find((u) => u.id === id);
 
 export function moveUnit(state, id, x, y) {
   const u = byId(state, id);
+  const stayed = u.x === x && u.y === y;
   u.x = x; u.y = y; u.moved = true;
   state.log.arriveAbilityEvents = [];
-  // 위협: 이동을 마쳤을 때 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
-  if (has(u, 'intimidate')) {
+  // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
+  if (has(u, 'intimidate') && !stayed) {
     const log = state.log.arriveAbilityEvents;
     u.intimNow ??= [];
     for (const f of state.units) {
@@ -161,13 +162,25 @@ export function targetsOf(state, user, move, focus) {
   }
 }
 
-function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false) {
+function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false, breaker = false) {
   for (const { stat, change } of list) {
     const key = API_STAT[stat];
     if (!key) continue;
-    const r = applyStageChange(unit, key, change, turns, { fromOther });
+    const r = applyStageChange(unit, key, change, turns, { fromOther, breaker });
     out.push({ unitId: unit.id, key, change, applied: r.applied, after: r.after });
   }
+}
+
+// 피뢰침·마중물: 주변 2칸 안의 대상을 노린 단일 전기/물 기술을 끌어온다 (아군·적 모두, 사거리·편 무시).
+// 끌어온 유닛(대상이 원래 그 유닛이면 null)을 돌려준다. 화면도 연출 대상을 정할 때 쓴다
+export function redirectTarget(state, userId, moveId, aim) {
+  if (!(typeof aim === 'string' || aim?.unitId)) return null;
+  const mv = MOVES[moveId], user = byId(state, userId), tgt = byId(state, typeof aim === 'string' ? aim : aim.unitId);
+  if (!user || !tgt || (mv.shape?.type ?? 'single') !== 'single' || has(user, 'mold-breaker')) return null;
+  if (mv.category === 'status' && mv.kind === 'self') return null;
+  const type = moveTypeOf(user, mv);
+  const rod = state.units.filter((o) => o.id !== userId && REDIRECT[o.ability] === type && dist(o, tgt) <= 2).sort((p, q) => dist(p, tgt) - dist(q, tgt))[0];
+  return rod && rod !== tgt ? rod : null;
 }
 
 // 공격기·변화기 공통. 공격기는 데미지 + 능력치 부가효과, 변화기는 대상별 랭크 변화
@@ -183,15 +196,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     u.plusActive = (has(u, 'plus') || has(u, 'minus')) && nextTo(u, (o) => has(o, 'plus') || has(o, 'minus'));
     u.flowerActive = W === 'sun' && (has(u, 'flower-gift') || nextTo(u, (o) => has(o, 'flower-gift')));
   }
-  // 피뢰침·마중물: 주변 2칸 안의 대상을 노린 단일 전기/물 기술을 끌어온다 (아군·적 모두)
-  if (typeof aim === 'string' || aim?.unitId) {
-    const mv0 = MOVES[moveId], tId = typeof aim === 'string' ? aim : aim.unitId, tgt = byId(state, tId);
-    if (tgt && (mv0.shape?.type ?? 'single') === 'single') {
-      const type = moveTypeOf(byId(state, userId), mv0);
-      const rod = state.units.filter((o) => o.id !== userId && REDIRECT[o.ability] === type && dist(o, tgt) <= 2).sort((p, q) => dist(p, tgt) - dist(q, tgt))[0];
-      if (rod && rod !== tgt && !has(byId(state, userId), 'mold-breaker')) aim = { unitId: rod.id };
-    }
-  }
+  const rod = redirectTarget(state, userId, moveId, aim);
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = MOVES[moveId];
   a.acted = true;
@@ -200,6 +205,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
   const abilityEvents = (state.log.abilityEvents = []); // 이번 기술에서 발동한 특성 (연출용)
+  const moldBreaker = has(a, 'mold-breaker'); // 틀깨기: 상대의 방어 특성(클리어바디·유연·습기 …) 무시
   // 특성 흡수 결과 적용: 회복·랭크·타오르는불꽃
   const absorb = (u, ab) => {
     if (ab.heal) u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * ab.heal)));
@@ -209,7 +215,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   };
   const ail = (t) => {
     if (!move.ailment) return;
-    const r = inflict(t, move.ailment, rng, move, W);
+    const r = inflict(t, move.ailment, rng, move, W, { breaker: t !== a && moldBreaker });
     statusChanges.push({ unitId: t.id, ailment: move.ailment, ...r });
     // 싱크로: 독·마비·화상을 건 상대에게도
     if (r.ok && has(t, 'synchronize') && t !== a && SYNC_AILMENTS.includes(move.ailment)) {
@@ -224,7 +230,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   if (blocked) {
     const out = { kind, blocked, stageChanges, statusChanges, thawed, missed: [] };
     if (blocked === 'confusion') {
-      const damage = confusionDamage(a);
+      const damage = magicGuard(a) ? 0 : confusionDamage(a); // 매직가드: 자해 피해 없음
       a.hp = Math.max(0, a.hp - damage);
       out.selfHit = { damage, fainted: a.hp === 0 };
       if (a.hp === 0) knockOut(state, a, null);
@@ -234,9 +240,18 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
 
   // 습기: 주변 2칸에 습기가 있으면 자폭·대폭발 불발
-  if (SELF_KO.includes(move.id) && state.units.some((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2)) {
+  if (SELF_KO.includes(move.id) && !moldBreaker && state.units.some((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2)) {
     abilityEvents.push({ unitId: state.units.find((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2).id, ability: 'damp' });
     return { kind, blocked: 'damp', stageChanges, statusChanges, thawed, missed: [], abilityEvents };
+  }
+
+  // 끌어왔으면 그 유닛이 무효로 흡수하고 특공 +1 (명중 판정 없음)
+  if (rod) {
+    const hpBefore = rod.hp;
+    absorb(rod, { ability: rod.ability, boost: { spa: 1 } });
+    if (kind === 'status') return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, redirected: rod.id };
+    const hit = { unitId: rod.id, hit: true, crit: false, typeMult: 0, damage: 0, absorbed: { ability: rod.ability }, fainted: false, hpBefore };
+    return { kind, hits: [hit], expGained: {}, stageChanges, statusChanges, thawed, selfKO: false, abilityEvents, redirected: rod.id, hit: true, crit: false, typeMult: 0, damage: 0, fainted: false };
   }
 
   if (kind === 'status') {
@@ -246,10 +261,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
       const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
       if (ab) { absorb(t, ab); continue; }
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
-      changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a);
+      changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
-    return { kind, stageChanges, statusChanges, thawed, missed };
+    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const spread = targets.length >= 2 ? 0.75 : 1;
@@ -273,7 +288,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     const landed = r.hit && r.typeMult > 0;
     anyLanded ||= landed;
     const dust = !breaksDef && has(d, 'shield-dust'); // 인분: 받는 부가효과 무효
-    if (landed && !fainted && !dust && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, true);
+    if (landed && !fainted && !dust && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, true, breaksDef);
     if (landed && !fainted && !dust && move.ailment && roll(move.ailmentChance)) ail(d);
     if (landed && !fainted && r.damage > 0) {
       if (has(d, 'color-change') && d.typeOverride !== moveTypeOf(a, move)) { d.typeOverride = moveTypeOf(a, move); abilityEvents.push({ unitId: d.id, ability: 'color-change' }); }
@@ -398,11 +413,14 @@ export function endPhase(state, rng = Math.random) {
     u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
     u.trapped = state.units.some((o) => o.side !== u.side && dist(o, u) === 1 && traps(o, u)); // 묶기
     if (state.result) continue;
-    if (u.loafNext) { u.loafNext = false; u.moved = true; u.acted = true; abilityLog.push({ unitId: u.id, ability: 'truant' }); continue; } // 게으름
     if (W === 'sun' && u.status === 'freeze') { cure(u); events.push({ unitId: u.id, kind: 'thawed' }); } // 쾌청: 녹는다
     const st = phaseStart(u, rng);
     if (st.event) events.push({ unitId: u.id, kind: st.event });
     if (st.skip) { u.moved = true; u.acted = true; }
+    if (u.loafNext) { // 게으름: 잠·얼음 턴은 그대로 흐르고, 이번 차례는 쉰다
+      u.loafNext = false; u.moved = true; u.acted = true;
+      if (!st.skip) abilityLog.push({ unitId: u.id, ability: 'truant' });
+    }
   }
 }
 

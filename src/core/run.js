@@ -6,7 +6,7 @@ export const CANDY_EXP_PER_FLOOR = 30;
 export const FAINTED_HP_RATIO = 0.5;
 
 export const startRun = (dungeonId, seed) => ({ dungeonId, floor: 1, seed, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 0 } });
-export const FLOOR_COINS = 10, CHEST_COINS = 20;
+export const FLOOR_COINS = 10, CHEST_COINS = 20, PICKUP_COINS = 10;
 
 export const floorSeed = (run) => hashSeed(run.seed, run.floor);
 
@@ -25,6 +25,7 @@ export function addLoot(run, item, floor) {
   if (item === 'evoStone') run.loot.evoStone += 1;
   else if (item === 'candy') run.loot.candy.push(floor);
   else if (item === 'coins') run.loot.coins = (run.loot.coins ?? 0) + CHEST_COINS * floor;
+  else if (item === 'pickupCoins') run.loot.coins = (run.loot.coins ?? 0) + PICKUP_COINS * floor; // 픽업·꿀모으기
 }
 
 export const addBattleCoins = (run, n) => { run.loot.coins = (run.loot.coins ?? 0) + n; };

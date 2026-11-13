@@ -178,7 +178,7 @@ export function pickupLoot(members, rng) {
   const out = [];
   for (const m of members) {
     const a = SPECIES[m.species].abilities[m.abilitySlot ?? 0] ?? SPECIES[m.species].abilities[0];
-    if ((a === 'pickup' || a === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'coins' : 'candy');
+    if ((a === 'pickup' || a === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'pickupCoins' : 'candy');
   }
   return out;
 }

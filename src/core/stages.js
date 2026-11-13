@@ -29,8 +29,8 @@ function refresh(unit, key) {
 }
 
 // 반환: { key, before, after, applied } — applied 0 이면 이미 한계 (새 층 없음)
-export function applyStageChange(unit, key, change, turns = STAGE_TURNS, { fromOther = false } = {}) {
-  change = stageGuard(unit, key, change, fromOther); // 클리어바디·괴력집게·날카로운눈·단순
+export function applyStageChange(unit, key, change, turns = STAGE_TURNS, { fromOther = false, breaker = false } = {}) {
+  if (!breaker) change = stageGuard(unit, key, change, fromOther); // 클리어바디·괴력집게·날카로운눈·단순 (틀깨기면 무시)
   unit.stages ??= zeros();
   unit.turns ??= zeros();
   unit.layers ??= [];

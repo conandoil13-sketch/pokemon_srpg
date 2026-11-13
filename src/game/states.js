@@ -1,5 +1,5 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
-import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict } from '../core/status.js';
 import { wrapMessage } from '../render/mapAttack.js';
@@ -201,6 +201,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 페이즈 종료 때 풀린 랭크 → 대사 (한 건씩)
   // 페이즈 전환 알림: { lines, at?, hp? } — 스펙 순서(끝 데미지 → 랭크 만료 → 시작)
+  // 층 시작 특성 대사 — 안개 속 적의 것은 정체가 드러나므로 뺀다
+  const floorNotices = () => abilityNotices((st.floorAbilityEvents ?? []).filter((e) => !hiddenIds().has(e.unitId)), (id) => everyone.get(id));
   const phaseLines = () => { const get = (id) => everyone.get(id); return [...abilityNotices(st.log.phaseAbilityEvents, get), ...phaseNotices(st.log.statusEvents ?? [], st.log.expired ?? [], get)]; };
 
   // list: 대사 줄 또는 { lines, at, hp } 알림
@@ -295,10 +297,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function doAttack(attacker, target, moveId, then, aim) {
     const mv = MOVES[moveId];
     if (isAttack(mv)) { attackWith(attacker, target, mv, then, aim); return; }
-    const one = pickOne(mv) && target && target !== attacker ? target : null;
+    const pulled = pickOne(mv) && target && target !== attacker ? redirectTarget(st, attacker.id, moveId, target.id) : null; // 피뢰침·마중물
+    const one = pulled ?? (pickOne(mv) && target && target !== attacker ? target : null);
     const hpBefore = one?.hp;
     const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, one].find((u) => u?.id === id);
-    const result = applyMove(st, attacker.id, moveId, aim ?? one?.id ?? null, rng);
+    const result = applyMove(st, attacker.id, moveId, aim ?? (pulled ? target.id : one?.id) ?? null, rng); // 끌어오기는 원래 대상으로 넘겨야 다시 판정됨
     // 마비 실패·혼란 자해: 기술이 나가지 않으므로 대상은 돌아보지 않고 카메라는 사용자에게
     if (one && !result.blocked) {
       facing[attacker.id] = dirFromDelta(one.x - attacker.x, one.y - attacker.y);
@@ -314,7 +317,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 공격기: 맞기 전 대상 목록을 잡아 두고(기절해도 연출), 결과를 다중 대상 연출로
   function attackWith(attacker, target, mv, then, aim) {
     const a = aim ?? (target ? { unitId: target.id } : { self: true });
-    const defenders = unitsHit(st, attacker, mv, a);
+    const pulled = redirectTarget(st, attacker.id, mv.id, a); // 피뢰침·마중물이 끌어오면 그 유닛만 연출
+    const defenders = pulled ? [pulled] : unitsHit(st, attacker, mv, a);
     const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, ...defenders].find((u) => u.id === id);
     const result = applyMove(st, attacker.id, mv.id, a, rng);
     if (!result.blocked) {
@@ -425,7 +429,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       case 'result':
         if ((ev.type === 'confirm' || ev.type === 'click') && resultT >= RESULT_LOCK) {
           if (onExit) onExit(st.result, st.log);
-          else { reset(); playerPhase(abilityNotices(st.floorAbilityEvents, (id) => everyone.get(id))); }
+          else { reset(); playerPhase(floorNotices()); }
         }
         return;
       case 'notice':
@@ -819,7 +823,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (resultT >= RESULT_LOCK && Math.floor(time * 2) % 2 === 0) centered(ctx, onExit ? 'Z 키로 계속' : 'Z 키로 다시 하기', 116, '#606878');
   }
 
-  playerPhase(abilityNotices(st.floorAbilityEvents, (id) => everyone.get(id))); // 잔비·트레이스 등 층 시작 특성
+  playerPhase(floorNotices()); // 잔비·트레이스 등 층 시작 특성
 
   return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get fx() { return fxm; }, get bannerSub() { return banner?.sub ?? null; }, get hiddenIds() { return hiddenIds(); }, get shake() { return anim?.shake ?? 0; }, get camera() { return { ...cam }; } };
 }
