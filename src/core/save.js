@@ -1,5 +1,6 @@
 // 저장 / 불러오기 (순수 + 주입한 storage). storage = { getItem(key), setItem(key, value) }
 import { SPECIES } from '../data/species.js';
+import { defaultSlot } from './progress.js';
 import { MOVES } from '../data/moves.js';
 import { expForLevel, MAX_LEVEL } from './stats.js';
 import { startingMoves } from './learn.js';
@@ -7,7 +8,7 @@ import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 4;
+const VERSION = 5;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -31,7 +32,8 @@ function cleanMember(m) {
   let moves = (Array.isArray(m.moves) ? m.moves : []).filter((mv) => own(MOVES, mv) && (MOVES[mv].learnable || mv === 'tackle'));
   moves = [...new Set(moves)].slice(0, 4);
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES, m.species);
-  return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves };
+  const slot = Number.isInteger(m.abilitySlot) && m.abilitySlot >= 0 && m.abilitySlot < s.abilities.length ? m.abilitySlot : m.abilitySlot === undefined ? defaultSlot(m.species) : 0;
+  return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot };
 }
 
 const isDungeon = (id) => typeof id === 'string' && DUNGEONS.some((d) => d.id === id);
@@ -87,6 +89,7 @@ export function loadGame(storage) {
   if (data?.version === 1) data = { ...data, version: 2, cleared: [], unlocked: [], best: {}, run: null }; // v1 → v2: 고정 스테이지 기록은 버림
   if (data?.version === 2) data = { ...data, version: 3 }; // v2 → v3: 메타몽은 아래 ensureDitto 가 넣는다
   if (data?.version === 3) data = { ...data, version: 4, coins: 0, shards: {}, sortie: [] }; // v3 → v4: 출전은 아래에서 파티 앞으로 채움
+  if (data?.version === 4) data = { ...data, version: 5 }; // v4 → v5: 특성 슬롯은 cleanMember 가 채운다
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
     const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);

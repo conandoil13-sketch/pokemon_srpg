@@ -8,7 +8,7 @@ export function encounterPool(dungeon, floor, { boss = false } = {}) {
   let bstCap = dungeon.bstCap + (boss ? 80 : 0);
   for (let step = 0; step <= RELAX_STEPS; step++) {
     const pool = Object.values(SPECIES)
-      .filter((s) => !s.legendary && s.key !== 'ditto' && s.types.some((t) => dungeon.types.includes(t)) && s.stage <= stageCap && s.bst <= bstCap)
+      .filter((s) => !s.legendary && s.key !== 'ditto' && s.key !== 'shedinja' /* 불가사의부적: 적으로 안 나옴 (사용자 결정) */ && s.types.some((t) => dungeon.types.includes(t)) && s.stage <= stageCap && s.bst <= bstCap)
       .map((s) => s.key)
       .sort();
     if (pool.length) {

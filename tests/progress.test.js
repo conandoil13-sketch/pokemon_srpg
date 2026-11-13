@@ -98,3 +98,38 @@ test('random branches: wurmple picks one by rng', () => {
   assert.equal(e.options.length, 1);
   assert.equal(e.random, true);
 });
+
+// ---- 특성 ----
+import { abilityOf, swapAbility } from '../src/core/progress.js';
+import { makeUnit as mkA } from '../src/core/battle.js';
+import { encounterPool } from '../src/core/encounters.js';
+import { DUNGEONS } from '../src/data/dungeons.js';
+test('members get an ability slot; evolution keeps the slot', () => {
+  const g = newMember('geodude', 5, () => 0.9);
+  assert.equal(g.abilitySlot, 1);
+  assert.equal(abilityOf(g), 'sturdy');
+  evolveMember(g, 'graveler');
+  assert.equal(abilityOf(g), 'sturdy');
+  assert.equal(abilityOf(newMember('pikachu', 5, () => 0.9)), 'static'); // 특성 하나
+});
+
+test('swap ability with 3 shards of the line', () => {
+  const game = { party: [newMember('geodude', 5, () => 0)], shards: { geodude: 3 } };
+  assert.deepEqual(swapAbility(game, 'geodude'), { ok: true });
+  assert.equal(abilityOf(game.party[0]), 'sturdy');
+  assert.equal(game.shards.geodude, 0);
+  assert.equal(swapAbility(game, 'geodude').reason, 'shards');
+  const p = { party: [newMember('pikachu', 5)], shards: { pichu: 9, pikachu: 9 } };
+  assert.equal(swapAbility(p, 'pikachu').reason, 'single');
+});
+
+test('units carry abilities; Shedinja never appears as an enemy', () => {
+  const e = mkA({ species: 'geodude', side: 'enemy', x: 3, y: 4, level: 10 });
+  assert.ok(['rock-head', 'sturdy'].includes(e.ability));
+  const a = mkA({ species: 'geodude', side: 'ally', x: 0, y: 0, level: 10, ability: 'sturdy' });
+  assert.equal(a.ability, 'sturdy');
+  for (const d of DUNGEONS) for (let f = 1; f <= d.floors; f++) {
+    assert.ok(!encounterPool(d, f).includes('shedinja'));
+    assert.ok(!encounterPool(d, f, { boss: true }).includes('shedinja'));
+  }
+});

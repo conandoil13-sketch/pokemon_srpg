@@ -1,5 +1,6 @@
 // 전투 상태 (순수 로직, 상태 객체를 직접 갱신)
 import { MAP } from '../data/map.js';
+import { hash } from '../render/pixels.js';
 import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
@@ -11,18 +12,20 @@ import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './s
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { startingMoves } from './learn.js';
-import { newParty } from './progress.js';
+import { newParty, abilityOf } from './progress.js';
 
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id, boss }) {
+export function makeUnit({ species, side, x, y, level, moves, id, boss, ability }) {
   const stats = statsAt(SPECIES[species].base, level);
   return {
     id: id ?? `${side}-${species}`, species, side, x, y, level, stats,
     hp: stats.hp, maxHp: stats.hp,
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES, species),
     moved: false, acted: false,
+    // 특성: 동료는 멤버 값, 적은 위치·레벨로 정해지는 무작위 (같은 층이면 같은 특성)
+    ability: ability ?? SPECIES[species].abilities[Math.floor(hash(species, x, y, level) * SPECIES[species].abilities.length)],
     ...newStages(),
     ...newStatus(),
     ...(boss ? { boss: true } : {}),
@@ -40,7 +43,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
   const units = [];
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
     const { x, y } = mapDef.allySlots[i];
-    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species) });
+    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m) });
     if (hpRatio[m.species]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[m.species]));
     units.push(u);
   });

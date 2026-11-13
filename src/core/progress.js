@@ -1,5 +1,7 @@
 // 파티 진행 (순수): 새 파티, 경험치 적용 → 레벨업·기술·진화 이벤트
 import { SPECIES } from '../data/species.js';
+import { hash } from '../render/pixels.js';
+import { lineRoot } from './gacha.js';
 import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
 import { expForLevel, levelForExp, statsAt, MAX_LEVEL } from './stats.js';
@@ -9,9 +11,28 @@ import { levelEvolutionOptions, stoneEvolutionOptions, pickEvolution } from './e
 export const STARTERS = ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']; // 메타몽 = 주인공 (항상 맨 앞)
 
 // Member = { species, level, exp, moves }
-export function newMember(species, level = BALANCE.startLevel) {
+// 특성 슬롯: 합류할 때 무작위(rng 가 없으면 종 이름으로 고정). 진화해도 같은 슬롯
+export const defaultSlot = (species) => (SPECIES[species].abilities.length > 1 ? hash(species, 'ability') < 0.5 ? 0 : 1 : 0);
+export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
-  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species) };
+  const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
+  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot };
+}
+
+// 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)
+export const abilityOf = (m) => { const a = SPECIES[m.species].abilities; return a[m.abilitySlot ?? 0] ?? a[0]; };
+
+// 결정 3개로 다른 특성으로 (계열 뿌리 결정)
+export const ABILITY_SWAP_COST = 3;
+export function swapAbility(game, species) {
+  const m = game.party.find((x) => x.species === species);
+  if (!m) return { ok: false, reason: 'missing' };
+  if (SPECIES[species].abilities.length < 2) return { ok: false, reason: 'single' };
+  const root = lineRoot(species);
+  if ((game.shards[root] ?? 0) < ABILITY_SWAP_COST) return { ok: false, reason: 'shards' };
+  game.shards[root] -= ABILITY_SWAP_COST;
+  m.abilitySlot = (m.abilitySlot ?? 0) === 0 ? 1 : 0;
+  return { ok: true };
 }
 
 export const newParty = () => STARTERS.map((sp) => newMember(sp));
