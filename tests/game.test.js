@@ -364,3 +364,28 @@ test('a throwing effect manager never blocks the battle', () => {
   game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
   playOut(game);
 });
+
+// ---- 상태이상 지속 표시 ----
+test('lingering status effects follow status changes and vanished units', () => {
+  const game = createGame({ rng: () => 0.5 });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  const st = game.state;
+  const c = st.units.find((u) => u.id === 'ally-chimchar');
+  c.status = 'burn';
+  game.update(0.02);
+  assert.equal(game.fx.following, 1);
+  c.status = null;
+  for (let i = 0; i < 60; i++) game.update(0.02);
+  assert.equal(game.fx.following, 0);
+  c.status = 'paralysis'; c.confusion = 2;
+  game.update(0.02);
+  assert.equal(game.fx.following, 2);
+  st.units = st.units.filter((u) => u !== c); // 기절해 사라짐
+  assert.doesNotThrow(() => { for (let i = 0; i < 5; i++) game.update(0.02); });
+  assert.equal(game.fx.following, 0);
+});
+
+test('a new battle starts with no effects', () => {
+  const game = createGame({ rng: () => 0.5 });
+  assert.equal(game.fx.count, 0);
+});

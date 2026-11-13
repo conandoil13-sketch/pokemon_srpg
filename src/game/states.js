@@ -9,7 +9,9 @@ import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
-import { drawUnitSprite, drawShadow, hasAnim, DIR } from '../render/sprites.js';
+import { drawUnitSprite, drawShadow, hasAnim, idleFrameSource, DIR } from '../render/sprites.js';
+import { actorFor, bodyAt } from '../render/fxActor.js';
+import { fxForAilment } from '../data/moveFx.js';
 import { dirFromDelta } from '../render/pmdData.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -467,6 +469,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // ---------- 갱신 ----------
   function update(dt) {
     clock += dt;
+    syncStatusFx();
     fxm.update(dt);
     if (notice) notice.t += dt;
     resultT = mode === 'result' ? resultT + dt : 0;
@@ -504,6 +507,24 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         if (!st.result) animThen();
       }
     }
+  }
+
+  // 상태이상 지속 표시: 살아 있는 유닛의 상태와 맞춘다 (없어진 건 멈추고, 새로 생긴 건 붙인다)
+  function syncStatusFx() {
+    const wanted = new Map();
+    for (const u of st.units) {
+      const kinds = [u.status, u.confusion > 0 ? 'confusion' : null].filter(Boolean);
+      for (const k of kinds) {
+        const loop = fxForAilment(k).loop;
+        if (!loop) continue;
+        const actor = actorFor(u.species, idleFrameSource(u.species));
+        wanted.set(`${u.id}:${k}`, {
+          spec: loop, actor,
+          getPos: () => { if (!st.units.includes(u)) return null; const p = unitWorld(u); return bodyAt(actor, p.x + TILE / 2, p.y + TILE / 2); },
+        });
+      }
+    }
+    fxm.sync(wanted);
   }
 
   function updateCamera(dt) {

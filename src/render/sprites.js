@@ -75,6 +75,15 @@ export const loadSprites = requestSprites; // 이전 이름
 
 export const hasPmd = (key) => !!pmd[key];
 // 그 동작의 시트가 실제로 있는가 (대체 동작 제외)
+// pixelfx actor 용: Idle 첫 프레임(정면) 위치 { img, sx, sy, w, h } — 아직 로드 전이면 null
+export function idleFrameSource(key) {
+  const p = pmd[key];
+  if (!p) return null;
+  const a = pickAnim(p, 'Idle'), img = p.sheets[a.sheet];
+  if (!img) return null;
+  const rows = Math.max(1, Math.round(img.height / a.frameH));
+  return { img, sx: 0, sy: (rows >= 8 ? DIR.Down : 0) * a.frameH, w: a.frameW, h: a.frameH };
+}
 export const hasAnim = (key, name) => { const a = pmd[key]?.data.anims[name]; return !!(a && pmd[key].sheets[a.sheet]); };
 
 // 애니메이션이 없으면 대체: Attack ← Strike, Shoot ← Attack, Walk ← Idle

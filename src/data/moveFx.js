@@ -28,7 +28,7 @@ function rule(move, distance) {
     case 'around':
       if (move.type === 'ground' || move.type === 'rock') return { cast: spec('impacts/ground-slam', { palette: p, reach: AREA_REACH }, 2, 'back'), hit: thud };
       return { cast: spec('lightning/thunderclap', { palette: p, sparks: bright(p), reach: AREA_REACH }, 2, 'back'), hit: thud };
-    case 'blast': return { travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), burst: spec('explosions/plasma-explosion', { palette: p, accent: bright(p) }, 2) };
+    case 'blast': return { travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), burst: spec('impacts/blunt-hit', { palette: p, light: 1.3 }, 1.5) }; // 착탄 십자 5칸에 하나씩 (plasma-explosion 은 화면에 너무 큼)
     default:
       if (distance >= 2) {
         if (move.category === 'special') return { cast: spec('arcane/spell-charge', { palette: p }, 2, 'front', { life: 0.3 }), travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), hit: thud };

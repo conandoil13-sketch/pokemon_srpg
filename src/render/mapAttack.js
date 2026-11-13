@@ -10,6 +10,8 @@ import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
 import { fxForMove, fxForStage, fxForAilment } from '../data/moveFx.js';
+import { actorFor, bodyAt } from './fxActor.js';
+import { idleFrameSource } from './sprites.js';
 
 const AUTO = 1.1;
 
@@ -105,11 +107,18 @@ function spawnSafe(fx, spec, at, opts) {
   if (!fx || !spec) return null;
   try { return fx.spawn(spec, at, opts); } catch { return null; }
 }
+// 몸에 붙는 이펙트: 우리 스프라이트 모양 actor 와 그 원점
+function onBody(fx, spec, u) {
+  const actor = actorFor(u.species, idleFrameSource(u.species));
+  return spawnSafe(fx, spec, bodyAt(actor, u.x * TILE + TILE / 2, u.y * TILE + TILE / 2), { actor });
+}
 // 랭크·상태이상 걸림 (세 연출 공통): 단계에 들어갈 때 한 번
 function spawnChangeFx(fx, s, result, get) {
-  if (s.k === 'stage') for (const c of result.stageChanges ?? []) { const u = get(c.unitId); if (u && c.applied) spawnSafe(fx, fxForStage(c.applied), feet(u)); }
-  if (s.pop) { const u = get(s.pop.unitId); if (u) spawnSafe(fx, fxForAilment(s.pop.ailment).inflict, feet(u)); }
+  if (s.k === 'stage') for (const c of result.stageChanges ?? []) { const u = get(c.unitId); if (u && c.applied) onBody(fx, fxForStage(c.applied), u); }
+  if (s.pop) { const u = get(s.pop.unitId); if (u) onBody(fx, fxForAilment(s.pop.ailment).inflict, u); }
 }
+// 직선 빔: 이펙트의 손 위치(15, -24)가 사용자 중심에 오도록 원점을 방향별로 옮긴다
+const BEAM_HAND = { right: [15, -24], left: [-15, -24], up: [-24, -15], down: [24, 15] };
 
 export function createMapAttack(opts) {
   if (opts.result.blocked) return createBlockedAnim(opts);
@@ -278,7 +287,8 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     if (s.k === 'travel' && spec.travel) {
       if (spec.travel.clip) {
         const len = (Math.abs(endPt.x - attacker.x) + Math.abs(endPt.y - attacker.y)) * TILE + TILE / 2;
-        fallbackShot = !spawnSafe(fx, spec.travel, { x: feet(attacker).x, y: feet(attacker).y - 10 }, { dir, clipTo: len });
+        const [hx, hy] = BEAM_HAND[dir], c = center(attacker);
+        fallbackShot = !spawnSafe(fx, spec.travel, { x: c.x - hx, y: c.y - hy }, { dir, clipTo: len + 15 }); // 손 위치만큼 더
       } else {
         shot = spawnSafe(fx, spec.travel, feet(attacker), { dir });
         fallbackShot = !shot;
@@ -286,7 +296,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     }
     if (s.k === 'impact') {
       if (shot) { try { shot.fx.stop(); } catch { /* 무시 */ } }
-      if (spec.burst && aim?.x !== undefined) spawnSafe(fx, spec.burst, feet(aim));
+      if (spec.burst && aim?.x !== undefined) for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) spawnSafe(fx, spec.burst, feet({ x: aim.x + dx, y: aim.y + dy }), { delay: dx || dy ? 0.06 : 0 }); // 착탄 십자
       if (spec.selfKO) { spawnSafe(fx, spec.selfKO, feet(attacker)); shakeT = 0.4; }
       let ok = true;
       for (const d of defenders) {

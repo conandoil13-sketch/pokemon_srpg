@@ -63,6 +63,7 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
   return {
     get count() { return list.length; },
     get failed() { return failed; },
+    get following() { return list.filter((e) => e.key && !e.stopped).length; },
     log,
     // 공격 연출이 끝난 뒤 꼬리(연기·잔해)는 sec 초 뒤에 정리 (지속 표시는 제외)
     expire(sec) { for (const e of list) if (!e.key && e.life === null) e.life = e.age + sec; },

@@ -16,7 +16,7 @@ test('templates by shape and category', () => {
   assert.deepEqual([f('heat-wave').cast.id, f('heat-wave').cast.opts.palette], ['fire/fire-breath', PAL.fire]);
   assert.equal(f('earthquake').cast.id, 'impacts/ground-slam');
   assert.deepEqual([f('discharge').cast.id, f('discharge').cast.opts.palette], ['lightning/thunderclap', PAL.volt]);
-  assert.equal(f('fire-blast').burst.id, 'explosions/plasma-explosion');
+  assert.equal(f('fire-blast').burst.id, 'impacts/blunt-hit');
   assert.equal(f('self-destruct').selfKO.id, 'explosions/small-explosion');
   assert.equal(f('explosion').selfKO.id, 'explosions/big-explosion');
 });

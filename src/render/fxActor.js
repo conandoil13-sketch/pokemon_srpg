@@ -2,6 +2,7 @@
 // src: { img, sx, sy, w, h } (Idle 첫 프레임 정면) 또는 null(아직 로드 전 → 타원)
 const cache = new Map();
 
+// anchor: 스프라이트 그림 중심(타일 중심)에서 actor 원점(발밑)까지 — 몸 위 이펙트가 스프라이트에 딱 겹치게
 function fromMask(w, h, data, pixels) {
   // 불투명 영역으로 잘라 발밑 원점에 맞춘다
   let x0 = w, y0 = h, x1 = -1, y1 = -1;
@@ -10,7 +11,9 @@ function fromMask(w, h, data, pixels) {
   const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
   const md = new Uint8Array(cw * ch), px = new Uint32Array(cw * ch);
   for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) { md[y * cw + x] = data[(y + y0) * w + x + x0]; px[y * cw + x] = pixels[(y + y0) * w + x + x0]; }
-  return actorOf(cw, ch, md, px);
+  const a = actorOf(cw, ch, md, px);
+  a.anchor = { dx: -Math.floor(w / 2) + x0 + Math.floor(cw / 2), dy: -Math.floor(h / 2) + y1 + 1 };
+  return a;
 }
 
 function actorOf(w, h, data, pixels) {
@@ -24,8 +27,13 @@ function ellipse(w = 16, h = 20) {
     const dx = (x + 0.5 - w / 2) / (w / 2), dy = (y + 0.5 - h / 2) / (h / 2);
     if (dx * dx + dy * dy <= 1) { data[y * w + x] = 1; pixels[y * w + x] = 0xff8a8a8a; }
   }
-  return actorOf(w, h, data, pixels);
+  const a = actorOf(w, h, data, pixels);
+  a.anchor = { dx: 0, dy: 10 };
+  return a;
 }
+
+// 몸 위 이펙트 원점 (월드 px). cx, cy = 스프라이트 그림 중심
+export const bodyAt = (actor, cx, cy) => ({ x: cx + actor.anchor.dx, y: cy + actor.anchor.dy });
 
 export function actorFor(species, src) {
   const key = `${species}:${src ? 'img' : 'none'}`;
