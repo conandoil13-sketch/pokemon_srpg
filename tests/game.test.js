@@ -327,11 +327,11 @@ test('pointing at a tile picks the aim centred there, a click on another aim onl
 const fxCount = (game, id) => game.fx.log.filter((x) => x === id).length;
 const playOut = (game) => assert.ok(advance(game, (g) => g.mode === 'idle' || g.mode === 'result'));
 
-test('a contact hit spawns one hit spark', () => {
+test('a weak contact hit spawns one small burst', () => {
   const { game } = setupWith(['scratch'], { 'enemy-riolu': [3, 5] });
   game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
   playOut(game);
-  assert.equal(fxCount(game, 'impacts/hit-spark'), 1);
+  assert.equal(fxCount(game, 'pickups/collect-burst'), 1); // 할퀴기 위력 40 → 약
 });
 
 test('earthquake: one quake cast, one thud per target; mashing does not duplicate', () => {
@@ -339,7 +339,7 @@ test('earthquake: one quake cast, one thud per target; mashing does not duplicat
   game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
   for (let i = 0; i < 400 && game.mode !== 'idle'; i++) { game.update(0.02); game.handle({ type: 'confirm' }); }
   assert.equal(fxCount(game, 'impacts/ground-slam'), 1);
-  assert.ok(fxCount(game, 'impacts/blunt-hit') >= 2 && fxCount(game, 'impacts/blunt-hit') <= 3);
+  assert.ok(fxCount(game, 'impacts/blunt-hit') >= 4 && fxCount(game, 'impacts/blunt-hit') <= 6); // 지진(강): 대상마다 충격 2겹
 });
 
 test('swords dance shows one rank-up effect', () => {

@@ -14,6 +14,7 @@ export const FX_FILES = [
   'ui/level-up',
   'status/cursed', 'status/stunned', 'status/burning', 'status/poisoned', 'status/sleep', 'status/frozen', 'status/confused',
   'nature/acid-splash',
+  'pickups/collect-burst',
 ];
 
 const OUT = fileURLToPath(new URL('../src/vendor/pixelfx/', import.meta.url));
