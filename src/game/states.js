@@ -15,6 +15,7 @@ import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
 import { W, H } from '../render/screen.js';
 import { createAttackAnim } from './attackAnim.js';
+import { createFxManager } from '../render/fx.js';
 
 const STEP = 0.11; // 타일당 이동 시간(초)
 const BANNER = 1.4;
@@ -80,10 +81,13 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   let notice = null; // { lines, then } 대사 후 다음 단계
   let moveLocked = false; // 보물상자를 연 이동은 취소할 수 없다
   const cam = { x: 0, y: 0 };
+  // pixelfx 이펙트 (브라우저면 오프스크린 캔버스로 그림, 테스트에선 계산만)
+  const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
   function reset() {
     st = createBattle(map, party, { hpRatio });
+    fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     mode = 'banner';
     const first = st.units.find((u) => u.side === 'ally');
@@ -240,7 +244,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       facing[attacker.id] = dirFromDelta(one.x - attacker.x, one.y - attacker.y);
       if (mv.category !== 'status') facing[one.id] = dirFromDelta(attacker.x - one.x, attacker.y - one.y);
     }
-    anim = createAttackAnim({ attacker, defender: one, move: mv, result, hpBefore, lookup });
+    anim = createAttackAnim({ attacker, defender: one, move: mv, result, hpBefore, lookup, fx: fxm });
     target = result.blocked ? attacker : one ?? attacker;
     animThen = then;
     focus = target;
@@ -259,7 +263,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       for (const d of defenders) facing[d.id] = dirFromDelta(attacker.x - d.x, attacker.y - d.y);
     }
     const lineEnd = mv.shape?.type === 'line' ? tilesOf(st, attacker, mv, a).at(-1) ?? { x: attacker.x, y: attacker.y } : null; // 벽·가장자리에서 멈춘 끝 칸
-    anim = createAttackAnim({ attacker, defenders: result.blocked ? [] : defenders, move: mv, result, lookup, aim: a, endPt: lineEnd });
+    anim = createAttackAnim({ attacker, defenders: result.blocked ? [] : defenders, move: mv, result, lookup, aim: a, endPt: lineEnd, fx: fxm });
     aims = null;
     animThen = then;
     focus = result.blocked || defenders.length !== 1 ? attacker : defenders[0];
@@ -463,6 +467,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // ---------- 갱신 ----------
   function update(dt) {
     clock += dt;
+    fxm.update(dt);
     if (notice) notice.t += dt;
     resultT = mode === 'result' ? resultT + dt : 0;
     updateCamera(dt);
@@ -493,6 +498,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       anim.update(dt);
       if (anim.done) {
         anim = null;
+        fxm.expire(1); // 남은 연기·잔해는 1초 뒤 정리
         // 다음 행동 전 대기(pause) 동안 'anim' 에 머물지 않도록 먼저 모드를 되돌린다
         mode = st.result ? 'result' : st.phase === 'enemy' ? 'enemy' : 'idle';
         if (!st.result) animThen();
@@ -653,7 +659,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const toPts = (m) => [...m.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; });
 
   function draw(ctx, time) {
-    const cx = Math.round(cam.x), cy = Math.round(cam.y);
+    const shake = anim?.shake ?? 0;
+    const cx = Math.round(cam.x) + shake, cy = Math.round(cam.y);
     ctx.fillStyle = '#101018';
     ctx.fillRect(0, 0, W, H);
     ctx.save();
@@ -679,7 +686,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       ui.drawHighlights(ctx, tiles, RED);
       for (const u of unitsHit(st, sel, mv, curAim())) if (u.side === sel.side) ui.drawOutline(ctx, u.x, u.y, '#f89020');
     } else if (mode === 'target') area(MOVES[move]);
+    fxm.draw(ctx, 'back', { x: cx, y: cy });
     drawUnits(ctx);
+    fxm.draw(ctx, 'front', { x: cx, y: cy });
     if (['idle', 'selected', 'target'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
     if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);
@@ -720,5 +729,5 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   playerPhase();
 
-  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get camera() { return { ...cam }; } };
+  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get fx() { return fxm; }, get shake() { return anim?.shake ?? 0; }, get camera() { return { ...cam }; } };
 }

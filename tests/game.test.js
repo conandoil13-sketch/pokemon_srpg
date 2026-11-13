@@ -322,3 +322,45 @@ test('pointing at a tile picks the aim centred there, a click on another aim onl
   game.handle(at(4, 4, 'click'));
   assert.equal(game.mode, 'anim');
 });
+
+// ---- 이펙트 연결 ----
+const fxCount = (game, id) => game.fx.log.filter((x) => x === id).length;
+const playOut = (game) => assert.ok(advance(game, (g) => g.mode === 'idle' || g.mode === 'result'));
+
+test('a contact hit spawns one hit spark', () => {
+  const { game } = setupWith(['scratch'], { 'enemy-riolu': [3, 5] });
+  game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
+  playOut(game);
+  assert.equal(fxCount(game, 'impacts/hit-spark'), 1);
+});
+
+test('earthquake: one quake cast, one thud per target; mashing does not duplicate', () => {
+  const { game } = setupWith(['earthquake'], { 'enemy-riolu': [3, 5], 'enemy-gible': [2, 6] });
+  game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
+  for (let i = 0; i < 400 && game.mode !== 'idle'; i++) { game.update(0.02); game.handle({ type: 'confirm' }); }
+  assert.equal(fxCount(game, 'impacts/ground-slam'), 1);
+  assert.ok(fxCount(game, 'impacts/blunt-hit') >= 2 && fxCount(game, 'impacts/blunt-hit') <= 3);
+});
+
+test('swords dance shows one rank-up effect', () => {
+  const { game } = setupWith(['swords-dance'], {});
+  game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
+  playOut(game);
+  assert.equal(fxCount(game, 'ui/level-up'), 1);
+});
+
+test('self-destruct shows its explosion and shakes the screen', () => {
+  const { game } = setupWith(['self-destruct'], { 'enemy-riolu': [3, 5] });
+  game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
+  let shook = false;
+  for (let i = 0; i < 400 && !['idle', 'result'].includes(game.mode); i++) { game.update(0.02); if (game.shake) shook = true; if (game.mode !== 'anim' || i % 20 === 0) game.handle({ type: 'confirm' }); }
+  assert.equal(fxCount(game, 'explosions/small-explosion'), 1);
+  assert.ok(shook);
+});
+
+test('a throwing effect manager never blocks the battle', () => {
+  const { game } = setupWith(['scratch'], { 'enemy-riolu': [3, 5] });
+  game.fx.spawn = () => { throw new Error('boom'); };
+  game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
+  playOut(game);
+});

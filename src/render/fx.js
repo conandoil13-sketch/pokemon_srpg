@@ -10,6 +10,7 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
   const frames = { back: createFrame(w, h), front: createFrame(w, h) };
   const scratch = createFrame(w, h);
   let list = [], failed = 0, out = null;
+  const log = []; // 만든 이펙트 id (테스트·디버그용, 최근 200개)
 
   function make(spec, at, { dir, actor, delay = 0, clipTo = null, key = null, getPos = null } = {}) {
     try {
@@ -19,6 +20,7 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
       const fx = createFx(mod, { ...(spec.opts ?? {}), x: at.x, y: at.y, flip: o.flip, angle: o.angle, ...(actor ? { actor } : {}) });
       const e = { fx, layer: spec.layer ?? 'front', timeScale: spec.timeScale ?? 1, delay, life: spec.life ?? null, age: 0, stopped: false, clipTo, dir, at, key, getPos };
       list.push(e);
+      log.push(spec.id); if (log.length > 200) log.shift();
       return e;
     } catch {
       failed++;
@@ -61,6 +63,9 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
   return {
     get count() { return list.length; },
     get failed() { return failed; },
+    log,
+    // 공격 연출이 끝난 뒤 꼬리(연기·잔해)는 sec 초 뒤에 정리 (지속 표시는 제외)
+    expire(sec) { for (const e of list) if (!e.key && e.life === null) e.life = e.age + sec; },
     spawn: (spec, at, opts) => make(spec, at, opts),
     follow(key, spec, getPos, actor) {
       if (list.some((e) => e.key === key && !e.stopped)) return;
@@ -107,7 +112,7 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
       out ??= (() => { const c = makeCanvas(w, h); const g = c.getContext('2d'); return { c, g, img: g.createImageData(w, h) }; })();
       composite(f, out.img.data, null);
       out.g.putImageData(out.img, 0, 0);
-      ctx.drawImage(out.c, 0, 0);
+      ctx.drawImage(out.c, f.ox, f.oy); // ctx 는 월드 좌표(카메라만큼 옮겨진 상태)
       return f;
     },
   };
