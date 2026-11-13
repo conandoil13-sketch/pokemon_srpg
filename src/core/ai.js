@@ -3,6 +3,7 @@ import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { reachable, tilesInRange, manhattan, canEnter, TILE_COST } from './pathfind.js';
 import { expectedDamage } from './damage.js';
+import { effectiveStat } from './stages.js';
 
 const KO_BONUS = 100;
 const THREAT_WEIGHT = 0.5;
@@ -10,7 +11,7 @@ const THREAT_WEIGHT = 0.5;
 export function enemyTurnOrder(state) {
   return state.units
     .filter((u) => u.side === 'enemy')
-    .sort((a, b) => b.stats.spe - a.stats.spe);
+    .sort((a, b) => effectiveStat(b, 'spe') - effectiveStat(a, 'spe'));
 }
 
 const parse = (k) => { const [x, y] = k.split(',').map(Number); return { x, y }; };

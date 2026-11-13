@@ -1,23 +1,24 @@
 // 데미지 / 명중 계산 (순수 함수, spec §4.4)
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
+import { effectiveStat, accuracyShift } from './stages.js';
 
 const CRIT_RATE = 1 / 16;
 
 const sp = (unit) => SPECIES[unit.species];
 
 export function hitChance(attacker, defender, move, defTile) {
-  const speGap = Math.floor((defender.stats.spe - attacker.stats.spe) / 10);
+  const speGap = Math.floor((effectiveStat(defender, 'spe') - effectiveStat(attacker, 'spe')) / 10);
   const evasion = Math.min(30, (defTile === '"' ? 15 : 0) + Math.max(0, speGap));
-  return Math.max(0, Math.min(100, move.accuracy - evasion));
+  return Math.max(0, Math.min(100, move.accuracy - evasion + accuracyShift(attacker, defender)));
 }
 
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)
 function baseDamage(attacker, defender, move, defTile) {
   const a = sp(attacker), d = sp(defender);
   const physical = move.category === 'physical';
-  const A = physical ? attacker.stats.atk : attacker.stats.spa;
-  let D = physical ? defender.stats.def : defender.stats.spd;
+  const A = effectiveStat(attacker, physical ? 'atk' : 'spa');
+  let D = effectiveStat(defender, physical ? 'def' : 'spd');
   if (defTile === '^') D *= 1.2;
   const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;
   const stab = a.types.includes(move.type) ? 1.5 : 1;
