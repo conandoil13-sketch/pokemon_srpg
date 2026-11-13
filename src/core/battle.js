@@ -19,7 +19,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss }) {
   return {
     id: id ?? `${side}-${species}`, species, side, x, y, level, stats,
     hp: stats.hp, maxHp: stats.hp,
-    moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES),
+    moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES, species),
     moved: false, acted: false,
     ...newStages(),
     ...newStatus(),

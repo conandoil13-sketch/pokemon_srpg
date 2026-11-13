@@ -6,7 +6,17 @@ const MAX_STATUS = 2; // 시작 기술 중 변화기 최대 개수
 const learnable = (movesData, api) => movesData[api]?.learnable === true;
 
 // 레벨 이하에서 배우는 공격기 중 가장 최근 4개 (같은 기술은 최근 위치로)
-export function startingMoves(learnset, level, movesData) {
+// 레벨과 상관없이 처음부터 아는 대표 기술 (찌리리공·붐볼의 자폭 기믹)
+export const SIGNATURE_MOVES = { voltorb: 'self-destruct', electrode: 'self-destruct' };
+
+export function startingMoves(learnset, level, movesData, species) {
+  const base = baseStartingMoves(learnset, level, movesData);
+  const sig = SIGNATURE_MOVES[species];
+  if (!sig || base.includes(sig)) return base;
+  return [...base.slice(base.length >= MAX_MOVES ? 1 : 0), sig]; // 가장 오래된 칸을 대표 기술로
+}
+
+function baseStartingMoves(learnset, level, movesData) {
   const out = [];
   for (const [lv, api] of learnset) {
     if (lv > level || !learnable(movesData, api)) continue;

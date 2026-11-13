@@ -30,7 +30,7 @@ function cleanMember(m) {
   const hi = level >= MAX_LEVEL ? lo : expForLevel(s.growth, level + 1) - 1;
   let moves = (Array.isArray(m.moves) ? m.moves : []).filter((mv) => own(MOVES, mv) && (MOVES[mv].learnable || mv === 'tackle'));
   moves = [...new Set(moves)].slice(0, 4);
-  if (!moves.length) moves = startingMoves(s.learnset, level, MOVES);
+  if (!moves.length) moves = startingMoves(s.learnset, level, MOVES, m.species);
   return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves };
 }
 
