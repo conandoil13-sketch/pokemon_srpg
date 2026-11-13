@@ -8,7 +8,7 @@ import { calcDamage, hitChance, confusionDamage } from './damage.js';
 import { unitsHit } from './shapes.js';
 import { phaseEndWeather } from './weather.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
-import { newStages, applyStageChange, tickStages, API_STAT } from './stages.js';
+import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { startingMoves } from './learn.js';
 import { newParty } from './progress.js';
@@ -120,11 +120,11 @@ export function targetsOf(state, user, move, focus) {
   }
 }
 
-function changeStats(unit, list, out) {
+function changeStats(unit, list, out, turns = STAGE_TURNS) {
   for (const { stat, change } of list) {
     const key = API_STAT[stat];
     if (!key) continue;
-    const r = applyStageChange(unit, key, change);
+    const r = applyStageChange(unit, key, change, turns);
     out.push({ unitId: unit.id, key, change, applied: r.applied, after: r.after });
   }
 }
@@ -161,7 +161,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], state.weather))) { missed.push(t.id); continue; }
-      changeStats(t, move.statChanges ?? [], stageChanges);
+      changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS);
       ail(t);
     }
     return { kind, stageChanges, statusChanges, thawed, missed };
@@ -181,7 +181,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     // 대상 부가효과: 맞았고 면역이 아니고 버텼을 때
     const landed = r.hit && r.typeMult > 0;
     anyLanded ||= landed;
-    if (landed && !fainted && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges);
+    if (landed && !fainted && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS);
     if (landed && !fainted && move.ailment && roll(move.ailmentChance)) ail(d);
     hits.push({ unitId: d.id, ...r, fainted, hpBefore });
   }

@@ -491,3 +491,14 @@ test('harsh sun blocks freezing and thaws frozen units at their phase start', ()
   assert.equal(t.status, null);
   assert.ok(s.log.statusEvents.some((e) => e.unitId === 'enemy-riolu' && e.kind === 'thawed'));
 });
+
+test('area stat drops (growl) last 2 turns, single-target buffs 3', () => {
+  const s = stageBattle();
+  applyMove(s, 'ally-chimchar', 'growl', null, zero);
+  const r = find(s, 'enemy-riolu');
+  assert.equal(r.stages.atk, -1);
+  endPhase(s); endPhase(s); // 적 페이즈 끝 1번
+  assert.equal(r.stages.atk, -1);
+  endPhase(s); endPhase(s); // 적 페이즈 끝 2번 → 풀림
+  assert.equal(r.stages.atk, 0);
+});

@@ -467,3 +467,11 @@ test('no lingering status effects on units hidden in fog', () => {
   game.update(0.02);
   assert.equal(game.fx.following, 0);
 });
+
+test('expiry text: back to normal vs only part of the change', () => {
+  const full = { id: 'a', species: 'chimchar', side: 'ally', x: 0, y: 0, stages: { atk: 0 } };
+  const part = { ...full, stages: { atk: 2 } };
+  const text = (u) => phaseNotices([], [{ unitId: 'a', keys: ['atk'] }], () => u)[0].lines.join(' ');
+  assert.equal(text(full), '불꽃숭이의 공격이 원래대로 돌아왔다!');
+  assert.equal(text(part), '불꽃숭이의 공격 변화 일부가 풀렸다!');
+});

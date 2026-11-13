@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { stageMultiplier, newStages, effectiveStat, accuracyShift, applyStageChange, tickStages, STAGE_TURNS } from '../src/core/stages.js';
+import { stageMultiplier, newStages, effectiveStat, accuracyShift, applyStageChange, tickStages, STAGE_TURNS, AREA_STAGE_TURNS } from '../src/core/stages.js';
 
 const unit = () => ({ stats: { atk: 100, def: 100, spa: 100, spd: 100, spe: 100 }, ...newStages() });
 
@@ -22,20 +22,47 @@ test('effectiveStat and accuracyShift', () => {
   assert.equal(accuracyShift(a, d), -8);
 });
 
-test('stacking refreshes turns; clamped at ±6 with no refresh', () => {
+test('each change keeps its own timer; re-buffing does not extend the old one', () => {
   const u = unit();
-  applyStageChange(u, 'atk', 2);
+  applyStageChange(u, 'atk', 2);   // 3턴
+  tickStages(u); tickStages(u);    // 1턴 남음
+  applyStageChange(u, 'atk', 2);   // 새 층 3턴, 합 +4
+  assert.equal(u.stages.atk, 4);
+  tickStages(u);                   // 첫 층 만료 → +2 만 남음 (무한 유지 불가)
+  assert.equal(u.stages.atk, 2);
+  tickStages(u); tickStages(u);
+  assert.equal(u.stages.atk, 0);
+});
+
+test('up and down stack numerically but expire separately', () => {
+  const u = unit();
+  applyStageChange(u, 'def', 2);
   tickStages(u);
-  assert.equal(u.turns.atk, STAGE_TURNS - 1);
-  const r = applyStageChange(u, 'atk', 1);
-  assert.deepEqual([r.applied, r.after, u.turns.atk], [1, 3, STAGE_TURNS]);
+  applyStageChange(u, 'def', -1);  // 합 +1
+  assert.equal(u.stages.def, 1);
+  tickStages(u); tickStages(u);    // +2 층 만료 → −1
+  assert.equal(u.stages.def, -1);
+  tickStages(u);
+  assert.equal(u.stages.def, 0);
+});
+
+test('clamped at ±6: a capped change adds no layer', () => {
+  const u = unit();
   applyStageChange(u, 'atk', 6);
-  tickStages(u);
-  const turnsBefore = u.turns.atk;
   const capped = applyStageChange(u, 'atk', 2);
-  assert.equal(capped.applied, 0);
-  assert.equal(u.stages.atk, 6);
-  assert.equal(u.turns.atk, turnsBefore, 'no refresh at the cap');
+  assert.deepEqual([capped.applied, u.stages.atk], [0, 6]);
+  tickStages(u); tickStages(u); tickStages(u);
+  assert.equal(u.stages.atk, 0);
+});
+
+test('area changes can use a shorter timer', () => {
+  const u = unit();
+  applyStageChange(u, 'atk', -1, AREA_STAGE_TURNS);
+  assert.equal(AREA_STAGE_TURNS, 2);
+  tickStages(u);
+  assert.equal(u.stages.atk, -1);
+  assert.deepEqual(tickStages(u), ['atk']);
+  assert.equal(u.stages.atk, 0);
 });
 
 test('expires after 3 ticks', () => {
@@ -46,11 +73,4 @@ test('expires after 3 ticks', () => {
   assert.deepEqual(tickStages(u), ['spe']);
   assert.equal(u.stages.spe, 0);
   assert.deepEqual(tickStages(u), []);
-});
-
-test('a change that returns a stat to 0 clears its turns', () => {
-  const u = unit();
-  applyStageChange(u, 'atk', -1);
-  applyStageChange(u, 'atk', 1);
-  assert.deepEqual([u.stages.atk, u.turns.atk], [0, 0]);
 });

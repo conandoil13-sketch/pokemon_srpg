@@ -76,7 +76,7 @@ export function phaseNotices(events, expired, get) {
   const exp = expired.flatMap((e) => {
     const u = get(e.unitId);
     return u ? e.keys.map((k) => {
-      const w = wrapMessage(`${unitLabel(u)}의 ${josa(STAT_KO[k], '이/가')} 원래대로 돌아왔다!`);
+      const w = wrapMessage(u.stages?.[k] ? `${unitLabel(u)}의 ${STAT_KO[k]} 변화 일부가 풀렸다!` : `${unitLabel(u)}의 ${josa(STAT_KO[k], '이/가')} 원래대로 돌아왔다!`); // 다른 층이 남아 있으면 '일부'
       return { lines: Array.isArray(w) ? w : [w], at: { x: u.x, y: u.y }, hp: null };
     }) : [];
   });
