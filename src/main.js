@@ -124,6 +124,15 @@ function endRun(outcome, reached = game.run.floor) {
   save(); // 사탕 경험치는 createResults 생성 시 이미 적용됨 → 바로 저장 (결산 중 새로고침해도 유지)
 }
 
+// 이스터에그: 모부기에게 5번 말 걸면 200코인 (저장 하나당 한 번)
+function onTurtwigGift() {
+  if (game.eggs?.turtwig) return false;
+  game.coins += 200;
+  game.eggs = { ...game.eggs, turtwig: true };
+  save();
+  return true;
+}
+
 const go = {
   title: () => {
     scene = createTitle({
@@ -145,7 +154,7 @@ const go = {
     // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
     const out = deployed(game).slice(1).map((m) => m.species);
     const rest = game.party.filter((m) => m.species !== 'ditto' && !out.includes(m.species)).map((m) => m.species);
-    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
+    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onTurtwigGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
     scene = createDungeonSelect({

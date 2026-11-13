@@ -15,7 +15,7 @@ const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg
 // GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
 export const newGame = () => {
   const party = newParty();
-  return { version: VERSION, party, items: { evoStone: 0 }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party) };
+  return { version: VERSION, party, items: { evoStone: 0 }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {} };
 };
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
@@ -105,6 +105,7 @@ export function loadGame(storage) {
       shards: Object.fromEntries(Object.entries(data.shards && typeof data.shards === 'object' ? data.shards : {})
         .filter(([k]) => own(SPECIES, k)).map(([k, n]) => [k, clampInt(n, 0, 9999)]).filter(([, n]) => n > 0)),
       sortie: cleanSortie(data.sortie, party),
+      eggs: data.eggs?.turtwig === true ? { turtwig: true } : {}, // 이스터에그 받은 기록
     };
   } catch (e) {
     warn(`invalid save ignored: ${e.message}`); // 어떤 이상한 형태든 부팅을 막지 않는다

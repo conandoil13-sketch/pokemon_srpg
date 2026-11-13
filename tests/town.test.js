@@ -216,3 +216,12 @@ test('recruit office sign opens the gacha; mashing after a pull never double-spe
   assert.equal(after - before, 1);
   assert.equal(pulled, 1);
 });
+
+test('easter egg: talking to Turtwig 5 times gives 200 coins once', () => {
+  let gifts = 0;
+  const spot = TOWN.npcSpots[0];
+  const town = createTown({ onSortie() {}, companions: ['turtwig'], onTurtwigGift() { gifts++; return true; } });
+  town.player.x = spot.x; town.player.y = spot.y + 1; town.player.facing = 'up';
+  for (let i = 0; i < 6; i++) { town.handle({ type: 'confirm' }); tick(town, 0.1); town.handle({ type: 'confirm' }); tick(town, 0.1); }
+  assert.equal(gifts, 1);
+});
