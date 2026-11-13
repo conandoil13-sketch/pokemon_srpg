@@ -12,7 +12,7 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, onParty, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
+export function createTown({ onSortie, onParty, onGacha, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
   const map = TOWN;
   const width = map.tiles[0].length, height = map.tiles.length;
   const player = { x: spawn.x, y: spawn.y, facing: spawn.facing ?? 'down' };
@@ -45,7 +45,7 @@ export function createTown({ onSortie, onParty, spawn = TOWN.start, message = nu
     const o = objectAt(player.x + dx, player.y + dy);
     if (!o) return;
     if (o.kind === 'npc') npcFacing[o.id] = nameOf(-dx, -dy);
-    const then = o.action === 'sortie' ? onSortie : o.action === 'party' ? onParty : null;
+    const then = o.action === 'sortie' ? onSortie : o.action === 'party' ? onParty : o.action === 'gacha' ? onGacha : null;
     msg = { lines: o.lines, who: o.kind === 'npc' ? o : null, then };
   }
 

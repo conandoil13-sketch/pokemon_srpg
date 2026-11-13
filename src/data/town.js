@@ -21,7 +21,7 @@ export const TOWN = {
   objects: [
     { id: 'board', kind: 'sign', x: 9, y: 6, action: 'sortie', lines: ['출격 게시판이다.', '전투에 나갈까?'] },
     { id: 'team', kind: 'sign', x: 4, y: 3, action: 'party', lines: ['편성소다.', '파티를 확인할까?'] },
-    { id: 'dex', kind: 'sign', x: 13, y: 3, action: 'soon', lines: ['도감 연구소 (준비 중)', '아직 문이 닫혀 있다.'] },
+    { id: 'gacha', kind: 'sign', x: 13, y: 3, action: 'gacha', lines: ['모집소다.', '동료를 찾아볼까?'] },
   ],
   // 동료(파티에서 리더를 뺀 멤버)가 서 있는 자리와 대사. 파티 순서대로 채운다
   npcSpots: [
@@ -38,4 +38,6 @@ export const TOWN = {
   returnSpot: { x: 9, y: 7, facing: 'up' },
   // 편성소에서 나왔을 때 위치 (편성소 표지판 앞)
   partySpot: { x: 4, y: 4, facing: 'up' },
+  // 모집소에서 나왔을 때 위치 (모집소 표지판 앞)
+  gachaSpot: { x: 13, y: 4, facing: 'up' },
 };

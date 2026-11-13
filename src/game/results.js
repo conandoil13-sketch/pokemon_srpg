@@ -10,8 +10,9 @@ import { createLearnFlow, stepsFromEvents, nameOf, CHOICE_LOCK } from './learnFl
 export { CHOICE_LOCK };
 const BAR_TIME = 1.2;
 
-export function createResults({ game, result, log, firstClear, onDone }) {
-  const party = game.party;
+// members: 결산할 멤버 (기본 = 파티 전체, 탐험에선 출전 멤버). coins: 이번 층에서 얻은 코인 표시
+export function createResults({ game, result, log, firstClear, onDone, members = game.party, coins = 0 }) {
+  const party = members;
   const before = party.map((m) => ({ species: m.species, exp: m.exp }));
   const events = applyExp(party, log.exp ?? {});
   const gotStone = result === 'win' && firstClear;
@@ -47,6 +48,7 @@ export function createResults({ game, result, log, firstClear, onDone }) {
       ctx.fillRect(0, 0, W, H);
       const TITLE = { win: '승리!', stairs: '층 돌파!', loot: '탐험 보상', lose: '패배...' };
       ui.bigText(ctx, TITLE[result] ?? '결과', W / 2, 4, result === 'lose' ? '#f08080' : '#f8d050', '#202838');
+      if (coins) { const c = `코인 +${coins}`; drawText(ctx, c, W - 8 - textWidth(c, 'small'), 4, '#f8d050', null, 'small'); }
       party.forEach((m, k) => {
         const y = 32 + k * 27;
         ui.drawWindow(ctx, 6, y, W - 12, 25);

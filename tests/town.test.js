@@ -47,7 +47,7 @@ test('confirm facing the sortie board calls onSortie; other signs show a message
   town.handle({ type: 'confirm' }); // 안내 대사 넘김 → 출격
   assert.equal(sortie, 1);
 
-  const sign = TOWN.objects.find((o) => o.action === 'soon');
+  const sign = TOWN.objects.find((o) => o.action === 'gacha');
   town.player.x = sign.x; town.player.y = sign.y + 1; town.player.facing = 'up';
   town.handle({ type: 'confirm' });
   assert.ok(town.message, 'shows a message');
@@ -192,4 +192,26 @@ test('party office: sortie screen toggles members and explains refusals', async 
   p.handle({ type: 'dir', dx: 0, dy: 1 });      // pidgey
   p.handle({ type: 'confirm' });               // 넣기
   assert.deepEqual(game.sortie, ['chimchar', 'piplup', 'turtwig', 'pidgey']);
+});
+
+test('recruit office sign opens the gacha; mashing after a pull never double-spends', async () => {
+  let opened = 0;
+  const town = createTown({ onSortie() {}, onGacha() { opened++; } });
+  const sign = TOWN.objects.find((o) => o.action === 'gacha');
+  assert.ok(sign);
+  town.player.x = sign.x; town.player.y = sign.y + 1; town.player.facing = 'up';
+  town.handle({ type: 'confirm' }); town.handle({ type: 'confirm' });
+  assert.equal(opened, 1);
+
+  const { createGachaScene } = await import('../src/game/gacha.js');
+  const game = newGame();
+  game.coins = 150;
+  let pulled = 0;
+  const g = createGachaScene({ game, rng: createRng(3), onBack() {}, onPulled() { pulled++; } });
+  const before = game.party.length + Object.values(game.shards).reduce((a, b) => a + b, 0);
+  for (let i = 0; i < 60; i++) { g.update(0.1); g.handle({ type: 'confirm' }); }
+  const after = game.party.length + Object.values(game.shards).reduce((a, b) => a + b, 0);
+  assert.equal(game.coins, 50);
+  assert.equal(after - before, 1);
+  assert.equal(pulled, 1);
 });

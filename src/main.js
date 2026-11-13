@@ -10,7 +10,9 @@ import { createTown } from './game/town.js';
 import { createDungeonSelect } from './game/dungeonSelect.js';
 import { createFloorMenu } from './game/floorMenu.js';
 import { generateFloor } from './core/floorgen.js';
-import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun } from './core/run.js';
+import { deployed } from './core/roster.js';
+import { createGachaScene } from './game/gacha.js';
+import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun, addBattleCoins, addFloorCoins } from './core/run.js';
 import { dungeonById } from './data/dungeons.js';
 import { josa } from './data/text.js';
 import { createResults } from './game/results.js';
@@ -62,19 +64,23 @@ function startFloor() {
   const run = game.run;
   const d = dungeonById(run.dungeonId);
   const map = generateFloor(d, run.floor, floorSeed(run));
-  requestSprites([...game.party.map((m) => m.species), ...map.enemies.map((e) => e.species)]);
+  requestSprites([...deployed(game).map((m) => m.species), ...map.enemies.map((e) => e.species)]);
   save(); // 층 시작 시점 저장 (같은 시드 → 같은 맵으로 재개)
   scene = createGame({
-    rng, map, party: game.party, hpRatio: floorStartHp(run), theme: d.theme,
+    rng, map, party: deployed(game), hpRatio: floorStartHp(run), theme: d.theme, // 메타몽 + 출전 4
     floorLabel: `${d.name} B${run.floor}F`,
     onExit: (result, log) => afterBattle(result, log),
   });
 }
 
 function afterBattle(result, log) {
-  for (const item of log.loot) addLoot(game.run, item, game.run.floor);
+  const run = game.run;
+  for (const item of log.loot) addLoot(run, item, run.floor);
+  const before = run.loot.coins;
+  addBattleCoins(run, log.coins);
+  if (result !== 'lose') addFloorCoins(run, run.floor);
   scene = createResults({
-    game, result, log, firstClear: false,
+    game, result, log, firstClear: false, members: deployed(game), coins: run.loot.coins - before,
     onDone: (evos) => evolveChain(evos, () => afterResults(result, log)),
   });
 }
@@ -86,7 +92,7 @@ function afterResults(result, log) {
   game.run = run;
   save();
   scene = createFloorMenu({
-    lines: [`B${prevFloor}F 돌파!`, '어떻게 할까?'],
+    lines: [`B${prevFloor}F 돌파!  (이번 탐험 코인 ${run.loot.coins})`, '어떻게 할까?'],
     options: ['다음 층으로', '마을로 돌아가기'],
     onPick: (i) => (i === 0 ? startFloor() : endRun('retreat', prevFloor)), // 다음 층엔 아직 안 들어감
   });
@@ -96,7 +102,7 @@ function afterResults(result, log) {
 function endRun(outcome, reached = game.run.floor) {
   const run = { ...game.run, floor: reached };
   const d = dungeonById(run.dungeonId);
-  const loot = `진화의돌 ${run.loot.evoStone}개 · 경험 사탕 ${run.loot.candy.length}개`;
+  const loot = `코인 ${run.loot.coins} · 진화의돌 ${run.loot.evoStone} · 사탕 ${run.loot.candy.length}`;
   const before = [...game.unlocked];
   const reward = outcome === 'wiped' ? { exp: {} } : settleLoot(game, run);
   finishRun(game, run, outcome);
@@ -109,7 +115,11 @@ function endRun(outcome, reached = game.run.floor) {
   const toTown = () => go.town(lines, TOWN.returnSpot);
   if (!Object.keys(reward.exp).length) { toTown(); return; }
   // 경험 사탕: 탐험 보상 결산
-  scene = createResults({ game, result: 'loot', log: { exp: reward.exp }, firstClear: false, onDone: (evos) => evolveChain(evos, () => { save(); toTown(); }) });
+  // 사탕 경험치는 출전 멤버만
+  const out = deployed(game);
+  const exp = Object.fromEntries(Object.entries(reward.exp).filter(([sp]) => out.some((m) => m.species === sp)));
+  if (!Object.keys(exp).length) { toTown(); return; }
+  scene = createResults({ game, result: 'loot', log: { exp }, firstClear: false, members: out, onDone: (evos) => evolveChain(evos, () => { save(); toTown(); }) });
   save(); // 사탕 경험치는 createResults 생성 시 이미 적용됨 → 바로 저장 (결산 중 새로고침해도 유지)
 }
 
@@ -131,7 +141,10 @@ const go = {
   },
   town: (message = null, spawn = TOWN.start) => {
     requestSprites(game.party.map((m) => m.species));
-    scene = createTown({ onSortie: go.select, onParty: go.party, message, spawn, leader: game.party[0].species, companions: game.party.slice(1).map((m) => m.species) });
+    // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
+    const out = deployed(game).slice(1).map((m) => m.species);
+    const rest = game.party.filter((m) => m.species !== 'ditto' && !out.includes(m.species)).map((m) => m.species);
+    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
     scene = createDungeonSelect({
@@ -144,6 +157,9 @@ const go = {
       onResume: startFloor,
       onBack: () => go.town(null, TOWN.returnSpot),
     });
+  },
+  gacha: () => {
+    scene = createGachaScene({ game, rng, onBack: () => go.town(null, TOWN.gachaSpot), onPulled: () => save() });
   },
   party: () => {
     requestSprites(game.party.map((m) => m.species));
