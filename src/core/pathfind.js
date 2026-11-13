@@ -1,5 +1,6 @@
 // 이동 범위 / 사거리 (순수 함수)
 import { SPECIES } from '../data/species.js';
+import { moveBudget } from './status.js';
 
 export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1 };
 
@@ -18,7 +19,7 @@ const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 // 다익스트라. 반환: { best: Map<"x,y", 비용>, parent: Map<"x,y", "x,y">, occ }
 function search(grid, units, unit) {
-  const budget = SPECIES[unit.species].move;
+  const budget = moveBudget(unit); // 마비면 절반
   const h = grid.length, w = grid[0].length;
   const occ = new Map(units.filter((o) => o !== unit && o.hp > 0).map((o) => [`${o.x},${o.y}`, o.side]));
   const best = new Map([[`${unit.x},${unit.y}`, 0]]);

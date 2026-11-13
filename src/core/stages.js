@@ -11,7 +11,8 @@ export const newStages = () => ({ stages: zeros(), turns: zeros() });
 
 export const stageMultiplier = (n) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
 
-export const effectiveStat = (unit, key) => unit.stats[key] * stageMultiplier(unit.stages?.[key] ?? 0);
+// 마비면 스피드 ×0.5 (status.js 와 같은 규칙, 순환 import 를 피해 여기서 직접 본다)
+export const effectiveStat = (unit, key) => unit.stats[key] * stageMultiplier(unit.stages?.[key] ?? 0) * (key === 'spe' && unit.status === 'paralysis' ? 0.5 : 1);
 
 export const accuracyShift = (attacker, defender) => ACC_PER_STAGE * ((attacker.stages?.acc ?? 0) - (defender.stages?.eva ?? 0));
 

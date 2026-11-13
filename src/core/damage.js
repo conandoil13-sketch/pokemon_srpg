@@ -23,7 +23,8 @@ function baseDamage(attacker, defender, move, defTile) {
   const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;
   const stab = a.types.includes(move.type) ? 1.5 : 1;
   const typeMult = typeMultiplier(move.type, d.types);
-  return { raw: base * stab * typeMult, typeMult };
+  const burn = physical && attacker.status === 'burn' ? 0.5 : 1; // 화상: 물리 데미지 절반
+  return { raw: base * stab * typeMult * burn, typeMult };
 }
 
 export function calcDamage(attacker, defender, move, { rng, defTile }) {
@@ -41,4 +42,11 @@ export function calcDamage(attacker, defender, move, { rng, defTile }) {
 export function expectedDamage(attacker, defender, move, defTile) {
   const { raw } = baseDamage(attacker, defender, move, defTile);
   return raw * 0.925 * hitChance(attacker, defender, move, defTile) / 100;
+}
+
+// 혼란 자해: 위력 40 · 타입 없음 · 물리, 자기 공격/방어 랭크와 화상 반영, 난수·급소 없음
+export function confusionDamage(unit) {
+  const A = effectiveStat(unit, 'atk'), D = effectiveStat(unit, 'def');
+  const base = Math.floor(Math.floor((2 * unit.level / 5 + 2) * 40 * A / D) / 50) + 2;
+  return Math.max(1, Math.floor(base * (unit.status === 'burn' ? 0.5 : 1)));
 }

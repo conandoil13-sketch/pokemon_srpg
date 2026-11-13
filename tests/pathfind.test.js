@@ -85,3 +85,12 @@ test('pathTo walks around walls, through allies, step by step', () => {
   for (const p of path) assert.notEqual(grid[p.y][p.x], '#');
   assert.equal(path.length, 7); // 6 steps: down,down,right(ally),right,up,up
 });
+
+test('paralysis halves the movement budget', () => {
+  const grid = Array.from({ length: 11 }, () => '.'.repeat(11));
+  const u = { species: 'pikachu', side: 'ally', x: 5, y: 5, hp: 1 };
+  const far = (m) => Math.max(...[...m.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return Math.abs(x - 5) + Math.abs(y - 5); }));
+  assert.equal(far(reachable(grid, [u], u)), 5);
+  u.status = 'paralysis';
+  assert.equal(far(reachable(grid, [u], u)), 2);
+});
