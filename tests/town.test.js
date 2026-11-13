@@ -1,10 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createTown } from '../src/game/town.js';
-import { createStageSelect } from '../src/game/stageSelect.js';
+import { createDungeonSelect } from '../src/game/dungeonSelect.js';
+import { createFloorMenu } from '../src/game/floorMenu.js';
+import { CHOICE_LOCK } from '../src/game/learnFlow.js';
+import { newGame } from '../src/core/save.js';
+import { startRun } from '../src/core/run.js';
 import { createGame } from '../src/game/states.js';
 import { TOWN } from '../src/data/town.js';
-import { STAGES } from '../src/data/stages.js';
+import { MAP } from '../src/data/map.js';
 import { createRng } from '../src/core/rng.js';
 
 const tick = (scene, sec) => { for (let t = 0; t < sec; t += 0.02) scene.update(0.02); };
@@ -51,23 +55,54 @@ test('confirm facing the sortie board calls onSortie; other signs show a message
   assert.equal(town.message, null);
 });
 
-test('stage select: locked stages cannot be picked, first stage can', () => {
-  const picked = [];
-  let back = 0;
-  const sel = createStageSelect({ cleared: new Set(), onPick: (s) => picked.push(s), onBack: () => back++ });
-  sel.handle({ type: 'dir', dx: 0, dy: 1 });
+test('dungeon select: locked cave cannot be picked until unlocked', () => {
+  const game = newGame();
+  const started = [];
+  const sel = createDungeonSelect({ game, onStart: (id) => started.push(id), onResume() {}, onBack() {} });
+  sel.handle({ type: 'dir', dx: 0, dy: 1 }); sel.handle({ type: 'confirm' });
+  assert.deepEqual(started, [], 'cave locked');
+  game.unlocked.push('sinnoh-cave');
+  const sel2 = createDungeonSelect({ game, onStart: (id) => started.push(id), onResume() {}, onBack() {} });
+  sel2.handle({ type: 'dir', dx: 0, dy: 1 }); sel2.handle({ type: 'confirm' });
+  assert.deepEqual(started, ['sinnoh-cave']);
+});
+
+test('dungeon select: active run shows resume first; other dungeon asks before abandoning (default 아니요)', () => {
+  const game = newGame();
+  game.run = { ...startRun('sinnoh-field', 9), floor: 3 };
+  let resumed = 0;
+  const started = [];
+  const sel = createDungeonSelect({ game, onStart: (id) => started.push(id), onResume: () => resumed++, onBack() {} });
   sel.handle({ type: 'confirm' });
-  assert.equal(picked.length, 0, 'locked');
-  sel.handle({ type: 'dir', dx: 0, dy: -1 });
+  assert.equal(resumed, 1);
+  sel.handle({ type: 'dir', dx: 0, dy: 1 }); // 신오 들판
   sel.handle({ type: 'confirm' });
-  assert.equal(picked[0], STAGES[0]);
-  sel.handle({ type: 'cancel' });
-  assert.equal(back, 1);
+  assert.equal(sel.confirming, true);
+  for (let i = 0; i < 20; i++) { sel.update(0.1); sel.handle({ type: 'confirm' }); }
+  assert.deepEqual(started, [], 'mashing keeps the run');
+  if (!sel.confirming) sel.handle({ type: 'confirm' });
+  assert.equal(sel.confirming, true);
+  sel.update(CHOICE_LOCK + 0.1);
+  sel.handle({ type: 'dir', dx: 0, dy: -1 }); // 예
+  sel.handle({ type: 'confirm' });
+  assert.deepEqual(started, ['sinnoh-field']);
+});
+
+test('floor menu: lock ignores mashing, then pick', () => {
+  const picks = [];
+  const m = createFloorMenu({ lines: ['1층 돌파!'], options: ['다음 층으로', '마을로 돌아가기'], onPick: (i) => picks.push(i) });
+  for (let i = 0; i < 5; i++) m.handle({ type: 'confirm' });
+  assert.deepEqual(picks, []);
+  m.update(CHOICE_LOCK + 0.05);
+  m.handle({ type: 'dir', dx: 0, dy: 1 }); m.handle({ type: 'confirm' });
+  assert.deepEqual(picks, [1]);
+  m.handle({ type: 'confirm' });
+  assert.deepEqual(picks, [1], 'only once');
 });
 
 test('battle starts without a title and exits to the lobby with the result', () => {
   const exits = [];
-  const game = createGame({ rng: createRng(3), map: STAGES[0].map, onExit: (r) => exits.push(r) });
+  const game = createGame({ rng: createRng(3), map: MAP, onExit: (r) => exits.push(r) });
   assert.equal(game.mode, 'banner');
   tick(game, 2);
   assert.equal(game.mode, 'idle');
