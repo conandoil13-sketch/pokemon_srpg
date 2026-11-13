@@ -109,3 +109,17 @@ test('evolution choice: pick a branch → 예 → onPick(branch); "진화하지 
   c2.handle({ type: 'confirm' });
   assert.deepEqual(picks, ['umbreon', null]);
 });
+
+test('evolution choice works with the mouse: click a branch row, then click 예', async () => {
+  const { W, H } = await import('../src/render/screen.js');
+  const picks = [];
+  const c = createEvolutionChoice({ species: 'eevee', options: ['espeon', 'umbreon'], onPick: (to) => picks.push(to) });
+  c.update(CHOICE_LOCK + 0.05);
+  const rows = 3, menuH = rows * 16 + 8, x = W - 120 - 4 + 20, top = Math.max(2, H - 54 - menuH);
+  c.handle({ type: 'click', px: 5, py: 5 });            // 메뉴 밖 → 무시
+  c.handle({ type: 'click', px: x, py: top + 4 + 8 });  // 1번째 줄: 에브이
+  c.update(CHOICE_LOCK + 0.05);
+  const yesTop = H - 54 - (2 * 16 + 8);
+  c.handle({ type: 'click', px: x, py: yesTop + 4 + 8 }); // 예
+  assert.deepEqual(picks, ['espeon']);
+});
