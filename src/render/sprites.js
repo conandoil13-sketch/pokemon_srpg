@@ -74,6 +74,8 @@ export function requestSprites(keys) {
 export const loadSprites = requestSprites; // 이전 이름
 
 export const hasPmd = (key) => !!pmd[key];
+// 그 동작의 시트가 실제로 있는가 (대체 동작 제외)
+export const hasAnim = (key, name) => { const a = pmd[key]?.data.anims[name]; return !!(a && pmd[key].sheets[a.sheet]); };
 
 // 애니메이션이 없으면 대체: Attack ← Strike, Shoot ← Attack, Walk ← Idle
 function pickAnim(p, name) {

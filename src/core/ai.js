@@ -22,10 +22,13 @@ export function enemyTurnOrder(state) {
 
 const parse = (k) => { const [x, y] = k.split(',').map(Number); return { x, y }; };
 
+// 다음 페이즈에 움직일 수 있는 상대인가 (잠듦 남은 턴이 있거나 얼음이면 아님)
+export const isThreat = (u) => !((u.status === 'sleep' && u.statusTurns > 0) || u.status === 'freeze');
+
 // 아군별로 "다음 턴에 공격 가능한 칸 → 기술 목록" 미리 계산
 function threatMap(state, unit) {
   const out = [];
-  for (const ally of state.units.filter((u) => u.side !== unit.side)) {
+  for (const ally of state.units.filter((u) => u.side !== unit.side && isThreat(u))) {
     const attackable = new Map(); // "x,y" → Set<moveId>
     for (const k of reachable(state.grid, state.units, ally).keys()) {
       const p = parse(k);

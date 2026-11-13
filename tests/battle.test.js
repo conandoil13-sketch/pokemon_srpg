@@ -348,7 +348,7 @@ test('phase end: poison damage event; confusion end event', () => {
   endPhase(s, rs([]));
   assert.equal(c.hp, hp - Math.floor(c.maxHp / 8));
   assert.deepEqual(s.log.statusEvents.filter((e) => e.unitId === 'ally-chimchar'), [
-    { unitId: 'ally-chimchar', kind: 'poison', damage: Math.floor(c.maxHp / 8) },
+    { unitId: 'ally-chimchar', kind: 'poison', damage: Math.floor(c.maxHp / 8), hpBefore: hp, maxHp: c.maxHp, x: 5, y: 5 },
     { unitId: 'ally-chimchar', kind: 'confusionEnd' },
   ]);
 });
@@ -369,4 +369,11 @@ test('a sleeping enemy skips its phase', () => {
   assert.deepEqual([r.acted, r.moved, r.statusTurns], [true, true, 1]);
   assert.ok(s.log.statusEvents.some((e) => e.unitId === 'enemy-riolu' && e.kind === 'asleep'));
   assert.equal(createBattle().units[0].status, null);
+});
+
+test('status damage events carry hpBefore, maxHp and position', () => {
+  const s = stageBattle(); const c = find(s, 'ally-chimchar'); c.status = 'burn'; c.hp = 30;
+  endPhase(s, rs([]));
+  const e = s.log.statusEvents.find((x) => x.unitId === 'ally-chimchar');
+  assert.deepEqual([e.hpBefore, e.maxHp, e.x, e.y], [30, c.maxHp, 5, 5]);
 });

@@ -228,3 +228,20 @@ test('status forecast warns about immune or already-affected targets', () => {
   assert.equal(ailmentNote({ species: 'pikachu', status: 'poison', confusion: 0 }, { id: 'sleep-powder', type: 'grass', ailment: 'sleep' }), '이미 상태이상');
   assert.equal(ailmentNote({ species: 'pikachu', status: null, confusion: 0 }, { id: 'sleep-powder', type: 'grass', ailment: 'sleep' }), null);
 });
+
+// ---- 페이즈 알림 순서·HP 연출 ----
+import { phaseNotices } from '../src/game/states.js';
+test('phase notices: end damage → stage expiry → phase start, damage carries HP', () => {
+  const units = { a: { id: 'a', species: 'chimchar', side: 'ally', x: 1, y: 2 }, e: { id: 'e', species: 'riolu', side: 'enemy', x: 5, y: 5 } };
+  const events = [
+    { unitId: 'e', kind: 'asleep' },
+    { unitId: 'a', kind: 'poison', damage: 5, hpBefore: 20, maxHp: 40, x: 1, y: 2 },
+  ];
+  const out = phaseNotices(events, [{ unitId: 'a', keys: ['atk'] }], (id) => units[id]);
+  assert.deepEqual(out.map((n) => n.lines.join(' ')), [
+    '불꽃숭이는 독의 데미지를 입었다!', '불꽃숭이의 공격이 원래대로 돌아왔다!', '상대 리오르는 쿨쿨 잠들어 있다',
+  ]);
+  assert.deepEqual(out[0].hp, { from: 20, to: 15, max: 40 });
+  assert.deepEqual(out[0].at, { x: 1, y: 2 });
+  assert.deepEqual(out[2].at, { x: 5, y: 5 });
+});

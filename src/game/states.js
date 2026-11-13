@@ -8,7 +8,7 @@ import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
-import { drawUnitSprite, drawShadow, DIR } from '../render/sprites.js';
+import { drawUnitSprite, drawShadow, hasAnim, DIR } from '../render/sprites.js';
 import { dirFromDelta } from '../render/pmdData.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -36,6 +36,37 @@ export function ailmentNote(target, mv) {
   const r = canInflict(target, mv.ailment, mv);
   return r.ok ? null : r.reason === 'immune' ? '효과 없음' : '이미 상태이상';
 }
+const STATUS_LINE = {
+  poison: '독의 데미지를 입었다!', toxic: '독의 데미지를 입었다!', burn: '화상 데미지를 입었다!', fainted: '쓰러졌다!',
+  asleep: '쿨쿨 잠들어 있다', woke: '눈을 떴다!', frozen: '얼어 버려서 움직일 수 없다!',
+};
+const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
+
+// 페이즈 전환 알림 목록 (순수). events: log.statusEvents, expired: log.expired, get: id → 유닛
+export function phaseNotices(events, expired, get) {
+  const who = (id) => unitLabel(get(id));
+  const one = (e) => {
+    const u = get(e.unitId);
+    const text = e.kind === 'confusionEnd' ? `${who(e.unitId)}의 혼란이 풀렸다!`
+      : e.kind === 'thawed' ? `${who(e.unitId)}의 얼음이 녹았다!`
+      : `${josa(who(e.unitId), '은/는')} ${STATUS_LINE[e.kind]}`;
+    const w = wrapMessage(text);
+    return {
+      lines: Array.isArray(w) ? w : [w],
+      at: e.x !== undefined ? { x: e.x, y: e.y } : u ? { x: u.x, y: u.y } : null,
+      hp: e.damage ? { from: e.hpBefore, to: Math.max(0, e.hpBefore - e.damage), max: e.maxHp } : null,
+    };
+  };
+  const exp = expired.flatMap((e) => {
+    const u = get(e.unitId);
+    return u ? e.keys.map((k) => {
+      const w = wrapMessage(`${unitLabel(u)}의 ${josa(STAT_KO[k], '이/가')} 원래대로 돌아왔다!`);
+      return { lines: Array.isArray(w) ? w : [w], at: { x: u.x, y: u.y }, hp: null };
+    }) : [];
+  });
+  return [...events.filter((e) => !START_EVENTS.includes(e.kind)).map(one), ...exp, ...events.filter((e) => START_EVENTS.includes(e.kind)).map(one)];
+}
+
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
 export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
@@ -89,31 +120,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 페이즈 종료 때 풀린 랭크 → 대사 (한 건씩)
-  function expiryLines() {
-    return (st.log.expired ?? []).flatMap((e) => {
-      const u = st.units.find((o) => o.id === e.unitId);
-      return u ? e.keys.map((k) => wrapMessage(`${unitLabel(u)}의 ${josa(STAT_KO[k], '이/가')} 원래대로 돌아왔다!`)) : [];
-    });
-  }
-  // 페이즈 전환 때 상태이상 이벤트 → 대사 (한 건씩)
-  const STATUS_LINE = {
-    poison: '독의 데미지를 입었다!', toxic: '독의 데미지를 입었다!', burn: '화상 데미지를 입었다!', fainted: '쓰러졌다!',
-    asleep: '쿨쿨 잠들어 있다', woke: '눈을 떴다!', frozen: '얼어 버려서 움직일 수 없다!',
-  };
-  function statusLines() {
-    return (st.log.statusEvents ?? []).map((e) => {
-      const who = unitLabel(everyone.get(e.unitId));
-      if (e.kind === 'confusionEnd') return wrapMessage(`${who}의 혼란이 풀렸다!`);
-      if (e.kind === 'thawed') return wrapMessage(`${who}의 얼음이 녹았다!`);
-      return wrapMessage(`${josa(who, '은/는')} ${STATUS_LINE[e.kind]}`);
-    });
-  }
-  const phaseLines = () => [...statusLines(), ...expiryLines()];
+  // 페이즈 전환 알림: { lines, at?, hp? } — 스펙 순서(끝 데미지 → 랭크 만료 → 시작)
+  const phaseLines = () => phaseNotices(st.log.statusEvents ?? [], st.log.expired ?? [], (id) => everyone.get(id));
 
+  // list: 대사 줄 또는 { lines, at, hp } 알림
   function noticeChain(list, then) {
     if (!list.length) { then(); return; }
     const [first, ...rest] = list;
-    showNotice(Array.isArray(first) ? first : [first], () => noticeChain(rest, then));
+    const n = first.lines ? first : { lines: Array.isArray(first) ? first : [first] };
+    showNotice(n.lines, () => noticeChain(rest, then), n);
   }
 
   function attackTilesFrom(unit, tiles) {
@@ -196,14 +211,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const mv = MOVES[moveId];
     const one = pickOne(mv) && target && target !== attacker ? target : null;
     const hpBefore = one?.hp;
-    if (one) {
+    const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, one].find((u) => u?.id === id);
+    const result = applyMove(st, attacker.id, moveId, one?.id ?? null, rng);
+    // 마비 실패·혼란 자해: 기술이 나가지 않으므로 대상은 돌아보지 않고 카메라는 사용자에게
+    if (one && !result.blocked) {
       facing[attacker.id] = dirFromDelta(one.x - attacker.x, one.y - attacker.y);
       if (mv.category !== 'status') facing[one.id] = dirFromDelta(attacker.x - one.x, attacker.y - one.y);
     }
-    const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, one].find((u) => u?.id === id);
-    const result = applyMove(st, attacker.id, moveId, one?.id ?? null, rng);
     anim = createAttackAnim({ attacker, defender: one, move: mv, result, hpBefore, lookup });
-    target = one ?? attacker;
+    target = result.blocked ? attacker : one ?? attacker;
     animThen = then;
     focus = target;
     mode = 'anim';
@@ -236,8 +252,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     } else openAction();
   }
 
-  function showNotice(lines, then) {
-    notice = { lines, then };
+  function showNotice(lines, then, extra = {}) {
+    notice = { lines, then, at: extra.at ?? null, hp: extra.hp ?? null, t: 0 };
     mode = 'notice';
   }
 
@@ -375,6 +391,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // ---------- 갱신 ----------
   function update(dt) {
     clock += dt;
+    if (notice) notice.t += dt;
     resultT = mode === 'result' ? resultT + dt : 0;
     updateCamera(dt);
     if (pause) {
@@ -415,6 +432,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     let t;
     if (walk) { const p = unitWorld(walk.unit); t = camTarget({ x: p.x / TILE, y: p.y / TILE }); }
     else if (focus && (mode === 'anim' || mode === 'enemy')) t = camTarget(focus);
+    else if (mode === 'notice' && notice?.at) t = camTarget(notice.at); // 상태 데미지 등: 그 유닛 쪽으로
     else t = camTarget(cursor);
     const k = Math.min(1, dt * 10);
     cam.x += (t.x - cam.x) * k;
@@ -448,12 +466,18 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       drawShadow(ctx, cx, cy, u.side === 'ally' ? 'rgba(40,80,200,0.45)' : 'rgba(200,40,40,0.45)');
       const grey = u.acted && !pose && st.phase === (u.side === 'ally' ? 'player' : 'enemy');
       const walking = walk && walk.unit === u;
-      const a = pose?.anim ?? (walking ? 'Walk' : u.status === 'sleep' && !pose ? 'Sleep' : 'Idle');
-      const t = pose ? pose.t : walking ? walk.t : u.status === 'freeze' ? 0 : clock; // 얼음: 정지
+      // 쉬는 중: 잠듦은 Sleep 동작(없으면 회색 정지), 얼음은 푸르스름한 정지
+      const resting = !pose && !walking && (u.status === 'sleep' || u.status === 'freeze');
+      const sleepAnim = u.status === 'sleep' && hasAnim(u.species, 'Sleep');
+      const a = pose?.anim ?? (walking ? 'Walk' : resting && sleepAnim ? 'Sleep' : 'Idle');
+      const t = pose ? pose.t : walking ? walk.t : resting && !sleepAnim ? 0 : clock;
+      const restFilter = resting && !grey && !sleepAnim ? (u.status === 'freeze' ? 'grayscale(0.6) brightness(1.25)' : 'grayscale(1) brightness(0.85)') : null;
       if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.85)'; }
+      if (restFilter) { ctx.save(); ctx.filter = restFilter; }
       if (pose?.flash) { ctx.save(); ctx.filter = 'brightness(3)'; }
       drawUnitSprite(ctx, u.species, a, pose?.dir ?? facing[u.id], grey ? 0 : t, cx + (pose?.dx ?? 0), cy + (pose?.dy ?? 0), pose ? pose.loop : true);
       if (pose?.flash) ctx.restore();
+      if (restFilter) ctx.restore();
       if (grey) ctx.restore();
       if (!pose?.hidden) ui.drawStatusDot(ctx, u, cx, cy);
     }
@@ -519,6 +543,17 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
   }
 
+  // 상태 데미지 알림: 유닛 위 데미지 숫자 + 줄어드는 HP 바 (월드 좌표)
+  function drawNoticeHp(ctx, n) {
+    const k = Math.min(1, n.t / 0.45);
+    const px = n.at.x * TILE + TILE / 2, py = n.at.y * TILE + TILE / 2, bw = 22;
+    const dmg = `${n.hp.from - n.hp.to}`;
+    drawText(ctx, dmg, Math.round(px - textWidth(dmg) / 2), Math.round(py - 30 - Math.min(8, n.t * 20)), '#d8a0f0', '#202020');
+    ctx.fillStyle = '#202020';
+    ctx.fillRect(Math.round(px - bw / 2) - 1, Math.round(py + 10), bw + 2, 7);
+    ui.drawHpBar(ctx, Math.round(px - bw / 2), Math.round(py + 11), bw, n.hp.from + (n.hp.to - n.hp.from) * k, n.hp.max);
+  }
+
   const toPts = (m) => [...m.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; });
 
   function draw(ctx, time) {
@@ -539,6 +574,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawUnits(ctx);
     if (['idle', 'selected', 'target'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
+    if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);
     ctx.restore();
 
     const onLeft = cursor.x * TILE - cx < W / 2;

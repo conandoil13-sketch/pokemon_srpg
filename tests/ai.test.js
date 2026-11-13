@@ -147,3 +147,12 @@ test('never puts the last awake foe to sleep (small parties)', () => {
   const b = mkm('pikachu', 'ally', 15, 4, ['tackle']); b.status = 'sleep';
   assert.notEqual(planEnemyAction(state(16, 5, [foe, ally, b]), foe).attack?.moveId, 'sleep-powder');
 });
+
+import { isThreat } from '../src/core/ai.js';
+test('sleeping (with turns left) or frozen units are not threats next phase', () => {
+  assert.equal(isThreat({ status: null }), true);
+  assert.equal(isThreat({ status: 'sleep', statusTurns: 1 }), false);
+  assert.equal(isThreat({ status: 'sleep', statusTurns: 0 }), true); // 다음 페이즈 시작에 깨어남
+  assert.equal(isThreat({ status: 'freeze', statusTurns: 2 }), false);
+  assert.equal(isThreat({ status: 'paralysis' }), true);
+});
