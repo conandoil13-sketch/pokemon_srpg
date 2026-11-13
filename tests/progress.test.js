@@ -10,7 +10,7 @@ const need = (m, level) => expForLevel(SPECIES[m.species].growth, level) - m.exp
 
 test('level up without evolution', () => {
   const party = newParty();
-  const m = party[0]; // chimchar Lv8
+  const m = party[1]; // chimchar Lv8
   const ev = applyExp(party, { chimchar: need(m, 13) });
   assert.equal(m.level, 13);
   assert.deepEqual(ev[0].type, 'level');
@@ -23,7 +23,7 @@ test('level up without evolution', () => {
 
 test('several levels crossing evolution: level → moves → evolve last', () => {
   const party = newParty();
-  const m = party[0];
+  const m = party[1];
   const ev = applyExp(party, { chimchar: need(m, 15) });
   assert.equal(ev[0].type, 'level');
   assert.equal(ev.at(-1).type, 'evolve');
@@ -38,7 +38,7 @@ test('several levels crossing evolution: level → moves → evolve last', () =>
 
 test('events follow party order', () => {
   const party = newParty();
-  const ev = applyExp(party, { piplup: need(party[1], 10), chimchar: need(party[0], 10) });
+  const ev = applyExp(party, { piplup: need(party[2], 10), chimchar: need(party[1], 10) });
   const levels = ev.filter((e) => e.type === 'level').map((e) => e.species);
   assert.deepEqual(levels, ['chimchar', 'piplup']);
 });

@@ -3,11 +3,11 @@ import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { expForLevel, MAX_LEVEL } from './stats.js';
 import { startingMoves } from './learn.js';
-import { newParty } from './progress.js';
+import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 2;
+const VERSION = 3;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -50,6 +50,12 @@ function cleanRun(r) {
   };
 }
 
+// 메타몽(주인공)은 항상 파티 맨 앞에 정확히 하나
+export function ensureDitto(party) {
+  const ditto = party.find((m) => m.species === 'ditto') ?? newMember('ditto');
+  return [ditto, ...party.filter((m) => m.species !== 'ditto')];
+}
+
 export function loadGame(storage) {
   let raw;
   try {
@@ -66,11 +72,13 @@ export function loadGame(storage) {
     warn('corrupted save ignored');
     return null;
   }
-  if (data?.version === 1) data = { ...data, cleared: [], unlocked: [], best: {}, run: null }; // v1 → v2: 고정 스테이지 기록은 버림
-  else if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
+  if (data?.version === 1) data = { ...data, version: 2, cleared: [], unlocked: [], best: {}, run: null }; // v1 → v2: 고정 스테이지 기록은 버림
+  if (data?.version === 2) data = { ...data, version: 3 }; // v2 → v3: 메타몽은 아래 ensureDitto 가 넣는다
+  if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
-    const party = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
-    if (!party.length) return null;
+    const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
+    if (!cleaned.length) return null;
+    const party = ensureDitto(cleaned);
     return {
       version: VERSION,
       party,

@@ -79,7 +79,7 @@ test('placements on walkable unique tiles', () => {
     seen.add(k);
     assert.ok(SPECIES[p.species], p.species);
   }
-  assert.equal(MAP.allySlots.length, 4);
+  assert.equal(MAP.allySlots.length, 5);
   for (const e of MAP.enemies) assert.ok(Number.isInteger(e.level) && e.level >= 1, e.species);
 });
 

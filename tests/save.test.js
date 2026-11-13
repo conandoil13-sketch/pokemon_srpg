@@ -12,10 +12,10 @@ test('round trip', () => {
   g.party[0].exp = 1000;
   assert.equal(saveGame(st, g), true);
   const back = loadGame(st);
-  assert.equal(back.version, 2);
+  assert.equal(back.version, 3);
   assert.deepEqual(back.cleared, ['sinnoh-field']);
   assert.equal(back.items.evoStone, 2);
-  assert.equal(back.party.length, 4);
+  assert.equal(back.party.length, 5);
   assert.deepEqual(back.party[1], g.party[1]);
 });
 
@@ -27,7 +27,7 @@ test('broken json / other version → null', () => {
   const st = memStore();
   st.setItem(SAVE_KEY, '{nope');
   assert.equal(loadGame(st), null);
-  st.setItem(SAVE_KEY, JSON.stringify({ ...newGame(), version: 3 }));
+  st.setItem(SAVE_KEY, JSON.stringify({ ...newGame(), version: 4 }));
   assert.equal(loadGame(st), null);
 });
 
@@ -38,7 +38,7 @@ test('unknown species dropped, unknown moves removed and refilled', () => {
   g.party[0].moves = ['not-a-move'];
   st.setItem(SAVE_KEY, JSON.stringify(g));
   const back = loadGame(st);
-  assert.equal(back.party.length, 4);
+  assert.equal(back.party.length, 5);
   assert.ok(back.party[0].moves.length >= 1);
   assert.ok(!back.party[0].moves.includes('not-a-move'));
 });
@@ -74,7 +74,7 @@ test('prototype-key species / moves never crash loading', () => {
     st.setItem(SAVE_KEY, JSON.stringify(g));
     let back;
     assert.doesNotThrow(() => { back = loadGame(st); }, sp);
-    assert.equal(back.party.length, 4, sp);
+    assert.equal(back.party.length, 5, sp);
     assert.deepEqual(back.party[0].moves, ['scratch']);
   }
 });
@@ -89,7 +89,7 @@ test('any unexpected shape returns null instead of throwing', () => {
 // ---- v2 ----
 test('v2 new game shape', () => {
   const g = newGame();
-  assert.equal(g.version, 2);
+  assert.equal(g.version, 3);
   assert.deepEqual(g.unlocked, ['sinnoh-field']);
   assert.deepEqual(g.best, {});
   assert.equal(g.run, null);
@@ -113,7 +113,7 @@ test('v1 save migrates: party/items kept, fixed-stage clears dropped', () => {
   v1.party[0].level = 12; v1.party[0].exp = 1000;
   st.setItem(SAVE_KEY, JSON.stringify(v1));
   const g = loadGame(st);
-  assert.equal(g.version, 2);
+  assert.equal(g.version, 3);
   assert.equal(g.party[0].level, 12);
   assert.equal(g.items.evoStone, 3);
   assert.deepEqual(g.cleared, []);
@@ -134,4 +134,32 @@ test('invalid run or unknown dungeons are cleaned', () => {
   st.setItem(SAVE_KEY, JSON.stringify(g));
   back = loadGame(st);
   assert.equal(back.run, null);
+});
+
+// ---- v3: 메타몽 주인공 ----
+test('new game: ditto leads a party of 5', () => {
+  const g = newGame();
+  assert.equal(g.version, 3);
+  assert.deepEqual(g.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
+});
+
+test('v2 save gains ditto at the front', () => {
+  const st = memStore();
+  const g = newGame();
+  const v2 = { ...g, version: 2, party: g.party.slice(1) };
+  st.setItem(SAVE_KEY, JSON.stringify(v2));
+  const back = loadGame(st);
+  assert.equal(back.version, 3);
+  assert.deepEqual(back.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
+});
+
+test('ditto elsewhere in the party moves to the front, never duplicated', () => {
+  const st = memStore();
+  const g = newGame();
+  const [ditto, ...rest] = g.party;
+  ditto.level = 15; ditto.exp = 3375;
+  st.setItem(SAVE_KEY, JSON.stringify({ ...g, party: [rest[0], rest[1], ditto, rest[2], rest[3]] }));
+  const back = loadGame(st);
+  assert.deepEqual(back.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
+  assert.equal(back.party[0].level, 15);
 });

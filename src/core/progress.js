@@ -6,7 +6,7 @@ import { expForLevel, levelForExp, statsAt, MAX_LEVEL } from './stats.js';
 import { startingMoves, movesLearnedBetween, learnOutcome } from './learn.js';
 import { levelEvolutionOptions, stoneEvolutionOptions, pickEvolution } from './evolution.js';
 
-export const STARTERS = ['chimchar', 'piplup', 'turtwig', 'shinx'];
+export const STARTERS = ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']; // 메타몽 = 주인공 (항상 맨 앞)
 
 // Member = { species, level, exp, moves }
 export function newMember(species, level = BALANCE.startLevel) {

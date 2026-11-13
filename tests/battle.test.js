@@ -11,9 +11,10 @@ const find = (s, id) => s.units.find((u) => u.id === id);
 
 test('createBattle builds level-based units from the party and the map', () => {
   const s = createBattle();
-  assert.equal(s.units.length, 9);
+  assert.equal(s.units.length, 10);
   const allies = s.units.filter((u) => u.side === 'ally');
-  assert.deepEqual(allies.map((u) => u.species), ['chimchar', 'piplup', 'turtwig', 'shinx']);
+  assert.deepEqual(allies.map((u) => u.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
+  assert.deepEqual(find(s, 'ally-ditto').moves, ['tackle']);
   for (const u of allies) {
     assert.equal(u.level, BALANCE.startLevel);
     assert.deepEqual(u.stats, statsAt(SPECIES[u.species].base, u.level));
@@ -27,7 +28,7 @@ test('createBattle builds level-based units from the party and the map', () => {
 
 test('party levels and moves carry into battle', () => {
   const party = newParty();
-  party[0].level = 20; party[0].moves = ['ember'];
+  party[1].level = 20; party[1].moves = ['ember'];
   const u = find(createBattle(undefined, party), 'ally-chimchar');
   assert.equal(u.level, 20);
   assert.deepEqual(u.moves, ['ember']);
