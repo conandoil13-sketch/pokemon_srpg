@@ -12,7 +12,7 @@ test('round trip', () => {
   g.party[0].exp = 1000;
   assert.equal(saveGame(st, g), true);
   const back = loadGame(st);
-  assert.equal(back.version, 3);
+  assert.equal(back.version, 4);
   assert.deepEqual(back.cleared, ['sinnoh-field']);
   assert.equal(back.items.evoStone, 2);
   assert.equal(back.party.length, 5);
@@ -27,7 +27,7 @@ test('broken json / other version → null', () => {
   const st = memStore();
   st.setItem(SAVE_KEY, '{nope');
   assert.equal(loadGame(st), null);
-  st.setItem(SAVE_KEY, JSON.stringify({ ...newGame(), version: 4 }));
+  st.setItem(SAVE_KEY, JSON.stringify({ ...newGame(), version: 5 }));
   assert.equal(loadGame(st), null);
 });
 
@@ -89,7 +89,7 @@ test('any unexpected shape returns null instead of throwing', () => {
 // ---- v2 ----
 test('v2 new game shape', () => {
   const g = newGame();
-  assert.equal(g.version, 3);
+  assert.equal(g.version, 4);
   assert.deepEqual(g.unlocked, ['sinnoh-field']);
   assert.deepEqual(g.best, {});
   assert.equal(g.run, null);
@@ -98,7 +98,7 @@ test('v2 new game shape', () => {
 test('v2 round trip with an active run', () => {
   const st = memStore();
   const g = newGame();
-  g.run = { dungeonId: 'sinnoh-field', floor: 3, seed: 777, faintedLast: ['piplup'], loot: { evoStone: 1, candy: [2] } };
+  g.run = { dungeonId: 'sinnoh-field', floor: 3, seed: 777, faintedLast: ['piplup'], loot: { evoStone: 1, candy: [2], coins: 0 } };
   g.best = { 'sinnoh-field': 3 };
   saveGame(st, g);
   const back = loadGame(st);
@@ -113,7 +113,7 @@ test('v1 save migrates: party/items kept, fixed-stage clears dropped', () => {
   v1.party[0].level = 12; v1.party[0].exp = 1000;
   st.setItem(SAVE_KEY, JSON.stringify(v1));
   const g = loadGame(st);
-  assert.equal(g.version, 3);
+  assert.equal(g.version, 4);
   assert.equal(g.party[0].level, 12);
   assert.equal(g.items.evoStone, 3);
   assert.deepEqual(g.cleared, []);
@@ -139,7 +139,7 @@ test('invalid run or unknown dungeons are cleaned', () => {
 // ---- v3: 메타몽 주인공 ----
 test('new game: ditto leads a party of 5', () => {
   const g = newGame();
-  assert.equal(g.version, 3);
+  assert.equal(g.version, 4);
   assert.deepEqual(g.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
 });
 
@@ -149,7 +149,7 @@ test('v2 save gains ditto at the front', () => {
   const v2 = { ...g, version: 2, party: g.party.slice(1) };
   st.setItem(SAVE_KEY, JSON.stringify(v2));
   const back = loadGame(st);
-  assert.equal(back.version, 3);
+  assert.equal(back.version, 4);
   assert.deepEqual(back.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
 });
 
@@ -162,4 +162,45 @@ test('ditto elsewhere in the party moves to the front, never duplicated', () => 
   const back = loadGame(st);
   assert.deepEqual(back.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
   assert.equal(back.party[0].level, 15);
+});
+
+// ---- v4: 코인 · 결정 · 출전 ----
+import { cleanSortie } from '../src/core/save.js';
+
+test('v4 new game and round trip', () => {
+  const st = memStore();
+  const g = newGame();
+  assert.equal(g.version, 4);
+  assert.equal(g.coins, 0);
+  assert.deepEqual(g.shards, {});
+  assert.deepEqual(g.sortie, ['chimchar', 'piplup', 'turtwig', 'shinx']);
+  g.coins = 340; g.shards = { chimchar: 2 }; g.sortie = ['piplup', 'shinx'];
+  g.run = { dungeonId: 'sinnoh-field', floor: 2, seed: 5, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 40 } };
+  saveGame(st, g);
+  const back = loadGame(st);
+  assert.equal(back.coins, 340);
+  assert.deepEqual(back.shards, { chimchar: 2 });
+  assert.deepEqual(back.sortie, ['piplup', 'shinx']);
+  assert.equal(back.run.loot.coins, 40);
+});
+
+test('v3 → v4 migration', () => {
+  const st = memStore();
+  const g = newGame();
+  const v3 = { version: 3, party: g.party, items: g.items, unlocked: g.unlocked, best: {}, cleared: [], run: { dungeonId: 'sinnoh-field', floor: 2, seed: 5, faintedLast: [], loot: { evoStone: 0, candy: [] } } };
+  st.setItem(SAVE_KEY, JSON.stringify(v3));
+  const back = loadGame(st);
+  assert.equal(back.version, 4);
+  assert.equal(back.coins, 0);
+  assert.deepEqual(back.shards, {});
+  assert.deepEqual(back.sortie, ['chimchar', 'piplup', 'turtwig', 'shinx']);
+  assert.equal(back.run.loot.coins, 0);
+});
+
+test('cleanSortie fixes broken lists', () => {
+  const party = newGame().party;
+  assert.deepEqual(cleanSortie(['ditto', 'missingno', 'chimchar', 'chimchar', 'piplup', 'turtwig', 'shinx'], party), ['chimchar', 'piplup', 'turtwig', 'shinx']);
+  assert.deepEqual(cleanSortie([], party), ['chimchar', 'piplup', 'turtwig', 'shinx']);
+  assert.deepEqual(cleanSortie('nope', party), ['chimchar', 'piplup', 'turtwig', 'shinx']);
+  assert.deepEqual(cleanSortie(['shinx'], party), ['shinx']);
 });

@@ -7,13 +7,16 @@ import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 3;
+const VERSION = 4;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
 
 // GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
-export const newGame = () => ({ version: VERSION, party: newParty(), items: { evoStone: 0 }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null });
+export const newGame = () => {
+  const party = newParty();
+  return { version: VERSION, party, items: { evoStone: 0 }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party) };
+};
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
 
@@ -46,8 +49,17 @@ function cleanRun(r) {
     loot: {
       evoStone: clampInt(r.loot?.evoStone, 0, 99),
       candy: (Array.isArray(r.loot?.candy) ? r.loot.candy : []).map((f) => clampInt(f, 1, d.floors)),
+      coins: clampInt(r.loot?.coins, 0, 9999999),
     },
   };
+}
+
+// 출전 목록: 파티에 있는 종족만, 메타몽 제외, 중복 제거, 최대 4. 비면 파티 앞에서 채운다
+export const SORTIE_SIZE = 4;
+export function cleanSortie(sortie, party) {
+  const inParty = new Set(party.map((m) => m.species));
+  const list = [...new Set((Array.isArray(sortie) ? sortie : []).filter((k) => typeof k === 'string' && k !== 'ditto' && inParty.has(k)))].slice(0, SORTIE_SIZE);
+  return list.length ? list : party.filter((m) => m.species !== 'ditto').slice(0, SORTIE_SIZE).map((m) => m.species);
 }
 
 // 메타몽(주인공)은 항상 파티 맨 앞에 정확히 하나
@@ -74,6 +86,7 @@ export function loadGame(storage) {
   }
   if (data?.version === 1) data = { ...data, version: 2, cleared: [], unlocked: [], best: {}, run: null }; // v1 → v2: 고정 스테이지 기록은 버림
   if (data?.version === 2) data = { ...data, version: 3 }; // v2 → v3: 메타몽은 아래 ensureDitto 가 넣는다
+  if (data?.version === 3) data = { ...data, version: 4, coins: 0, shards: {}, sortie: [] }; // v3 → v4: 출전은 아래에서 파티 앞으로 채움
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
     const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
@@ -88,6 +101,10 @@ export function loadGame(storage) {
         .filter(([id]) => isDungeon(id)).map(([id, f]) => [id, clampInt(f, 0, dungeonById(id).floors)])),
       cleared: dungeonIds(data.cleared),
       run: cleanRun(data.run),
+      coins: clampInt(data.coins, 0, 9999999),
+      shards: Object.fromEntries(Object.entries(data.shards && typeof data.shards === 'object' ? data.shards : {})
+        .filter(([k]) => own(SPECIES, k)).map(([k, n]) => [k, clampInt(n, 0, 9999)]).filter(([, n]) => n > 0)),
+      sortie: cleanSortie(data.sortie, party),
     };
   } catch (e) {
     warn(`invalid save ignored: ${e.message}`); // 어떤 이상한 형태든 부팅을 막지 않는다
