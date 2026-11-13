@@ -1,0 +1,66 @@
+// 뽑기 (순수, rng 주입): 1단계 포켓몬, 계열 최종형 종족값으로 희귀도, 같은 계열이 있으면 결정
+import { SPECIES } from '../data/species.js';
+import { newMember } from './progress.js';
+
+export const GACHA_COST = 100;
+export const RARITY = [{ id: 'common', weight: 70 }, { id: 'rare', weight: 25 }, { id: 'epic', weight: 5 }];
+const RARE_MIN = 450, EPIC_MIN = 535;
+
+// 계열 최종형들의 최대 종족값 합 (갈래 포함, 자기 자신 포함)
+export function lineFinalBst(key) {
+  const s = SPECIES[key];
+  return Math.max(s.bst, ...s.evolutions.map((e) => lineFinalBst(e.to)));
+}
+
+export function rarityOf(key) {
+  const b = lineFinalBst(key);
+  return b >= EPIC_MIN ? 'epic' : b >= RARE_MIN ? 'rare' : 'common';
+}
+
+let poolCache = null;
+export function gachaPool() {
+  if (poolCache) return poolCache;
+  const pool = { common: [], rare: [], epic: [] };
+  for (const s of Object.values(SPECIES)) {
+    if (s.stage === 0 && !s.legendary && s.key !== 'ditto') pool[rarityOf(s.key)].push(s.key);
+  }
+  for (const k of Object.keys(pool)) pool[k].sort();
+  return (poolCache = pool);
+}
+
+// 1단계 조상 (진화 역방향)
+const parentOf = {};
+for (const s of Object.values(SPECIES)) for (const e of s.evolutions) parentOf[e.to] ??= s.key;
+export function lineRoot(key) {
+  let k = key;
+  while (parentOf[k]) k = parentOf[k];
+  return k;
+}
+
+// 합류 레벨: 출전 동료 평균 - 2 (최소 5). 출전 정보가 없으면 메타몽 외 파티 평균
+export function joinLevel(game) {
+  const deployed = game.party.filter((m) => (game.sortie ?? []).includes(m.species));
+  const pool = deployed.length ? deployed : game.party.filter((m) => m.species !== 'ditto');
+  if (!pool.length) return 5;
+  const avg = pool.reduce((s, m) => s + m.level, 0) / pool.length;
+  return Math.max(5, Math.round(avg) - 2);
+}
+
+export function pull(game, rng) {
+  if ((game.coins ?? 0) < GACHA_COST) return { ok: false, reason: 'coins' };
+  game.coins -= GACHA_COST;
+  const total = RARITY.reduce((s, r) => s + r.weight, 0);
+  let roll = rng() * total, rarity = RARITY[0].id;
+  for (const r of RARITY) { if (roll < r.weight) { rarity = r.id; break; } roll -= r.weight; }
+  const tier = gachaPool()[rarity];
+  const species = tier[Math.min(tier.length - 1, Math.floor(rng() * tier.length))];
+  const owned = game.party.some((m) => lineRoot(m.species) === species);
+  if (owned) {
+    game.shards ??= {};
+    game.shards[species] = (game.shards[species] ?? 0) + 1;
+    return { ok: true, species, rarity, duplicate: true };
+  }
+  const member = newMember(species, joinLevel(game));
+  game.party.push(member);
+  return { ok: true, species, rarity, duplicate: false, member };
+}
