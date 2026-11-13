@@ -13,14 +13,14 @@ const THEMES = {
     water: { deep: '#3068d0', mid: '#4088e8', light: '#70b0f8', foam: '#e8f8ff', sand: '#f0e0a0', sandD: '#d0b878' },
     cover: { outline: '#2a6a28', dark: '#3c8a34', mid: '#58b040', light: '#80d058', tip: '#b8f080' },
     wall: { kind: 'tree', outline: '#183c18', dark: '#286028', mid: '#3c8c38', light: '#64b450', hl: '#90d468', trunk: '#6a4020', trunkL: '#9a6a38' },
-    rock: { outline: '#3a3028', dark: '#7a6a58', mid: '#a89880', light: '#d0c4a8', hl: '#f0e8d0' },
+    rock: { outline: '#2e2a28', dark: '#5e5852', mid: '#847c72', light: '#a89e90', hl: '#cac2b4' },
   },
   cave: {
     ground: { base: '#a09080', dark: '#857565', light: '#bcac98', deep: '#6c5e50', flowers: [], pebble: ['#c8bca8', '#5c5044'] },
     water: { deep: '#203e80', mid: '#2c58a8', light: '#4878c8', foam: '#b8d8f8', sand: '#7c6e5e', sandD: '#5e5246' },
     cover: { outline: '#202868', dark: '#3848a0', mid: '#5878d0', light: '#90b8f0', tip: '#d0e8ff' }, // 동굴 수정 덤불
     wall: { kind: 'cave', outline: '#1c1712', dark: '#40362e', mid: '#5c5044', light: '#7c6e5e', hl: '#9c8c78' },
-    rock: { outline: '#2a221c', dark: '#5c5044', mid: '#7c6e5e', light: '#a09080', hl: '#c4b6a2' },
+    rock: { outline: '#1e1a16', dark: '#3e3832', mid: '#5a524a', light: '#7a7066', hl: '#9a9084' }, // 바닥보다 어둡게
   },
 };
 
@@ -207,6 +207,96 @@ function rockTile(P) {
   });
 }
 
+// ---- 위로 솟는 스프라이트 (나무·풀숲·바위): 칸보다 위로 OVER px 튀어나와 윗칸을 살짝 덮는다 ----
+const TREE_OVER = 10, GRASS_OVER = 6, ROCK_OVER = 6;
+
+// 외곽선 붙이기: 모양 함수(색 또는 null) → 바깥 1px 를 outline 으로
+function withOutline(w, h, fn, outline) {
+  const px = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) px.push(fn(x, y));
+  const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? null : px[y * w + x]);
+  return paint(w, h, (x, y) => {
+    const c = at(x, y);
+    if (c) return c;
+    return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at(x + dx, y + dy)) ? outline : null;
+  });
+}
+
+// 나무 한 그루: 잎 덩어리가 울퉁불퉁한 둥근 수관 + 줄기 + 발밑 그림자
+function treeSprite(P, v) {
+  const H = TILE + TREE_OVER, cx = 11.5, cy = 14, R = 12.5;
+  const bumps = Array.from({ length: 9 }, (_, i) => hash('tb', v, i) * 1.8);
+  const leaves = clusterCenters(`tree${v}`, 6, 5.5).map(([x, y, r]) => [x * 0.9 + 1, y * 0.85 + 2, r]);
+  return withOutline(TILE, H, (x, y) => {
+    const dx = x + 0.5 - cx, dy = y + 0.5 - cy, a = Math.atan2(dy, dx);
+    const k = Math.floor(((a + Math.PI) / (2 * Math.PI)) * 9) % 9;
+    const r = R - bumps[k] + Math.sin(a * 9 + v) * 0.8; // 가장자리 잎사귀 요철
+    if (Math.hypot(dx, dy * 1.1) <= r && y < 28) {
+      if (dy > 5 && -dx * 0.5 - dy < -7) return P.dark; // 아래쪽 그늘
+      return clusterColor(clusterAt(x, y, leaves), P, P.dark);
+    }
+    if (x >= 10 && x <= 13 && y >= 25 && y <= 30) return x === 10 ? P.trunk : x === 13 ? shadeHex(P.trunk) : P.trunkL; // 줄기
+    if (y >= 30 && y <= 32 && Math.abs(x + 0.5 - 12) <= 9 - (y - 30) * 2) return 'rgba(0,0,0,0.22)'; // 그림자
+    return null;
+  }, P.outline);
+}
+const shadeHex = (hex) => { const n = parseInt(hex.slice(1), 16), f = (c) => Math.round(c * 0.7); return `#${((1 << 24) | (f(n >> 16) << 16) | (f((n >> 8) & 255) << 8) | f(n & 255)).toString(16).slice(1)}`; };
+
+// 긴 풀숲 한 칸: 풀 다발 4개(2×2), 다발마다 위로 삐죽한 잎 끝
+function grassSprite(P, v) {
+  const H = TILE + GRASS_OVER;
+  const tufts = [[6, 13], [18, 12], [6, 25], [18, 26]].map(([x, y], i) => [x + (hash('gt', v, i) - 0.5) * 2, y + GRASS_OVER - 6]);
+  return withOutline(TILE, H, (x, y) => {
+    for (const [tx, ty] of [...tufts].reverse()) { // 아래 다발이 앞
+      const lx = x + 0.5 - tx, ly = y + 0.5 - ty;
+      if (ly > 0 || ly < -14 || Math.abs(lx) > 7) continue;
+      // 잎 끝: 2px 간격의 뾰족한 톱니, 가운데가 더 높다
+      const tooth = 3 + (Math.abs(Math.round(lx)) % 2) * 3 + Math.abs(lx) * 0.7;
+      if (-ly > 14 - tooth) continue;
+      const blade = Math.round(lx + 7) % 3;
+      if (-ly > 10 - tooth) return blade === 1 ? P.tip : P.light;
+      if (ly > -3) return P.dark;
+      return blade === 0 ? P.dark : lx < 0 ? P.light : P.mid;
+    }
+    return null;
+  }, P.outline);
+}
+
+// 진짜 돌: 각진 큰 돌 + 작은 돌 둘, 면마다 평평한 명암(위 왼쪽 빛), 면 경계 선, 금
+function rockSprite(P, v) {
+  const H = TILE + ROCK_OVER;
+  const stone = (cx, cy, R, n, seed) => {
+    const vs = Array.from({ length: n }, (_, i) => {
+      const a = (i / n) * Math.PI * 2 + hash(seed, i, 'a') * 0.5;
+      const r = R * (0.72 + hash(seed, i, 'r') * 0.35);
+      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.85];
+    });
+    return { cx, cy, vs };
+  };
+  const stones = [stone(12.5, 15 + ROCK_OVER - 4, 11, 6, `rk${v}`), stone(4.5, 22 + ROCK_OVER - 4, 3.6, 5, `rs${v}`), stone(20, 24 + ROCK_OVER - 4, 3.2, 5, `rt${v}`)];
+  const inPoly = (vs, x, y) => { let c = false; for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) { const [xi, yi] = vs[i], [xj, yj] = vs[j]; if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
+  return withOutline(TILE, H, (x, y) => {
+    const px = x + 0.5, py = y + 0.5;
+    for (const s of [...stones].reverse()) {
+      if (!inPoly(s.vs, px, py)) continue;
+      // 어느 면(중심에서 꼭짓점 사이 부채꼴)인지 → 면 방향으로 평평한 명암
+      const a = Math.atan2(py - s.cy, px - s.cx), n = s.vs.length;
+      const angs = s.vs.map(([vx, vy]) => Math.atan2(vy - s.cy, vx - s.cx));
+      let f = 0; for (let i = 0; i < n; i++) { const a0 = angs[i], a1 = angs[(i + 1) % n]; const inside = a0 < a1 ? a >= a0 && a < a1 : a >= a0 || a < a1; if (inside) f = i; }
+      const mid = (angs[f] + angs[(f + 1) % n]) / 2 + (angs[f] > angs[(f + 1) % n] ? Math.PI : 0);
+      const near = Math.hypot(px - s.cx + 1.5, py - s.cy + 2) < 2.6; // 꼭대기 평평한 면 (위 왼쪽으로 치우침)
+      const lit = near ? 0.95 : -Math.cos(mid) * 0.6 - Math.sin(mid);
+      // 면 경계: 꼭짓점 방향 선 근처를 어둡게
+      const edge = angs.some((ae) => Math.abs(Math.atan2(Math.sin(a - ae), Math.cos(a - ae))) < 0.09) && !near;
+      if (edge) return P.dark;
+      if ((x * 3 + y * 5 + v) % 23 === 0) return P.dark; // 작은 금
+      return lit > 0.85 ? P.hl : lit > 0.3 ? P.light : lit < -0.3 ? P.dark : P.mid;
+    }
+    if (y >= H - 4 && y <= H - 2 && Math.abs(px - 13) <= 11 - (y - (H - 4)) * 2) return 'rgba(0,0,0,0.22)';
+    return null;
+  }, P.outline);
+}
+
 // ---- 계단: 바닥 구멍 + 내려가는 단 (외곽선) ----
 function stairsTile() {
   return paint(TILE, TILE, (x, y) => {
@@ -225,9 +315,10 @@ function build(theme) {
   return {
     ground: decos.map((d, i) => groundTile(P.ground, `${theme}${i}`, d)),
     water: Array.from({ length: WATER_FRAMES }, (_, f) => waterSet(P.water, f)),
-    bush: bushSet(P.cover),
-    wall: P.wall.kind === 'cave' ? caveWallSet(P.wall) : treeSet(P.wall),
-    rock: rockTile(P.rock),
+    grassTufts: [0, 1].map((v) => grassSprite(P.cover, v)),
+    trees: P.wall.kind === 'cave' ? null : [0, 1, 2].map((v) => treeSprite(P.wall, v)),
+    caveWall: P.wall.kind === 'cave' ? caveWallSet(P.wall) : null,
+    rocks: [0, 1].map((v) => rockSprite(P.rock, v)),
     stairs: stairsTile(),
   };
 }
@@ -259,15 +350,23 @@ export function drawMap(ctx, grid, time, camX = 0, camY = 0, viewW = 256, viewH 
   const x0 = Math.max(0, Math.floor(camX / TILE)), y0 = Math.max(0, Math.floor(camY / TILE));
   const x1 = Math.min(grid[0].length - 1, Math.floor((camX + viewW) / TILE));
   const y1 = Math.min(grid.length - 1, Math.floor((camY + viewH) / TILE));
+  // 1) 바닥·물·계단·동굴벽 (칸 안에만)
   for (let y = y0; y <= y1; y++) {
     for (let x = x0; x <= x1; x++) {
       const t = grid[y][x], px = x * TILE, py = y * TILE;
       ctx.drawImage(cache.ground[Math.floor(hash(x, y) * cache.ground.length)], px, py); // 모든 칸 바닥 먼저
       if (t === '~') drawQuads(ctx, cache.water[wf], grid, x, y, SAME.water, px, py);
-      else if (t === '"') drawQuads(ctx, cache.bush, grid, x, y, SAME.bush, px, py);
-      else if (t === '#') drawQuads(ctx, cache.wall, grid, x, y, SAME.wall, px, py);
-      else if (t === '^') ctx.drawImage(cache.rock, px, py);
+      else if (t === '#' && cache.caveWall) drawQuads(ctx, cache.caveWall, grid, x, y, SAME.wall, px, py);
       else if (t === '>') ctx.drawImage(cache.stairs, px, py);
+    }
+  }
+  // 2) 위로 솟는 것들 (나무·풀숲·돌): 위 줄부터 그려서 아래 줄이 윗줄을 덮는다. 화면 아래 한 줄 더 (솟은 부분)
+  for (let y = y0; y <= Math.min(grid.length - 1, y1 + 1); y++) {
+    for (let x = x0; x <= x1; x++) {
+      const t = grid[y][x], px = x * TILE, py = y * TILE, v = hash(x, y, 'v');
+      if (t === '#' && cache.trees) ctx.drawImage(cache.trees[Math.floor(v * 3)], px, py - TREE_OVER);
+      else if (t === '"') ctx.drawImage(cache.grassTufts[Math.floor(v * 2)], px, py - GRASS_OVER);
+      else if (t === '^') ctx.drawImage(cache.rocks[Math.floor(v * 2)], px, py - ROCK_OVER);
     }
   }
 }
