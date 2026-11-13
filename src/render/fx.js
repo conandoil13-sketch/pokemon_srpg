@@ -18,7 +18,7 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
       if (!mod) throw new Error(`no effect ${spec?.id}`);
       const o = ORIENT[dir] ?? ORIENT.right;
       const fx = createFx(mod, { ...(spec.opts ?? {}), x: at.x, y: at.y, flip: o.flip, angle: o.angle, ...(actor ? { actor } : {}) });
-      const e = { fx, layer: spec.layer ?? 'front', timeScale: spec.timeScale ?? 1, delay, life: spec.life ?? null, age: 0, stopped: false, clipTo, dir, at, key, getPos };
+      const e = { fx, actor: actor ?? null, layer: spec.layer ?? 'front', timeScale: spec.timeScale ?? 1, delay, life: spec.life ?? null, age: 0, stopped: false, clipTo, dir, at, key, getPos };
       list.push(e);
       log.push(spec.id); if (log.length > 200) log.shift();
       return e;
@@ -32,7 +32,8 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
   function blitClipped(src, dst, e) {
     const { x: ax, y: ay } = e.at, len = e.clipTo, ox = dst.ox, oy = dst.oy;
     const rect = { right: [ax - BEAM_PAD, ay - 40, ax + len, ay + 8], left: [ax - len, ay - 40, ax + BEAM_PAD, ay + 8],
-      up: [ax - 24, ay - len - 8, ax + 24, ay + BEAM_PAD], down: [ax - 24, ay - BEAM_PAD, ax + 24, ay + len] }[e.dir ?? 'right'];
+      // 위/아래는 오른쪽 기준 띠(-40..8)가 회전한 것: 위 x ∈ [ax-40, ax+8], 아래 x ∈ [ax-8, ax+40]
+      up: [ax - 40, ay - len - 8, ax + 8, ay + BEAM_PAD], down: [ax - 8, ay - BEAM_PAD, ax + 40, ay + len] }[e.dir ?? 'right'];
     for (let y = 0; y < src.h; y++) for (let x = 0; x < src.w; x++) {
       const wx = x + ox, wy = y + oy, i = y * src.w + x;
       if (wx < rect[0] || wx > rect[2] || wy < rect[1] || wy > rect[3]) continue;
@@ -63,6 +64,7 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
   return {
     get count() { return list.length; },
     get failed() { return failed; },
+    actorOf(key) { return list.find((e) => e.key === key && !e.stopped)?.actor ?? null; },
     get following() { return list.filter((e) => e.key && !e.stopped).length; },
     log,
     // 공격 연출이 끝난 뒤 꼬리(연기·잔해)는 sec 초 뒤에 정리 (지속 표시는 제외)
@@ -77,6 +79,11 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
     // wanted: Map(key → { spec, getPos, actor }) — 없는 건 만들고, 빠진 건 멈춘다
     sync(wanted) {
       for (const e of list) if (e.key && !e.stopped && !wanted.has(e.key)) { e.fx.stop(); e.stopped = true; }
+      // 스프라이트가 늦게 로드되면 actor(몸 모양)와 위치 계산을 새것으로 바꾼다
+      for (const e of list) {
+        const v = e.key && !e.stopped ? wanted.get(e.key) : null;
+        if (v && v.actor && v.actor !== e.actor) { e.actor = v.actor; e.fx.options.actor = v.actor; e.getPos = v.getPos; e.cache = null; }
+      }
       for (const [key, v] of wanted) this.follow(key, v.spec, v.getPos, v.actor);
     },
     stopAll() { for (const e of list) if (!e.stopped) { e.fx.stop(); e.stopped = true; } },

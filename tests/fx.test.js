@@ -78,3 +78,30 @@ test('performance: 10 lingering status loops + 1 attack under 4ms per frame', ()
   }
   assert.ok(per < 4, `${per.toFixed(2)}ms`);
 });
+
+test('a clipped beam keeps its full width in all four directions', () => {
+  const HAND = { right: [15, -24], left: [-15, -24], up: [-24, -15], down: [24, 15] };
+  const beam = { id: 'arcane/arcane-beam', opts: { palette: PAL.water }, timeScale: 1, layer: 'front', clip: true };
+  for (const dir of ['right', 'left', 'up', 'down']) {
+    const m = createFxManager();
+    const c = { x: 128, y: 96 }, [hx, hy] = HAND[dir];
+    m.spawn(beam, { x: c.x - hx, y: c.y - hy }, { dir, clipTo: 60 });
+    run(m, 0.3);
+    const f = m.draw(null, 'front', { x: 0, y: 0 });
+    const across = [];
+    for (let i = 0; i < f.color.length; i++) if (f.color[i] || f.light[i]) across.push(dir === 'up' || dir === 'down' ? i % f.w : Math.floor(i / f.w));
+    const mid = dir === 'up' || dir === 'down' ? c.x : c.y;
+    assert.ok(Math.min(...across) < mid - 2 && Math.max(...across) > mid + 2, `${dir}: ${Math.min(...across)}..${Math.max(...across)}`);
+  }
+});
+
+test('a lingering loop takes the real sprite actor once it is available', () => {
+  const m = createFxManager();
+  const loop = fxForAilment('freeze').loop;
+  const a = actorFor('pikachu', null), b = { ...a, anchor: { dx: 3, dy: 4 } };
+  m.follow('u:freeze', loop, () => ({ x: 50, y: 50 }), a);
+  m.sync(new Map([['u:freeze', { spec: loop, getPos: () => ({ x: 53, y: 54 }), actor: b }]]));
+  assert.equal(m.actorOf('u:freeze'), b);
+  m.update(1 / 60);
+  assert.equal(m.count, 1);
+});
