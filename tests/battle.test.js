@@ -22,7 +22,7 @@ test('createBattle builds level-based units from the party and the map', () => {
   }
   assert.equal(find(s, 'enemy-gible').level, 9);
   assert.equal(s.phase, 'player');
-  assert.deepEqual(s.log, { exp: {} });
+  assert.deepEqual(s.log, { exp: {}, fainted: [], loot: [] });
 });
 
 test('party levels and moves carry into battle', () => {
@@ -97,4 +97,66 @@ test('all enemies gone → win', () => {
   const s = createBattle();
   s.units = s.units.filter((u) => u.side === 'ally');
   assert.equal(checkResult(s), 'win');
+});
+
+// ---- 던전 규칙 ----
+import { arrive } from '../src/core/battle.js';
+import { MAP } from '../src/data/map.js';
+import { canEnter, TILE_COST } from '../src/core/pathfind.js';
+
+const dungeonMap = (extra = {}) => {
+  const tiles = MAP.tiles.slice();
+  tiles[5] = tiles[5].slice(0, 4) + '>' + tiles[5].slice(5); // (4,5) 계단
+  return { ...MAP, tiles, stairs: { x: 4, y: 5 }, chests: [{ x: 3, y: 5, item: 'candy' }], ...extra };
+};
+
+test('hpRatio: listed species start at half (min 1), others full', () => {
+  const s = createBattle(dungeonMap(), newParty(), { hpRatio: { piplup: 0.5 } });
+  const p = find(s, 'ally-piplup');
+  assert.equal(p.hp, Math.max(1, Math.floor(p.maxHp * 0.5)));
+  assert.equal(find(s, 'ally-chimchar').hp, find(s, 'ally-chimchar').maxHp);
+});
+
+test('arrive: stairs → result stairs; enemies ignore stairs', () => {
+  const s = createBattle(dungeonMap());
+  const g = find(s, 'enemy-gible');
+  g.x = 4; g.y = 5;
+  assert.deepEqual(arrive(s, 'enemy-gible'), { stairs: false, item: null });
+  assert.equal(s.result, null);
+  moveUnit(s, 'ally-chimchar', 4, 5);
+  assert.equal(arrive(s, 'ally-chimchar').stairs, true);
+  assert.equal(s.result, 'stairs');
+  assert.equal(checkResult(s), 'stairs', 'stairs result is not overwritten');
+});
+
+test('arrive: chest opens once and is logged', () => {
+  const s = createBattle(dungeonMap());
+  moveUnit(s, 'ally-chimchar', 3, 5);
+  assert.deepEqual(arrive(s, 'ally-chimchar'), { stairs: false, item: 'candy' });
+  assert.deepEqual(s.chests, []);
+  assert.deepEqual(s.log.loot, ['candy']);
+  assert.equal(arrive(s, 'ally-chimchar').item, null);
+});
+
+test('boss floor: defeating the boss wins even with enemies left', () => {
+  const map = dungeonMap({ stairs: null, enemies: [...MAP.enemies, { species: 'riolu', level: 15, x: 15, y: 11, boss: true }] });
+  const s = createBattle(map);
+  const boss = s.units.find((u) => u.boss);
+  assert.ok(boss);
+  boss.x = 3; boss.y = 5; boss.hp = 1;
+  applyAttack(s, 'ally-chimchar', boss.id, 'ember', zero);
+  assert.equal(s.result, 'win');
+  assert.ok(s.units.some((u) => u.side === 'enemy'));
+});
+
+test('fainted allies are logged once', () => {
+  const s = createBattle();
+  find(s, 'ally-shinx').hp = 1;
+  applyAttack(s, 'enemy-gible', 'ally-shinx', 'tackle', zero);
+  assert.deepEqual(s.log.fainted, ['shinx']);
+});
+
+test('stairs tile is walkable at cost 1', () => {
+  assert.equal(canEnter('>', 'chimchar'), true);
+  assert.equal(TILE_COST['>'], 1);
 });

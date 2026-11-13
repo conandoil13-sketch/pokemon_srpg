@@ -11,13 +11,14 @@ import { newParty } from './progress.js';
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id }) {
+export function makeUnit({ species, side, x, y, level, moves, id, boss }) {
   const stats = statsAt(SPECIES[species].base, level);
   return {
     id: id ?? `${side}-${species}`, species, side, x, y, level, stats,
     hp: stats.hp, maxHp: stats.hp,
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES),
     moved: false, acted: false,
+    ...(boss ? { boss: true } : {}),
   };
 }
 
@@ -27,11 +28,14 @@ function uniqueId(units, side, species) {
   return id;
 }
 
-export function createBattle(mapDef = MAP, party = newParty()) {
+// opts.hpRatio: { [species]: 0.5 } — 직전 층 기절자 등 시작 HP 비율
+export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } = {}) {
   const units = [];
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
     const { x, y } = mapDef.allySlots[i];
-    units.push(makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species) }));
+    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species) });
+    if (hpRatio[m.species]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[m.species]));
+    units.push(u);
   });
   for (const e of mapDef.enemies) units.push(makeUnit({ ...e, side: 'enemy', id: uniqueId(units, 'enemy', e.species) }));
   return {
@@ -42,7 +46,10 @@ export function createBattle(mapDef = MAP, party = newParty()) {
     phase: 'player',
     turn: 1,
     result: null,
-    log: { exp: {} }, // 종족별 획득 경험치
+    log: { exp: {}, fainted: [], loot: [] }, // 획득 경험치(종족별), 기절한 아군, 연 보물
+    stairs: mapDef.stairs ?? null,
+    chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
+    bossFloor: units.some((u) => u.boss),
   };
 }
 
@@ -78,9 +85,28 @@ export function applyAttack(state, attackerId, targetId, moveId, rng) {
   if (fainted) {
     state.units = state.units.filter((u) => u !== d);
     expGained = awardExp(state, a, d);
+    if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
   }
   checkResult(state);
   return { ...r, fainted, expGained };
+}
+
+// 아군이 이동을 마친 칸 처리: 상자 열기, 계단 도착
+export function arrive(state, unitId) {
+  const u = byId(state, unitId);
+  const out = { stairs: false, item: null };
+  if (!u || u.side !== 'ally') return out;
+  const i = state.chests.findIndex((c) => c.x === u.x && c.y === u.y);
+  if (i >= 0) {
+    out.item = state.chests[i].item;
+    state.chests.splice(i, 1);
+    state.log.loot.push(out.item);
+  }
+  if (state.stairs && state.stairs.x === u.x && state.stairs.y === u.y) {
+    out.stairs = true;
+    state.result = 'stairs';
+  }
+  return out;
 }
 
 export function endPhase(state) {
@@ -91,6 +117,8 @@ export function endPhase(state) {
 }
 
 export function checkResult(state) {
+  if (state.result === 'stairs') return state.result; // 계단 클리어는 덮어쓰지 않음
+  if (state.bossFloor && !state.units.some((u) => u.boss)) { state.result = 'win'; return state.result; }
   const enemies = state.units.some((u) => u.side === 'enemy');
   const allies = state.units.some((u) => u.side === 'ally');
   state.result = !enemies ? 'win' : !allies ? 'lose' : null;

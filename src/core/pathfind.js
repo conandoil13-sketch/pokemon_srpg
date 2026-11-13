@@ -1,7 +1,7 @@
 // 이동 범위 / 사거리 (순수 함수)
 import { SPECIES } from '../data/species.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity };
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1 };
 
 export function canEnter(tile, speciesKey) {
   if (tile === '#' || tile === undefined) return false;
