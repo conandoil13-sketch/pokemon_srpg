@@ -173,3 +173,23 @@ test('move shapes from rules and overrides', () => {
   assert.deepEqual(MOVES.ember.range, [1, 2]);
   assert.equal(MOVES.growl.shape, null);
 });
+
+// ---- 특성 데이터 ----
+import { ABILITIES, SRPG_ABILITY_TEXT } from '../src/data/abilities.js';
+test('species carry gen-4 abilities only', () => {
+  assert.deepEqual(SPECIES.gengar.abilities, ['levitate']);
+  assert.deepEqual(SPECIES.koffing.abilities, ['levitate']);
+  assert.deepEqual(SPECIES.geodude.abilities, ['rock-head', 'sturdy']);
+  assert.deepEqual(SPECIES.pikachu.abilities, ['static']);
+  for (const s of Object.values(SPECIES)) {
+    assert.ok(s.abilities.length >= 1 && s.abilities.length <= 2, s.key);
+    for (const a of s.abilities) assert.ok(ABILITIES[a], `${s.key}: ${a}`);
+  }
+  for (const a of ['competitive', 'neutralizing-gas', 'sharpness', 'wind-rider']) assert.equal(ABILITIES[a], undefined, a);
+});
+
+test('every ability has a Korean name and description; SRPG ones use our rules text', () => {
+  for (const a of Object.values(ABILITIES)) assert.ok(a.name && a.desc, a.id);
+  assert.equal(ABILITIES.intimidate.desc, SRPG_ABILITY_TEXT.intimidate);
+  assert.ok(ABILITIES.intimidate.desc.includes('이동'));
+});
