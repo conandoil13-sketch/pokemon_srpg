@@ -217,3 +217,21 @@ test('no area move whose net effect hurts its own side', () => {
   const s = { grid: ['#...#'], width: 5, height: 1, units: [foe, mate, ally], phase: 'enemy', turn: 1, result: null };
   assert.equal(planEnemyAction(s, foe).attack, null);
 });
+
+// ---- 날씨 · 안개 ----
+test('in rain the AI prefers water over fire', () => {
+  const foe = mkm('vulpix', 'enemy', 4, 2, ['ember', 'water-gun']);
+  const ally = mkm('pikachu', 'ally', 3, 2, ['tackle']); ally.hp = ally.maxHp = 999;
+  const s = { ...state(9, 5, [foe, ally]), weather: 'rain' };
+  assert.equal(planEnemyAction(s, foe).attack?.moveId, 'water-gun');
+  const s2 = { ...state(9, 5, [foe, ally]), weather: 'sun' };
+  assert.equal(planEnemyAction(s2, foe).attack?.moveId, 'ember');
+});
+
+test('in fog the AI does not attack allies it has not seen', () => {
+  const foe = mkm('garchomp', 'enemy', 4, 2, ['dragon-claw']);
+  const ally = mkm('pikachu', 'ally', 3, 2, ['tackle']);
+  const s = { ...state(9, 5, [foe, ally]), weather: 'fog' };
+  assert.equal(planEnemyAction(s, foe, { unseen: new Set(['ally-pikachu']) }).attack, null);
+  assert.ok(planEnemyAction(s, foe).attack);
+});

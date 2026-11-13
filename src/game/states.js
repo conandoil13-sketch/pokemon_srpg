@@ -6,6 +6,7 @@ import { wrapMessage } from '../render/mapAttack.js';
 import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
+import { isHidden, WEATHER_KO } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
@@ -77,7 +78,7 @@ const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
 export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
-  let aims = null, aIdx = 0; // 공격기 조준 후보와 현재 선택
+  let aims = null, aIdx = 0, enemyUnseen = new Set(); // 공격기 조준 후보와 현재 선택
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0, everyone;
   let notice = null; // { lines, then } 대사 후 다음 단계
@@ -194,6 +195,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     showBanner('상대 턴', null, '#f84040', () => noticeChain(lines, () => {
       if (st.result) { mode = 'result'; return; }
       enemyQueue = enemyTurnOrder(st).map((u) => u.id);
+      // 안개: 적 차례 시작 때 적 누구에게서도 먼 아군은 이번 차례 안 보인다
+      enemyUnseen = st.weather === 'fog' ? new Set(allyUnits().filter((a) => isHidden(a, st.units.filter((u) => u.side === 'enemy'))).map((a) => a.id)) : new Set();
       mode = 'enemy';
       nextEnemy();
     }));
@@ -211,7 +214,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     const u = st.units.find((o) => o.id === id);
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
-    const plan = planEnemyAction(st, u);
+    const plan = planEnemyAction(st, u, { unseen: enemyUnseen });
     focus = u;
     cursor = { x: u.x, y: u.y };
     pause = { t: 0.35, fn: () => {

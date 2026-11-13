@@ -15,20 +15,23 @@ const IDLE_BUFF_SCORE = 20;   // 때릴 적이 없을 때 자신 버프 점수
 const BUFF_WEIGHT = 1.5;      // 다음 턴 데미지 증가분 가중치
 const MINOR_STAT_SCORE = 3;   // 스피드·명중·회피 변화 1건 점수
 const isStatus = (m) => m.category === 'status';
+// 이번 계획의 날씨 (planEnemyAction 이 정한다; 계산 함수들이 같이 쓴다)
+let W = null;
 const FRIENDLY_WEIGHT = 1.5;  // 같은 편이 휘말린 데미지 감점 배율
 const SELF_KO = ['self-destruct', 'explosion'];
 const SELF_TURNS = 3;         // 자폭 감점: 자기 최선 기대 데미지 × 3턴
 const SIG_SELF_KO = 0.3, OTHER_SELF_KO = 2;
 
 // 조준 하나의 점수 (위험도 제외). 적이 하나도 안 맞으면 null
-function aimScore(state, unit, ghost, move, aim, foes) {
+function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   const sim = { ...state, units: state.units.map((u) => (u === unit ? ghost : u)) };
   const hit = unitsHit(sim, ghost, move, aim);
   const spread = hit.length >= 2 ? 0.75 : 1;
   let score = 0, enemies = 0, kos = 0, mates = 0;
   for (const t of hit) {
-    const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread);
+    const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W);
     const ko = e >= t.hp;
+    if (t.side !== unit.side && unseen.has(t.id)) continue; // 안 보이는 상대는 노리지 않는다
     if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0); }
     else { mates++; score -= e * FRIENDLY_WEIGHT + (ko ? KO_BONUS : 0); }
   }
@@ -55,9 +58,9 @@ const parse = (k) => { const [x, y] = k.split(',').map(Number); return { x, y };
 export const isThreat = (u) => !((u.status === 'sleep' && u.statusTurns > 0) || u.status === 'freeze');
 
 // 아군별로 "다음 턴에 공격 가능한 칸 → 기술 목록" 미리 계산
-function threatMap(state, unit) {
+function threatMap(state, unit, unseen = new Set()) {
   const out = [];
-  for (const ally of state.units.filter((u) => u.side !== unit.side && isThreat(u))) {
+  for (const ally of state.units.filter((u) => u.side !== unit.side && isThreat(u) && !unseen.has(u.id))) {
     const attackable = new Map(); // "x,y" → Set<moveId>
     for (const k of reachable(state.grid, state.units, ally).keys()) {
       const p = parse(k);
@@ -80,16 +83,19 @@ function threatAt(threats, unit, x, y, tile) {
   for (const { ally, attackable } of threats) {
     const moves = attackable.get(`${x},${y}`);
     if (!moves) continue;
-    for (const mid of moves) worst = Math.max(worst, expectedDamage(ally, unit, MOVES[mid], tile));
+    for (const mid of moves) worst = Math.max(worst, expectedDamage(ally, unit, MOVES[mid], tile, 1, W));
   }
   return worst;
 }
 
-export function planEnemyAction(state, unit) {
+// unseen: 안개 속이라 이번 적 차례에 보이지 않는 상대 id (공격·위협 계산에서 뺀다, 다가가는 목표로는 씀)
+export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
   if (unit.acted) return { moveTo: { x: unit.x, y: unit.y }, attack: null }; // 잠듦·얼음으로 쉬는 중
+  W = state.weather ?? null;
   const reach = reachable(state.grid, state.units, unit);
-  const foes = state.units.filter((u) => u.side !== unit.side);
-  const threats = threatMap(state, unit);
+  const allFoes = state.units.filter((u) => u.side !== unit.side);
+  const foes = allFoes.filter((u) => !unseen.has(u.id));
+  const threats = threatMap(state, unit, unseen);
   let best = null, bestStatus = null;
 
   for (const k of reach.keys()) {
@@ -108,7 +114,7 @@ export function planEnemyAction(state, unit) {
       }
       const sim = { ...state, units: state.units.map((u) => (u === unit ? ghost : u)) };
       for (const aim of aimsOf(sim, ghost, move)) {
-        const s = aimScore(state, unit, ghost, move, aim, foes);
+        const s = aimScore(state, unit, ghost, move, aim, foes, unseen);
         if (s === null) continue;
         const score = s - (SELF_KO.includes(mid) ? 0 : risk); // 자폭은 어차피 쓰러지므로 위험 무시
         if (!best || score > best.score) best = { score, moveTo: p, attack: { moveId: mid, aim, ...(aim.unitId ? { targetId: aim.unitId } : {}) } };
@@ -124,11 +130,11 @@ export function planEnemyAction(state, unit) {
   }
 
   // 공격 불가: 가장 가까운 아군 쪽으로 (실제 걸어가는 거리 기준, spec §5-4)
-  const walk = walkDistanceFromFoes(state, unit, foes);
+  const walk = walkDistanceFromFoes(state, unit, allFoes);
   let approach = { x: unit.x, y: unit.y }, bestDist = Infinity;
   for (const k of reach.keys()) {
     const p = parse(k);
-    const dist = walk.get(k) ?? 1000 + Math.min(...foes.map((f) => manhattan(p, f)));
+    const dist = walk.get(k) ?? 1000 + Math.min(...allFoes.map((f) => manhattan(p, f)));
     if (dist < bestDist) { bestDist = dist; approach = p; }
   }
   // 변화기 위치의 위험은 그냥 다가갈 때의 위험과 비교 → 그래도 이득이고 자신 버프보다 나을 때만
@@ -173,7 +179,7 @@ function bestDamage(attacker, targets, category) {
   for (const mid of attacker.moves) {
     const mv = MOVES[mid];
     if (isStatus(mv) || (category && mv.category !== category)) continue;
-    for (const t of targets) m = Math.max(m, expectedDamage(attacker, t, mv, '.'));
+    for (const t of targets) m = Math.max(m, expectedDamage(attacker, t, mv, '.', 1, W));
   }
   return m;
 }
@@ -202,7 +208,7 @@ function positionalStatus(state, unit, ghost, move, foes) {
   const valueOn = (r) => {
     const same = r.side === unit.side;
     const v = ch.reduce((s, c) => s + changeValue(ghost, foes, same, r, c), 0) + (same ? 0 : ailmentValue(state, ghost, r, move));
-    return same ? v : v * hitChance(ghost, r, acc, tile(r)) / 100;
+    return same ? v : v * hitChance(ghost, r, acc, tile(r), W) / 100;
   };
   const near = (list, lo, hi) => list.filter((u) => { const d = manhattan(ghost, u); return d >= lo && d <= hi; });
   const mates = state.units.filter((u) => u.side === unit.side && u.id !== unit.id);
