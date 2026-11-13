@@ -56,6 +56,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
+    weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
   };
 }
 

@@ -16,6 +16,8 @@ export const DUNGEONS = [
     boss: { levelBonus: 3 },
     // 지형 덩어리 개수 (물은 [최소, 최대])
     clusters: { '"': 3, '^': 2, '~': [1, 2], '#': 2 },
+    // 날씨 확률 (층마다 하나, 나머지는 날씨 없음)
+    weather: [{ id: 'rain', chance: 0.15 }, { id: 'sun', chance: 0.10 }],
   },
   {
     id: 'sinnoh-cave',
@@ -31,6 +33,7 @@ export const DUNGEONS = [
     fallback: 'geodude',
     boss: { levelBonus: 3 },
     clusters: { '"': 2, '^': 3, '~': [1, 1], '#': 4 },
+    weather: [{ id: 'fog', chance: 0.15 }],
   },
 ];
 

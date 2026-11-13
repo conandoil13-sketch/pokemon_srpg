@@ -1,5 +1,6 @@
 // 층 맵 생성 (순수, 시드 고정이면 같은 결과). 탁 트인 필드에 지형 덩어리를 뿌리고 연결성을 보장한다.
 import { createRng } from './rng.js';
+import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
 
 const W = 16, H = 12;
@@ -124,5 +125,5 @@ export function generateFloor(dungeon, floor, seed) {
     chests.push({ x: p.x, y: p.y, item: roll < 0.15 ? 'evoStone' : roll < 0.7 ? 'candy' : 'coins' });
   }
 
-  return { tiles: tiles(), allySlots, enemies, stairs, chests };
+  return { tiles: tiles(), allySlots, enemies, stairs, chests, weather: rollWeather(dungeon, seed) };
 }
