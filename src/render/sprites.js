@@ -9,7 +9,7 @@ import { parseAnimData, frameAt, animLength, DIR } from './pmdData.js';
 
 // 앞에서부터 찾는다: 직접 넣은 폴더 → 저장소 통째로 받은 폴더
 export const PMD_BASES = ['assets/sprites/pmd', 'SpriteCollab-master'];
-const WANT_ANIMS = ['Idle', 'Walk', 'Attack', 'Strike', 'Shoot', 'Hurt'];
+const WANT_ANIMS = ['Idle', 'Walk', 'Attack', 'Strike', 'Shoot', 'Hurt', 'Sleep'];
 const EMOTIONS = ['Normal', 'Determined', 'Pain', 'Happy'];
 
 const pmd = {};       // key → { data, sheets: {sheet: img} } | null

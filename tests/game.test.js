@@ -153,3 +153,58 @@ test('action menu cursor starts on the first attack, not a status move', () => {
   assert.ok(run(game, (m) => m === 'action'));
   assert.equal(game.menu[game.menuSel].moveId, 'scratch');
 });
+
+// ---- 상태이상 화면 흐름 ----
+import { statusMessages } from '../src/render/mapAttack.js';
+// 대사·연출만 넘기는 진행 (빈 칸 확인으로 턴을 끝내지 않도록)
+function advance(game, until, maxSec = 120) {
+  for (let t = 0; t < maxSec; t += 0.05) {
+    game.update(0.05);
+    if (game.mode === 'notice' || game.mode === 'anim') game.handle({ type: 'confirm' });
+    if (until(game)) return true;
+  }
+  return false;
+}
+
+test('a paralyzed ally that fails still ends its action', () => {
+  const game = createGame({ rng: () => 0.1 });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  const st = game.state;
+  const c = st.units.find((u) => u.id === 'ally-chimchar'); c.moves = ['scratch']; c.status = 'paralysis';
+  const r = st.units.find((u) => u.id === 'enemy-riolu'); r.x = 3; r.y = 5;
+  const hp = r.hp;
+  const sel = [{ type: 'cursor', px: 2 * 24 + 12, py: 5 * 24 + 12 }, { type: 'confirm' }];
+  for (const e of [...sel, ...sel]) game.handle(e);
+  assert.ok(advance(game, (g) => g.mode === 'action'));
+  game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  assert.deepEqual([c.acted, r.hp], [true, hp]);
+});
+
+test('when every ally sleeps, the player phase passes on its own', () => {
+  const game = createGame({ rng: createRng(4) });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  for (const u of game.state.units) if (u.side === 'ally') { u.status = 'sleep'; u.statusTurns = 3; }
+  game.handle({ type: 'endTurn' });
+  assert.ok(advance(game, (g) => g.state.turn >= 3), `stuck in ${game.mode} turn ${game.state.turn}`);
+});
+
+test('the last enemy fainting from poison ends the floor', () => {
+  const game = createGame({ rng: createRng(4) });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  const st = game.state;
+  st.units = st.units.filter((u) => u.side === 'ally' || u.id === 'enemy-riolu');
+  const r = st.units.find((u) => u.id === 'enemy-riolu'); r.status = 'poison'; r.hp = 1;
+  game.handle({ type: 'endTurn' });
+  assert.ok(advance(game, (g) => g.mode === 'result'), `mode ${game.mode}`);
+  assert.equal(st.result, 'win');
+});
+
+test('status messages', () => {
+  const by = { a: { id: 'a', species: 'chimchar', side: 'ally' }, e: { id: 'e', species: 'riolu', side: 'enemy' } };
+  assert.deepEqual(statusMessages([{ unitId: 'e', ailment: 'paralysis', ok: true }], by, true), ['상대 리오르는 마비되어 기술이 나오기 어려워졌다!']);
+  assert.deepEqual(statusMessages([{ unitId: 'a', ailment: 'burn', ok: true }], by, false), ['불꽃숭이는 화상을 입었다!']);
+  assert.deepEqual(statusMessages([{ unitId: 'e', ailment: 'sleep', ok: true }], by, true), ['상대 리오르는 잠들어 버렸다!']);
+  assert.deepEqual(statusMessages([{ unitId: 'e', ailment: 'sleep', ok: false, reason: 'already' }], by, true), ['상대 리오르에게는 효과가 없는 것 같다...']);
+  assert.deepEqual(statusMessages([{ unitId: 'e', ailment: 'burn', ok: false, reason: 'already' }], by, false), []);
+});
