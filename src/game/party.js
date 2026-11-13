@@ -1,6 +1,7 @@
 // 편성소: 파티 정보(레벨·경험치·기술·진화 조건) + 진화의돌 사용
 import { SPECIES } from '../data/species.js';
 import { stoneTargets } from '../core/progress.js';
+import { stoneEvolutionOptions } from '../core/evolution.js';
 import { expForLevel, MAX_LEVEL } from '../core/stats.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -11,9 +12,12 @@ import { nameOf, moveName } from './learnFlow.js';
 const ROW_H = 34;
 
 export function evolutionHint(member) {
-  const evo = SPECIES[member.species].evolution;
-  if (!evo) return '최종 진화';
-  return evo.rule.kind === 'stone' ? '진화의돌로 진화' : `Lv.${evo.rule.level}에 진화`;
+  const evos = SPECIES[member.species].evolutions;
+  if (!evos.length) return '최종 진화';
+  const levels = evos.filter((e) => e.rule.kind === 'level').map((e) => e.rule.level);
+  const stone = evos.some((e) => e.rule.kind === 'stone');
+  if (levels.length && stone) return `Lv.${Math.min(...levels)} 또는 진화의돌`;
+  return levels.length ? `Lv.${Math.min(...levels)}에 진화` : '진화의돌로 진화';
 }
 
 export function createParty({ game, onBack, onEvolve }) {
@@ -43,7 +47,7 @@ export function createParty({ game, onBack, onEvolve }) {
       else {
         const m = targets()[cursor];
         game.items.evoStone -= 1;
-        onEvolve(m, SPECIES[m.species].evolution.to);
+        onEvolve(m, stoneEvolutionOptions(SPECIES[m.species]));
       }
     },
     update() {},

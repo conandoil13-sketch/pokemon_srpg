@@ -17,7 +17,7 @@ export function validateData() {
   for (const s of Object.values(SPECIES)) {
     for (const t of s.types) if (!TYPES.includes(t)) throw new Error(`${s.key}: unknown type ${t}`);
     for (const [, m] of s.learnset) if (!MOVES[m]) throw new Error(`${s.key}: unknown move ${m}`);
-    if (s.evolution && !SPECIES[s.evolution.to]) throw new Error(`${s.key}: unknown evolution ${s.evolution.to}`);
+    for (const e of s.evolutions) if (!SPECIES[e.to]) throw new Error(`${s.key}: unknown evolution ${e.to}`);
   }
   // 변화기(learnable=false)는 쓰지 않으므로 4세대 '???' 타입(저주) 등도 허용
   for (const m of Object.values(MOVES)) if (m.learnable && !TYPES.includes(m.type)) throw new Error(`${m.id}: unknown type ${m.type}`);

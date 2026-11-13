@@ -9,3 +9,6 @@ assets/sprites/pmd/*
 
 # PMD Sprite Collab 저장소 통째 (1.7GB) — 커밋 금지
 SpriteCollab-master/
+
+# PokeAPI 응답 캐시
+tools/.cache/

@@ -18,7 +18,7 @@ test('bars → events → onDone once with evolutions', () => {
   assert.equal(r.phase, 'events');
   for (let i = 0; i < 30 && !done.length; i++) { tick(r, 0.5); r.handle({ type: 'confirm' }); }
   assert.equal(done.length, 1);
-  assert.deepEqual(done[0], [{ species: 'chimchar', to: 'monferno' }]);
+  assert.deepEqual(done[0], [{ species: 'chimchar', options: ['monferno'] }]);
 });
 
 test('lose: no stone, exp still applied', () => {

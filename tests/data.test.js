@@ -26,7 +26,7 @@ test('validateData passes', () => {
 });
 
 test('generated data: 24 species with base stats, learnsets and starting moves', () => {
-  assert.equal(Object.keys(SPECIES).length, 24);
+  assert.equal(Object.keys(SPECIES).length, 493);
   assert.deepEqual(SPECIES.infernape.base, { hp: 76, atk: 104, def: 71, spa: 104, spd: 71, spe: 108 });
   for (const s of Object.values(SPECIES)) {
     assert.ok(s.learnset.length > 0, s.key);
@@ -36,7 +36,7 @@ test('generated data: 24 species with base stats, learnsets and starting moves',
 });
 
 test('evolution rules match the verified table (spec §4)', () => {
-  const lv = (k) => SPECIES[k].evolution?.rule;
+  const lv = (k) => SPECIES[k].evolutions[0]?.rule;
   assert.deepEqual(lv('chimchar'), { kind: 'level', level: 14, source: 'original' });
   assert.equal(lv('monferno').level, 36);
   assert.deepEqual(lv('riolu'), { kind: 'level', level: 20, source: 'friendship' });
@@ -45,7 +45,7 @@ test('evolution rules match the verified table (spec §4)', () => {
   assert.deepEqual(lv('roselia'), { kind: 'stone' });
   assert.equal(lv('bronzor').level, 33);
   assert.equal(lv('gabite').level, 48);
-  for (const k of ['infernape', 'empoleon', 'torterra', 'luxray', 'lucario', 'garchomp', 'honchkrow', 'roserade', 'bronzong']) assert.equal(SPECIES[k].evolution, null, k);
+  for (const k of ['infernape', 'empoleon', 'torterra', 'luxray', 'lucario', 'garchomp', 'honchkrow', 'roserade', 'bronzong']) assert.deepEqual(SPECIES[k].evolutions, [], k);
 });
 
 test('korean names, learnable flags, movement and range rules', () => {
@@ -86,4 +86,24 @@ test('placements on walkable unique tiles', () => {
 test('every move and species is keyed by its PokeAPI identifier', () => {
   for (const [k, m] of Object.entries(MOVES)) assert.equal(m.api, k);
   for (const [k, s] of Object.entries(SPECIES)) assert.equal(s.api, k);
+});
+
+test('Gen 1-4: ditto, gen-4 types, branching lines', () => {
+  assert.deepEqual(startingMoves(SPECIES.ditto.learnset, 8, MOVES), ['tackle']);
+  assert.deepEqual(SPECIES.clefairy.types, ['normal']);
+  const ev = (k) => Object.fromEntries(SPECIES[k].evolutions.map((e) => [e.to, e.rule]));
+  const eevee = ev('eevee');
+  assert.deepEqual(Object.keys(eevee).sort(), ['espeon', 'flareon', 'glaceon', 'jolteon', 'leafeon', 'umbreon', 'vaporeon']);
+  assert.equal(eevee.vaporeon.kind, 'stone');
+  assert.equal(eevee.espeon.level, 20);
+  assert.equal(eevee.leafeon.kind, 'stone'); // PokeAPI 에 리프의돌(8세대) 경로가 있어 '아이템 → 진화의돌' 규칙 적용
+  const wurmple = ev('wurmple');
+  assert.ok(wurmple.silcoon.random && wurmple.cascoon.random);
+  const tyrogue = ev('tyrogue');
+  assert.equal(new Set(Object.values(tyrogue).map((r) => r.level)).size, 1);
+  assert.equal(Object.keys(tyrogue).length, 3);
+  for (const s of Object.values(SPECIES)) for (const e of s.evolutions) assert.ok(SPECIES[e.to], `${s.key} → ${e.to}`);
+  assert.equal(SPECIES.mewtwo.legendary, true);
+  assert.equal(SPECIES.chimchar.stage, 0);
+  assert.equal(SPECIES.infernape.stage, 2);
 });

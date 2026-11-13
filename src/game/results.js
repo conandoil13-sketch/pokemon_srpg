@@ -16,7 +16,7 @@ export function createResults({ game, result, log, firstClear, onDone }) {
   const events = applyExp(party, log.exp ?? {});
   const gotStone = result === 'win' && firstClear;
   if (gotStone) game.items.evoStone += 1;
-  const evolutions = events.filter((e) => e.type === 'evolve').map((e) => ({ species: e.species, to: e.to }));
+  const evolutions = events.filter((e) => e.type === 'evolve').map((e) => ({ species: e.species, options: e.options }));
 
   const steps = [...(gotStone ? [{ kind: 'msg', text: ['진화의돌을 얻었다!'] }] : []), ...stepsFromEvents(events)];
   let phase = 'bars', t = 0;

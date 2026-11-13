@@ -42,7 +42,9 @@ function evolveChain(list, done) {
   if (!first) { done(); return; }
   const member = game.party.find((m) => m.species === first.species);
   if (!member) { evolveChain(rest, done); return; }
-  scene = createEvolution({ member, to: first.to, onDone: () => evolveChain(rest, done) });
+  // (Task 6 에서 갈래 선택 창을 붙인다) 지금은 첫 갈래
+  const to = first.to ?? first.options[0];
+  scene = createEvolution({ member, to, onDone: () => evolveChain(rest, done) });
 }
 
 const newSeed = () => ((Date.now() ^ Math.floor(rng() * 0x7fffffff)) >>> 0);
@@ -137,7 +139,7 @@ const go = {
     scene = createParty({
       game,
       onBack: () => go.town(null, TOWN.partySpot),
-      onEvolve: (member, to) => evolveChain([{ species: member.species, to }], () => { save(); go.party(); }),
+      onEvolve: (member, options) => evolveChain([{ species: member.species, options }], () => { save(); go.party(); }),
     });
   },
 };

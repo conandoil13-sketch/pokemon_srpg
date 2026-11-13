@@ -4,7 +4,7 @@ import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
 import { expForLevel, levelForExp, statsAt, MAX_LEVEL } from './stats.js';
 import { startingMoves, movesLearnedBetween, learnOutcome } from './learn.js';
-import { levelEvolutionReady, stoneEvolutionReady } from './evolution.js';
+import { levelEvolutionOptions, stoneEvolutionOptions, pickEvolution } from './evolution.js';
 
 export const STARTERS = ['chimchar', 'piplup', 'turtwig', 'shinx'];
 
@@ -27,7 +27,7 @@ function learnEvents(member, moves) {
 }
 
 // expBySpecies: 전투 로그 { [species]: exp }. 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
-export function applyExp(party, expBySpecies) {
+export function applyExp(party, expBySpecies, rng = Math.random) {
   const events = [];
   for (const m of party) {
     const gain = expBySpecies[m.species];
@@ -40,7 +40,9 @@ export function applyExp(party, expBySpecies) {
     events.push({ type: 'level', species: m.species, from, to, before: statsAt(s.base, from), after: statsAt(s.base, to) });
     m.level = to;
     events.push(...learnEvents(m, movesLearnedBetween(s.learnset, from, to, MOVES)));
-    if (levelEvolutionReady(s, to)) events.push({ type: 'evolve', species: m.species, to: s.evolution.to });
+    // 진화: 갈래 1개면 그대로, 원작이 무작위면 rng, 그 외는 플레이어가 고름 (UI 가 options 로 선택 창)
+    const pick = pickEvolution(levelEvolutionOptions(s, to), s, rng);
+    if (pick) events.push({ type: 'evolve', species: m.species, options: pick.auto ? [pick.auto] : pick.choose, random: !!pick.auto && levelEvolutionOptions(s, to).length > 1 });
   }
   return events;
 }
@@ -59,4 +61,4 @@ export function evolveMember(member, to) {
   return learnEvents(member, moves);
 }
 
-export const stoneTargets = (party) => party.filter((m) => stoneEvolutionReady(SPECIES[m.species]));
+export const stoneTargets = (party) => party.filter((m) => stoneEvolutionOptions(SPECIES[m.species]).length > 0);

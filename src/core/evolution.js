@@ -15,8 +15,6 @@ export function classifyEvolution(details, line, balance = BALANCE) {
   return { kind: 'level', level, source };
 }
 
-export const levelEvolutionReady = (sp, level) => sp.evolution?.rule.kind === 'level' && level >= sp.evolution.rule.level;
-export const stoneEvolutionReady = (sp) => sp.evolution?.rule.kind === 'stone';
 
 // ---- 분기 진화 ----
 // branches: [{ to, details }]. 같은 출발에서 '원작 레벨' 이 같은 갈래가 둘 이상이면 원작에서도 무작위(개무소) → random

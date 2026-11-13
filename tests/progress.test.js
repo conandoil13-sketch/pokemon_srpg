@@ -27,7 +27,7 @@ test('several levels crossing evolution: level → moves → evolve last', () =>
   const ev = applyExp(party, { chimchar: need(m, 15) });
   assert.equal(ev[0].type, 'level');
   assert.equal(ev.at(-1).type, 'evolve');
-  assert.equal(ev.at(-1).to, 'monferno');
+  assert.deepEqual(ev.at(-1).options, ['monferno']);
   assert.ok(ev.slice(1, -1).every((e) => ['learned', 'choose', 'skip'].includes(e.type)));
   // 진화 후: 새 종족의 현재 레벨(15)에서 배우는 기술만
   const after = evolveMember(m, 'monferno');
@@ -75,4 +75,26 @@ test('stoneTargets', () => {
   assert.deepEqual(stoneTargets(newParty()), []);
   const party = [...newParty(), newMember('roselia', 20)];
   assert.deepEqual(stoneTargets(party).map((m) => m.species), ['roselia']);
+});
+
+test('branching: eevee asks at 20 (2 options) and asks again on the next level-up if it did not evolve', () => {
+  const m = newMember('eevee', 19);
+  let ev = applyExp([m], { eevee: need(m, 20) });
+  assert.deepEqual(ev.find((e) => e.type === 'evolve').options.sort(), ['espeon', 'umbreon']);
+  ev = applyExp([m], { eevee: need(m, 21) });
+  assert.deepEqual(ev.find((e) => e.type === 'evolve').options.sort(), ['espeon', 'umbreon']);
+});
+
+test('branching: tyrogue gets 3 options at 25', () => {
+  const m = newMember('tyrogue', 24);
+  const ev = applyExp([m], { tyrogue: need(m, 25) });
+  assert.equal(ev.find((e) => e.type === 'evolve').options.length, 3);
+});
+
+test('random branches: wurmple picks one by rng', () => {
+  const a = newMember('wurmple', 6);
+  const ev = applyExp([a], { wurmple: need(a, 7) }, () => 0);
+  const e = ev.find((x) => x.type === 'evolve');
+  assert.equal(e.options.length, 1);
+  assert.equal(e.random, true);
 });

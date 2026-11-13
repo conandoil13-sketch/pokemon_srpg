@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyEvolution, levelEvolutionReady, stoneEvolutionReady } from '../src/core/evolution.js';
+import { classifyEvolution } from '../src/core/evolution.js';
 import { BALANCE } from '../src/data/balance.js';
 
 const d = (o) => ({ trigger: 'level-up', minLevel: null, minHappiness: null, item: null, extra: false, ...o });
@@ -43,15 +43,6 @@ test('priority: stone > original level > friendship > trade > other', () => {
   assert.equal(classifyEvolution([d({ trigger: 'trade' }), d({ minHappiness: 1 })], { length: 2, order: 1, prevLevel: null }).source, 'friendship');
 });
 
-test('readiness helpers', () => {
-  const lv = { evolution: { to: 'monferno', rule: { kind: 'level', level: 14 } } };
-  assert.equal(levelEvolutionReady(lv, 14), true);
-  assert.equal(levelEvolutionReady(lv, 13), false);
-  const st = { evolution: { to: 'roserade', rule: { kind: 'stone' } } };
-  assert.equal(levelEvolutionReady(st, 99), false);
-  assert.equal(stoneEvolutionReady(st), true);
-  assert.equal(stoneEvolutionReady({ evolution: null }), false);
-});
 
 // ---- 분기 진화 ----
 import { classifyBranches, levelEvolutionOptions, stoneEvolutionOptions, pickEvolution } from '../src/core/evolution.js';
