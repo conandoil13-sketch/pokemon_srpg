@@ -105,3 +105,18 @@ test('accuracy/evasion stages shift hit chance by 8 per stage; speed stages coun
   applyStageChange(fast, 'spe', 2);
   assert.ok(hitChance(slow, fast, MOVES.tackle, '.') < before);
 });
+
+// ---- 날씨 ----
+import { makeUnit as mkW } from '../src/core/battle.js';
+test('weather changes damage and accuracy', () => {
+  const a = mkW({ species: 'piplup', side: 'ally', x: 0, y: 0, level: 30, moves: ['water-gun'] });
+  const d = mkW({ species: 'pikachu', side: 'enemy', x: 1, y: 0, level: 30, moves: ['tackle'] });
+  const M = (k) => ({ ...MOVES[k], id: k });
+  const base = expectedDamage(a, d, M('water-gun'), '.');
+  assert.ok(Math.abs(expectedDamage(a, d, M('water-gun'), '.', 1, 'rain') - base * 1.5) < 0.01);
+  assert.ok(Math.abs(expectedDamage(a, d, M('water-gun'), '.', 1, 'sun') - base * 0.5) < 0.01);
+  assert.equal(hitChance(a, d, M('thunder'), '"', 'rain'), 100); // 풀숲 회피가 있어도 반드시 명중
+  assert.ok(hitChance(a, d, M('thunder'), '.', 'sun') <= 50);
+  assert.equal(hitChance(a, d, M('blizzard'), '"', 'hail'), 100);
+  assert.equal(hitChance(a, d, M('tackle'), '.', 'fog'), hitChance(a, d, M('tackle'), '.') - 10);
+});

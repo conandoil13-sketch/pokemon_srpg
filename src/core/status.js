@@ -2,6 +2,7 @@
 // unit.status: 주 상태이상 하나, unit.statusTurns: 잠듦 남은 수면 / 얼음 남은 턴 / 맹독 n, unit.confusion: 혼란 남은 턴
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
+import { weatherBlocksAilment } from './weather.js';
 
 export const STATUS_KO = { paralysis: '마비', burn: '화상', poison: '독', toxic: '맹독', sleep: '잠듦', freeze: '얼음', confusion: '혼란' };
 const PRIMARY = ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze'];
@@ -17,15 +18,16 @@ export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0 });
 const types = (unit) => SPECIES[unit.species].types;
 
 // move: 거는 기술 (전기자석파처럼 기술 타입 상성으로 무효가 되는 경우)
-export function canInflict(unit, ailment, move) {
+export function canInflict(unit, ailment, move, weather = null) {
+  if (weatherBlocksAilment(weather, ailment)) return { ok: false, reason: 'weather' }; // 쾌청엔 얼지 않는다
   if (IMMUNE[ailment]?.some((t) => types(unit).includes(t))) return { ok: false, reason: 'immune' };
   if (move?.id === 'thunder-wave' && typeMultiplier(move.type, types(unit)) === 0) return { ok: false, reason: 'immune' };
   if (ailment === 'confusion') return unit.confusion > 0 ? { ok: false, reason: 'already' } : { ok: true };
   return unit.status ? { ok: false, reason: 'already' } : { ok: true };
 }
 
-export function inflict(unit, ailment, rng, move) {
-  const r = canInflict(unit, ailment, move);
+export function inflict(unit, ailment, rng, move, weather = null) {
+  const r = canInflict(unit, ailment, move, weather);
   if (!r.ok) return r;
   if (ailment === 'confusion') { unit.confusion = 1 + Math.floor(rng() * 4); return r; }
   unit.status = ailment;
