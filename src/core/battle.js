@@ -8,6 +8,7 @@ import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage } from './damage.js';
 import { unitsHit } from './shapes.js';
 import { phaseEndWeather } from './weather.js';
+import { immunity } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS } from './stages.js';
 import { statsAt, expYield } from './stats.js';
@@ -143,6 +144,14 @@ export function applyMove(state, userId, moveId, aim, rng) {
   a.moved = true;
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
+  const abilityEvents = (state.log.abilityEvents = []); // 이번 기술에서 발동한 특성 (연출용)
+  // 특성 흡수 결과 적용: 회복·랭크·타오르는불꽃
+  const absorb = (u, ab) => {
+    if (ab.heal) u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * ab.heal)));
+    if (ab.boost) for (const [k, v] of Object.entries(ab.boost)) changeStats(u, [{ stat: Object.keys(API_STAT).find((s) => API_STAT[s] === k), change: v }], stageChanges);
+    if (ab.flashFire) u.flashFire = true;
+    abilityEvents.push({ unitId: u.id, ability: ab.ability });
+  };
   const ail = (t) => { if (move.ailment) statusChanges.push({ unitId: t.id, ailment: move.ailment, ...inflict(t, move.ailment, rng, move, state.weather) }); };
 
   // 마비 25% 실패 → 혼란 50% 자해 (기술은 나가지 않고 행동 종료)
@@ -163,6 +172,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
     const missed = [];
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
+      const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
+      if (ab) { absorb(t, ab); continue; }
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], state.weather))) { missed.push(t.id); continue; }
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS);
       ail(t);
@@ -177,6 +188,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   for (const d of targets) {
     const hpBefore = d.hp;
     const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread, weather: state.weather });
+    if (r.absorbed) absorb(d, r.absorbed);
     d.hp = Math.max(0, d.hp - r.damage);
     const fainted = d.hp === 0;
     if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
@@ -196,7 +208,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents };
   if (hits.length === 1) { const { hit, crit, typeMult, damage, fainted } = hits[0]; Object.assign(out, { hit, crit, typeMult, damage, fainted }); }
   return out;
 }
