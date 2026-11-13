@@ -151,3 +151,15 @@ test('party office sign opens the party screen; leader is the first party member
   town.handle({ type: 'confirm' });
   assert.equal(opened, 1);
 });
+
+test('floor menu sits at the bottom right and clicks on its rows count', async () => {
+  const { W, H } = await import('../src/render/screen.js');
+  const picks = [];
+  const m = createFloorMenu({ lines: ['x'], options: ['다음 층으로', '마을로 돌아가기'], onPick: (i) => picks.push(i) });
+  m.update(CHOICE_LOCK + 0.05);
+  m.handle({ type: 'click', px: 10, py: 10 }); // 왼쪽 위: 메뉴 아님
+  assert.deepEqual(picks, []);
+  const menuH = 2 * 16 + 8;
+  m.handle({ type: 'click', px: W - 60, py: H - 54 - menuH + 4 + 16 + 8 }); // 두 번째 줄
+  assert.deepEqual(picks, [1]);
+});

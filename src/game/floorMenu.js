@@ -6,7 +6,7 @@ import { CHOICE_LOCK } from './learnFlow.js';
 export function createFloorMenu({ lines, options, onPick, initial = 0 }) {
   let cursor = initial, t = 0, done = false;
   const items = options.map((label) => ({ label, enabled: true }));
-  const rect = () => { const r = ui.menuRect(items, 0, 0); return { x: W - r.w - 4, y: H - 54 - r.h, ...r }; };
+  const rect = () => { const r = ui.menuRect(items, 0, 0); return { ...r, x: W - r.w - 4, y: H - 54 - r.h }; }; // 오른쪽 아래 (대사창 위)
   return {
     handle(ev) {
       if (done) return;
