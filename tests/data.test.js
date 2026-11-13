@@ -52,7 +52,7 @@ test('korean names, learnable flags, movement and range rules', () => {
   assert.equal(SPECIES.chimchar.name, '불꽃숭이');
   assert.equal(MOVES['close-combat'].name, '인파이트');
   assert.equal(MOVES.growl.learnable, true); // 능력치 변화기는 이제 배운다
-  assert.equal(MOVES['thunder-wave'].learnable, false);
+  assert.equal(MOVES['thunder-wave'].learnable, true); // 상태이상 기술도 배운다
   assert.equal(SPECIES.bronzor.move, 3);
   assert.equal(SPECIES.gible.move, 3);
   assert.equal(SPECIES.chimchar.move, 4);
@@ -114,7 +114,7 @@ test('status moves: stat changes, targets, learnable rules', () => {
   assert.deepEqual([sd.kind, sd.learnable, sd.statChanges], ['self', true, [{ stat: 'attack', change: 2 }]]);
   assert.deepEqual([MOVES.growl.kind, MOVES.growl.area, MOVES.growl.range], ['enemies', true, [0, 2]]);
   assert.equal(MOVES.agility.statChanges[0].stat, 'speed');
-  assert.equal(MOVES['thunder-wave'].learnable, false, 'ailment-only moves wait for the next step');
+  assert.equal(MOVES['heal-bell'].learnable, false, 'other status moves stay out');
   assert.deepEqual([MOVES.crunch.effectKind, MOVES.crunch.statChance, MOVES.crunch.kind], ['damage-lower', 20, 'enemy']);
   assert.equal(MOVES['close-combat'].effectKind, 'damage-raise');
   for (const m of Object.values(MOVES)) if (m.category === 'status' && m.learnable) assert.ok(m.kind, m.id);
@@ -131,4 +131,31 @@ test('every species starts with at least one damaging move', () => {
 
 test('status moves with side effects out of scope are not learnable', () => {
   for (const k of ['swagger', 'flatter', 'memento', 'stockpile']) assert.equal(MOVES[k].learnable, false, k);
+});
+
+// ---- 상태이상 데이터 ----
+test('status condition moves', () => {
+  const m = MOVES;
+  assert.deepEqual([m['thunder-wave'].learnable, m['thunder-wave'].ailment, m['thunder-wave'].kind], [true, 'paralysis', 'enemy']);
+  assert.equal(m['will-o-wisp'].ailment, 'burn');
+  assert.equal(m.toxic.ailment, 'toxic');
+  assert.deepEqual([m['poison-fang'].ailment, m['poison-fang'].ailmentChance], ['toxic', 50]);
+  assert.deepEqual([m.ember.ailment, m.ember.ailmentChance], ['burn', 10]);
+  assert.equal(m['sleep-powder'].ailment, 'sleep');
+  assert.equal(m['confuse-ray'].ailment, 'confusion');
+  for (const k of ['teeter-dance', 'swagger', 'flatter']) assert.equal(m[k].learnable, false, k);
+  assert.equal(m['tri-attack'].ailment, null);
+});
+
+test('starting moves: at most 2 status moves, at least 1 attack', () => {
+  for (const s of Object.values(SPECIES)) {
+    for (const lv of [5, 8, 10, 15, 20, 30]) {
+      const ms = startingMoves(s.learnset, lv, MOVES);
+      const st = ms.filter((x) => MOVES[x].category === 'status').length;
+      assert.ok(ms.length <= 4 && st <= 2 && ms.length - st >= 1, `${s.key}@${lv}: ${ms}`);
+    }
+  }
+  const odd = startingMoves(SPECIES.oddish.learnset, 15, MOVES);
+  const learnedAttacks = SPECIES.oddish.learnset.filter(([lv, k]) => lv <= 15 && MOVES[k]?.learnable && MOVES[k].category !== 'status').map(([, k]) => k);
+  if (new Set(learnedAttacks).size >= 2) assert.ok(odd.filter((x) => MOVES[x].category !== 'status').length >= 2, String(odd));
 });
