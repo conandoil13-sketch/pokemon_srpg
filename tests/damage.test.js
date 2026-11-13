@@ -80,3 +80,28 @@ test('attacker level scales damage', () => {
   const hi = expectedDamage(u('chimchar', 'ally', 50), u('bronzor', 'enemy', 8), MOVES.ember, '.');
   assert.ok(hi > lo * 3, `${lo} → ${hi}`);
 });
+
+// ---- 랭크 ----
+import { applyStageChange } from '../src/core/stages.js';
+
+test('attack +2 roughly doubles damage, defense -1 → ×1.5', () => {
+  const a = u('infernape'), d = u('torterra', 'enemy');
+  const base = expectedDamage(a, d, MOVES.flamethrower, '.');
+  applyStageChange(a, 'spa', 2);
+  assert.ok(Math.abs(expectedDamage(a, d, MOVES.flamethrower, '.') / base - 2) < 0.1);
+  const a2 = u('infernape'), d2 = u('torterra', 'enemy');
+  const b2 = expectedDamage(a2, d2, MOVES['close-combat'], '.');
+  applyStageChange(d2, 'def', -1);
+  assert.ok(Math.abs(expectedDamage(a2, d2, MOVES['close-combat'], '.') / b2 - 1.5) < 0.1);
+});
+
+test('accuracy/evasion stages shift hit chance by 8 per stage; speed stages count', () => {
+  const a = u('infernape'), d = u('torterra', 'enemy');
+  const h0 = hitChance(a, d, MOVES['razor-leaf'], '.');
+  applyStageChange(a, 'acc', -2);
+  assert.equal(hitChance(a, d, MOVES['razor-leaf'], '.'), h0 - 16);
+  const slow = u('torterra'), fast = u('infernape', 'enemy');
+  const before = hitChance(slow, fast, MOVES.tackle, '.');
+  applyStageChange(fast, 'spe', 2);
+  assert.ok(hitChance(slow, fast, MOVES.tackle, '.') < before);
+});

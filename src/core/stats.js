@@ -1,11 +1,12 @@
-// 능력치 · 성장 곡선 · 경험치 (순수). IV 31, EV 0, 성격 무보정
+// 능력치 · 성장 곡선 · 경험치 (순수). IV 31, EV 0, 성격 무보정. HP 만 밸런스 배율 적용
+import { BALANCE } from '../data/balance.js';
 const IV = 31;
 export const MAX_LEVEL = 100;
 
 export function statsAt(base, level) {
   const core = (b) => Math.floor((2 * b + IV) * level / 100);
   return {
-    hp: core(base.hp) + level + 10,
+    hp: Math.floor((core(base.hp) + level + 10) * BALANCE.hpScale(level)),
     atk: core(base.atk) + 5,
     def: core(base.def) + 5,
     spa: core(base.spa) + 5,

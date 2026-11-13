@@ -7,6 +7,14 @@ import { shade } from './pixels.js';
 import { W, H } from './screen.js';
 import { TILE } from './tiles.js';
 import { drawPortrait } from './sprites.js';
+import { STAT_KEYS } from '../core/stages.js';
+
+export const STAT_SHORT = { atk: '공', def: '방', spa: '특공', spd: '특방', spe: '스피', acc: '명중', eva: '회피' };
+
+// "공+2(3) 방-1(2)" — 0 단계는 생략, 괄호는 남은 턴
+export function stageLine(unit) {
+  return STAT_KEYS.filter((k) => unit.stages?.[k]).map((k) => `${STAT_SHORT[k]}${unit.stages[k] > 0 ? '+' : '-'}${Math.abs(unit.stages[k])}(${unit.turns[k]})`).join(' ');
+}
 
 const BORDER = '#384050', INNER = '#a8c0d8', FILL = '#f8f8f8';
 
@@ -57,7 +65,7 @@ function cursorArrow(ctx, x, y) {
 const ROW = 16;
 
 export function menuRect(items, x, y, minW = 120) {
-  const w = Math.max(minW, Math.max(...items.map((i) => textWidth(i.label))) + 24);
+  const w = Math.max(minW, Math.max(...items.map((i) => textWidth(i.label) + (i.tag ? textWidth(i.tag, 'small') + 6 : 0))) + 24);
   return { x, y, w, h: items.length * ROW + 8 };
 }
 
@@ -67,6 +75,7 @@ export function drawMenu(ctx, items, selected, x, y) {
   items.forEach((it, i) => {
     const ty = y + 5 + i * ROW;
     drawText(ctx, it.label, x + 15, ty, it.enabled ? '#383838' : '#a8a8a8', it.enabled ? '#d8d8d0' : null);
+    if (it.tag) drawText(ctx, it.tag, x + r.w - 8 - textWidth(it.tag, 'small'), ty + 2, it.enabled ? '#7868a8' : '#c0c0c0', null, 'small');
     if (i === selected) cursorArrow(ctx, x + 6, ty + 3);
   });
   return r;
@@ -77,9 +86,11 @@ export const menuIndexAt = (items, x, y, py) => Math.floor((py - y - 4) / ROW);
 // 커서 위 유닛 정보: 초상화 + 이름 + 타입 + HP
 export function drawUnitInfo(ctx, unit, onLeftHalf) {
   const s = SPECIES[unit.species];
-  const w = 140, h = 52;
+  const stages = stageLine(unit);
+  const w = 140, h = stages ? 64 : 52;
   const x = onLeftHalf ? W - w - 2 : 2, y = 2;
   drawWindow(ctx, x, y, w, h);
+  if (stages) drawText(ctx, stages, x + 6, y + 51, '#5848a0', null, 'small');
   ctx.fillStyle = unit.side === 'ally' ? '#3870f8' : '#f83838';
   ctx.fillRect(x + 4, y + 4, 44, 44);
   drawPortrait(ctx, unit.species, 'Normal', x + 6, y + 6);

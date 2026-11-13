@@ -38,6 +38,7 @@ test('mashing confirm right after the last KO does not skip the result screen', 
   s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-riolu');
   const L = s.units.find((u) => u.id === 'enemy-riolu');
   L.x = 3; L.y = 5; L.hp = 1;
+  s.units.find((u) => u.id === 'ally-chimchar').moves = ['scratch']; // 첫 기술 = 공격기
   const at = (x, y) => [{ type: 'cursor', x, y, px: x * 24 + 12, py: y * 24 + 12 }, { type: 'confirm' }];
   for (const e of [...at(2, 5), ...at(2, 5)]) game.handle(e);
   assert.ok(run(game, (m) => m === 'action'));
@@ -96,4 +97,59 @@ test('after opening a chest the move is committed (cancel cannot undo it)', () =
   assert.equal(game.mode, 'action', 'cancel ignored');
   const u = game.state.units.find((x) => x.id === 'ally-chimchar');
   assert.deepEqual([u.x, u.y], [2, 4]);
+});
+
+// ---- 변화기 화면 흐름 ----
+import { stageMessages } from '../src/render/mapAttack.js';
+
+const openMenuWith = (moves) => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const c = game.state.units.find((u) => u.id === 'ally-chimchar');
+  c.moves = moves;
+  const sel = [{ type: 'cursor', px: 2 * 24 + 12, py: 5 * 24 + 12 }, { type: 'confirm' }];
+  for (const e of [...sel, ...sel]) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  return { game, c };
+};
+
+test('swords dance: no target pick, one confirm, then atk +2', () => {
+  const { game, c } = openMenuWith(['swords-dance', 'scratch']);
+  assert.equal(game.menu[0].enabled, true);
+  assert.equal(game.menu[0].tag, '변화');
+  game.handle({ type: 'confirm' }); // 칼춤
+  assert.equal(game.mode, 'target');
+  game.handle({ type: 'dir', dx: 1, dy: 0 }); // 자신 대상: 순환 없음
+  game.handle({ type: 'confirm' });
+  assert.equal(game.mode, 'anim');
+  assert.ok(run(game, (m) => m === 'idle', [{ type: 'confirm' }]));
+  assert.deepEqual([c.stages.atk, c.turns.atk, c.acted], [2, 3, true]);
+});
+
+test('growl is greyed out with no enemy within 2', () => {
+  const { game } = openMenuWith(['growl', 'scratch']);
+  assert.equal(game.menu[0].enabled, false);
+});
+
+test('stage messages', () => {
+  const u = { id: 'a', species: 'chimchar', side: 'ally' };
+  const e = { id: 'e', species: 'riolu', side: 'enemy' };
+  const by = { a: u, e };
+  assert.deepEqual(stageMessages([{ unitId: 'a', key: 'atk', change: 2, applied: 2 }], by), ['불꽃숭이의 공격이 크게 올라갔다!']);
+  assert.deepEqual(stageMessages([{ unitId: 'e', key: 'def', change: -1, applied: -1 }], by), ['상대 리오르의 방어가 떨어졌다!']);
+  assert.deepEqual(stageMessages([{ unitId: 'a', key: 'spe', change: 3, applied: 3 }], by), ['불꽃숭이의 스피드가 매우 크게 올라갔다!']);
+  assert.deepEqual(stageMessages([{ unitId: 'a', key: 'atk', change: 2, applied: 0 }], by), ['불꽃숭이의 공격은 더 이상 오르지 않는다!']);
+  assert.deepEqual(stageMessages([{ unitId: 'e', key: 'atk', change: -1, applied: 0 }], by), ['상대 리오르의 공격은 더 이상 떨어지지 않는다!']);
+});
+
+test('action menu cursor starts on the first attack, not a status move', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state;
+  st.units.find((u) => u.id === 'ally-chimchar').moves = ['swords-dance', 'scratch'];
+  const r = st.units.find((u) => u.id === 'enemy-riolu'); r.x = 3; r.y = 5;
+  const sel = [{ type: 'cursor', px: 2 * 24 + 12, py: 5 * 24 + 12 }, { type: 'confirm' }];
+  for (const e of [...sel, ...sel]) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  assert.equal(game.menu[game.menuSel].moveId, 'scratch');
 });

@@ -23,7 +23,7 @@ test('createBattle builds level-based units from the party and the map', () => {
   }
   assert.equal(find(s, 'enemy-gible').level, 9);
   assert.equal(s.phase, 'player');
-  assert.deepEqual(s.log, { exp: {}, fainted: [], loot: [], coins: 0 });
+  assert.deepEqual(s.log, { exp: {}, fainted: [], loot: [], coins: 0, expired: [] });
 });
 
 test('party levels and moves carry into battle', () => {
@@ -170,4 +170,108 @@ test('enemy KO by an ally gives coins 3 + floor(lv/3); ally fainting gives none'
   find(s, 'ally-shinx').hp = 1;
   applyAttack(s, 'enemy-riolu', 'ally-shinx', 'tackle', zero);
   assert.equal(s.log.coins, 6);
+});
+
+// ---- 변화기 · 부가효과 · 만료 ----
+import { applyMove, targetsOf } from '../src/core/battle.js';
+import { MOVES as ALL_MOVES } from '../src/data/moves.js';
+
+const stageBattle = () => {
+  const s = createBattle();
+  // 위치를 단순하게: 아군 chimchar (5,5), 적 riolu (6,5) 거리1, gible (7,5) 거리2, murkrow (8,5) 거리3
+  const put = (id, x, y) => { const u = find(s, id); u.x = x; u.y = y; };
+  put('ally-chimchar', 5, 5); put('enemy-riolu', 6, 5); put('enemy-gible', 7, 5); put('enemy-murkrow', 8, 5);
+  put('ally-piplup', 4, 5); put('enemy-budew', 12, 0); put('enemy-bronzor', 12, 1);
+  return s;
+};
+
+test('self buff: swords dance +2 for 3 turns', () => {
+  const s = stageBattle();
+  const r = applyMove(s, 'ally-chimchar', 'swords-dance', null, zero);
+  assert.equal(r.kind, 'status');
+  const c = find(s, 'ally-chimchar');
+  assert.deepEqual([c.stages.atk, c.turns.atk], [2, 3]);
+  assert.equal(c.acted, true);
+});
+
+test('area debuff: growl hits enemies within 2 only', () => {
+  const s = stageBattle();
+  applyMove(s, 'ally-chimchar', 'growl', null, zero);
+  assert.equal(find(s, 'enemy-riolu').stages.atk, -1);
+  assert.equal(find(s, 'enemy-gible').stages.atk, -1);
+  assert.equal(find(s, 'enemy-murkrow').stages.atk, 0);
+});
+
+test('ally-target kind picks an adjacent ally', () => {
+  const s = stageBattle();
+  const fake = { ...ALL_MOVES.growl, kind: 'ally', area: false, range: [1, 1] };
+  assert.deepEqual(targetsOf(s, find(s, 'ally-chimchar'), fake, find(s, 'ally-piplup')).map((u) => u.id), ['ally-piplup']);
+  assert.deepEqual(targetsOf(s, find(s, 'ally-chimchar'), fake, find(s, 'enemy-riolu')), []);
+});
+
+test('secondary: close combat lowers own def/spd (100%)', () => {
+  const s = stageBattle();
+  find(s, 'enemy-riolu').hp = 999;
+  const r = applyMove(s, 'ally-chimchar', 'close-combat', 'enemy-riolu', () => 0.5);
+  assert.equal(r.kind, 'attack');
+  assert.equal(r.hit, true);
+  const c = find(s, 'ally-chimchar');
+  assert.deepEqual([c.stages.def, c.stages.spd], [-1, -1]);
+  assert.deepEqual(r.stageChanges.map((x) => [x.unitId, x.key, x.applied]), [['ally-chimchar', 'def', -1], ['ally-chimchar', 'spd', -1]]);
+});
+
+test('secondary chance: crunch lowers target def only when the roll succeeds', () => {
+  const run = (roll) => {
+    const s = stageBattle();
+    const t = find(s, 'enemy-gible'); t.x = 5; t.y = 6; t.hp = 999; t.maxHp = 999;
+    let i = 0; const rng = () => [0.5, 0.99, 0, roll][i++] ?? 0.5; // 명중, 급소X, 난수, 부가효과
+    applyMove(s, 'ally-chimchar', 'crunch', 'enemy-gible', rng);
+    return t.stages.def;
+  };
+  assert.equal(run(0.1), -1);
+  assert.equal(run(0.5), 0);
+});
+
+test('target effect skipped when it faints, self effect kept', () => {
+  const s = stageBattle();
+  find(s, 'enemy-riolu').hp = 1;
+  const r = applyMove(s, 'ally-chimchar', 'close-combat', 'enemy-riolu', () => 0.5);
+  assert.equal(r.fainted, true);
+  assert.equal(find(s, 'ally-chimchar').stages.def, -1);
+});
+
+test('no secondary on miss or immunity', () => {
+  const s = stageBattle();
+  const r = find(s, 'enemy-riolu'); r.stages.eva = 6; r.hp = 999;
+  const res = applyMove(s, 'ally-chimchar', 'close-combat', 'enemy-riolu', () => 0.9);
+  assert.equal(res.hit, false);
+  assert.equal(find(s, 'ally-chimchar').stages.def, 0);
+  const s2 = stageBattle();
+  const g = find(s2, 'enemy-riolu'); g.species = 'gastly'; // 고스트 → 격투 면역
+  const res2 = applyMove(s2, 'ally-chimchar', 'close-combat', 'enemy-riolu', () => 0.5);
+  assert.equal(res2.typeMult, 0);
+  assert.equal(find(s2, 'ally-chimchar').stages.def, 0);
+});
+
+test('status move vs enemy can miss (evasion)', () => {
+  const s = stageBattle();
+  find(s, 'enemy-riolu').stages.eva = 6;
+  const r = applyMove(s, 'ally-chimchar', 'growl', null, () => 0.9);
+  assert.equal(find(s, 'enemy-riolu').stages.atk, 0);
+  assert.equal(find(s, 'enemy-gible').stages.atk, -1);
+  assert.ok(r.missed.includes('enemy-riolu'));
+});
+
+test('stages tick only at the end of the owner side phase, expire after 3', () => {
+  const s = stageBattle();
+  applyMove(s, 'ally-chimchar', 'swords-dance', null, zero);
+  const c = find(s, 'ally-chimchar');
+  endPhase(s); // 아군 페이즈 끝 → 2
+  assert.equal(c.turns.atk, 2);
+  endPhase(s); // 적 페이즈 끝 → 그대로
+  assert.equal(c.turns.atk, 2);
+  endPhase(s); endPhase(s); endPhase(s); // 아군 끝 → 1, 적, 아군 끝 → 0
+  assert.equal(c.stages.atk, 0);
+  assert.deepEqual(s.log.expired, [{ unitId: 'ally-chimchar', keys: ['atk'] }]);
+  assert.equal(createBattle().units[0].stages.atk, 0, 'new floor starts clean');
 });

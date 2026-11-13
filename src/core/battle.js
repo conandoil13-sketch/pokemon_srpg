@@ -2,8 +2,10 @@
 import { MAP } from '../data/map.js';
 import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
+import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
-import { calcDamage } from './damage.js';
+import { calcDamage, hitChance } from './damage.js';
+import { newStages, applyStageChange, tickStages, API_STAT } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { startingMoves } from './learn.js';
 import { newParty } from './progress.js';
@@ -18,6 +20,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss }) {
     hp: stats.hp, maxHp: stats.hp,
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES),
     moved: false, acted: false,
+    ...newStages(),
     ...(boss ? { boss: true } : {}),
   };
 }
@@ -46,7 +49,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     phase: 'player',
     turn: 1,
     result: null,
-    log: { exp: {}, fainted: [], loot: [], coins: 0 }, // 획득 경험치(종족별), 기절한 아군, 연 보물, 격파 코인
+    log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [] }, // 획득 경험치(종족별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
@@ -74,12 +77,50 @@ function awardExp(state, attacker, defender) {
   return gained;
 }
 
-export function applyAttack(state, attackerId, targetId, moveId, rng) {
-  const a = byId(state, attackerId), d = byId(state, targetId);
-  const r = calcDamage(a, d, MOVES[moveId], { rng, defTile: state.grid[d.y][d.x] });
-  d.hp = Math.max(0, d.hp - r.damage);
+const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+
+// 기술이 실제로 닿는 유닛들 (move: id 또는 기술 객체, focus: 고른 대상)
+export function targetsOf(state, user, move, focus) {
+  const m = typeof move === 'string' ? MOVES[move] : move;
+  const [lo, hi] = m.range ?? [1, 1];
+  switch (m.kind) {
+    case 'self': return [user];
+    case 'enemies': return state.units.filter((u) => u.side !== user.side && dist(u, user) <= AREA_RADIUS);
+    case 'allies': return state.units.filter((u) => u.side === user.side && dist(u, user) <= AREA_RADIUS);
+    case 'ally':
+      return focus && focus !== user && focus.side === user.side && dist(focus, user) >= lo && dist(focus, user) <= hi ? [focus] : [];
+    default: // enemy
+      return focus && focus.side !== user.side && dist(focus, user) >= lo && dist(focus, user) <= hi ? [focus] : [];
+  }
+}
+
+function changeStats(unit, list, out) {
+  for (const { stat, change } of list) {
+    const key = API_STAT[stat];
+    if (!key) continue;
+    const r = applyStageChange(unit, key, change);
+    out.push({ unitId: unit.id, key, change, applied: r.applied, after: r.after });
+  }
+}
+
+// 공격기·변화기 공통. 공격기는 데미지 + 능력치 부가효과, 변화기는 대상별 랭크 변화
+export function applyMove(state, userId, moveId, focusId, rng) {
+  const a = byId(state, userId), move = MOVES[moveId];
   a.acted = true;
   a.moved = true;
+  const stageChanges = [];
+  if (move.category === 'status') {
+    const missed = [];
+    const acc = { ...move, accuracy: move.accuracy ?? 100 };
+    for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
+      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x]))) { missed.push(t.id); continue; }
+      changeStats(t, move.statChanges, stageChanges);
+    }
+    return { kind: 'status', stageChanges, missed };
+  }
+  const d = byId(state, focusId);
+  const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x] });
+  d.hp = Math.max(0, d.hp - r.damage);
   const fainted = d.hp === 0;
   let expGained = {};
   if (fainted) {
@@ -88,9 +129,18 @@ export function applyAttack(state, attackerId, targetId, moveId, rng) {
     if (a.side === 'ally' && d.side === 'enemy') state.log.coins += 3 + Math.floor(d.level / 3);
     if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
   }
+  // 부가효과: 맞았고 면역이 아닐 때만, 확률 0 = 100%
+  const landed = r.hit && r.typeMult > 0;
+  const toUser = move.effectKind === 'damage-raise', toTarget = move.effectKind === 'damage-lower' && !fainted;
+  if (landed && move.statChanges?.length && (toUser || toTarget) && (!move.statChance || rng() * 100 < move.statChance)) {
+    changeStats(toUser ? a : d, move.statChanges, stageChanges);
+  }
   checkResult(state);
-  return { ...r, fainted, expGained };
+  return { kind: 'attack', ...r, fainted, expGained, stageChanges };
 }
+
+// 기존 호출 호환
+export const applyAttack = (state, attackerId, targetId, moveId, rng) => applyMove(state, attackerId, moveId, targetId, rng);
 
 // 아군이 이동을 마친 칸 처리: 상자 열기, 계단 도착
 export function arrive(state, unitId) {
@@ -111,6 +161,13 @@ export function arrive(state, unitId) {
 }
 
 export function endPhase(state) {
+  const ending = state.phase === 'player' ? 'ally' : 'enemy';
+  state.log.expired = [];
+  for (const u of state.units) {
+    if (u.side !== ending || !u.turns) continue;
+    const keys = tickStages(u);
+    if (keys.length) state.log.expired.push({ unitId: u.id, keys });
+  }
   state.phase = state.phase === 'player' ? 'enemy' : 'player';
   if (state.phase === 'player') state.turn++;
   const side = state.phase === 'player' ? 'ally' : 'enemy';

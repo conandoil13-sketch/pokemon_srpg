@@ -5,6 +5,7 @@ import { writeFile, readFile, mkdir } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { classifyBranches } from '../src/core/evolution.js';
+import { TARGET_KIND } from '../src/data/moveTargets.js';
 
 const MAX_DEX = 493;
 const EXTRA_MOVES = ['tackle']; // 기술이 하나도 없을 때의 대체 기술
@@ -139,7 +140,15 @@ async function main() {
       if (p.type) type = p.type.name;
     }
     const category = mv.damage_class.name;
-    moves[name] = { api: name, name: ko(mv.names) ?? name, type, category, power, accuracy: accuracy ?? 100, learnable: category !== 'status' && power !== null };
+    const statChanges = (mv.stat_changes ?? []).map((c) => ({ stat: c.stat.name, change: c.change }));
+    const target = mv.target.name;
+    // 배울 수 있는 기술: 위력 있는 공격기, 또는 능력치를 바꾸고 지원하는 대상을 가진 변화기
+    // 변화기는 순수 능력치 변화(net-good-stats)만 — 뻐기기·부추기기(혼란), 추억의선물(기절), 비축하기(토해내기 연계)는 제외
+    const learnable = category === 'status' ? statChanges.length > 0 && !!TARGET_KIND[target] && mv.meta?.category?.name === 'net-good-stats' : power !== null;
+    moves[name] = {
+      api: name, name: ko(mv.names) ?? name, type, category, power, accuracy: accuracy ?? 100, learnable,
+      target, statChanges, statChance: mv.meta?.stat_chance ?? 0, effectKind: mv.meta?.category?.name ?? null,
+    };
   }));
 
   // 결정적 출력 (키 정렬)

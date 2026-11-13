@@ -51,7 +51,8 @@ test('evolution rules match the verified table (spec §4)', () => {
 test('korean names, learnable flags, movement and range rules', () => {
   assert.equal(SPECIES.chimchar.name, '불꽃숭이');
   assert.equal(MOVES['close-combat'].name, '인파이트');
-  assert.equal(MOVES.growl.learnable, false);
+  assert.equal(MOVES.growl.learnable, true); // 능력치 변화기는 이제 배운다
+  assert.equal(MOVES['thunder-wave'].learnable, false);
   assert.equal(SPECIES.bronzor.move, 3);
   assert.equal(SPECIES.gible.move, 3);
   assert.equal(SPECIES.chimchar.move, 4);
@@ -106,4 +107,28 @@ test('Gen 1-4: ditto, gen-4 types, branching lines', () => {
   assert.equal(SPECIES.mewtwo.legendary, true);
   assert.equal(SPECIES.chimchar.stage, 0);
   assert.equal(SPECIES.infernape.stage, 2);
+});
+
+test('status moves: stat changes, targets, learnable rules', () => {
+  const sd = MOVES['swords-dance'];
+  assert.deepEqual([sd.kind, sd.learnable, sd.statChanges], ['self', true, [{ stat: 'attack', change: 2 }]]);
+  assert.deepEqual([MOVES.growl.kind, MOVES.growl.area, MOVES.growl.range], ['enemies', true, [0, 2]]);
+  assert.equal(MOVES.agility.statChanges[0].stat, 'speed');
+  assert.equal(MOVES['thunder-wave'].learnable, false, 'ailment-only moves wait for the next step');
+  assert.deepEqual([MOVES.crunch.effectKind, MOVES.crunch.statChance, MOVES.crunch.kind], ['damage-lower', 20, 'enemy']);
+  assert.equal(MOVES['close-combat'].effectKind, 'damage-raise');
+  for (const m of Object.values(MOVES)) if (m.category === 'status' && m.learnable) assert.ok(m.kind, m.id);
+});
+
+test('every species starts with at least one damaging move', () => {
+  for (const s of Object.values(SPECIES)) {
+    for (const lv of [5, 8, 10, 15, 20, 30]) {
+      const ms = startingMoves(s.learnset, lv, MOVES);
+      assert.ok(ms.length <= 4 && ms.some((m) => MOVES[m].category !== 'status'), `${s.key}@${lv}: ${ms}`);
+    }
+  }
+});
+
+test('status moves with side effects out of scope are not learnable', () => {
+  for (const k of ['swagger', 'flatter', 'memento', 'stockpile']) assert.equal(MOVES[k].learnable, false, k);
 });
