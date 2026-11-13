@@ -8,9 +8,9 @@ import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage } from './damage.js';
 import { unitsHit } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
-import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf } from './abilities.js';
+import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
-import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS } from './stages.js';
+import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -63,9 +63,31 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     bossFloor: units.some((u) => u.boss),
     weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
   };
+  floorStartAbilities(state);
   for (const u of units) u.fieldWeather = effectiveWeather(state); // 날씨 특성(쓱쓱 등)이 처음부터 이동력에 반영
   return state;
 
+}
+
+// 층 시작 특성: 날씨(스피드 높은 순, 나중 것이 덮음, 안개는 그대로) · 트레이스 · 다운로드 · 슬로스타트
+function floorStartAbilities(state) {
+  const log = (state.floorAbilityEvents = []);
+  const nearestFoe = (u) => state.units.filter((o) => o.side !== u.side).sort((p, q) => dist(p, u) - dist(q, u))[0];
+  for (const u of state.units) if (has(u, 'trace')) {
+    const f = nearestFoe(u);
+    if (f && f.ability && !['trace', 'multitype'].includes(f.ability)) { u.ability = f.ability; log.push({ unitId: u.id, ability: 'trace', copied: f.ability }); }
+  }
+  if (state.weather !== 'fog') {
+    const setters = state.units.filter((u) => WEATHER_SETTER[u.ability]).sort((p, q) => effectiveStat(q, 'spe') - effectiveStat(p, 'spe'));
+    for (const u of setters) { state.weather = WEATHER_SETTER[u.ability]; log.push({ unitId: u.id, ability: u.ability }); }
+  }
+  for (const u of state.units) {
+    if (has(u, 'download')) {
+      const f = nearestFoe(u);
+      if (f) { applyStageChange(u, f.stats.def < f.stats.spd ? 'atk' : 'spa', 1, 99); log.push({ unitId: u.id, ability: 'download' }); }
+    }
+    if (has(u, 'slow-start')) u.slowTurns = 5;
+  }
 }
 
 export const unitAt = (state, x, y) => state.units.find((u) => u.x === x && u.y === y);
@@ -74,6 +96,17 @@ const byId = (state, id) => state.units.find((u) => u.id === id);
 export function moveUnit(state, id, x, y) {
   const u = byId(state, id);
   u.x = x; u.y = y; u.moved = true;
+  // 위협: 이동을 마쳤을 때 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
+  if (has(u, 'intimidate')) {
+    const log = (state.log.arriveAbilityEvents = []);
+    u.intimNow ??= [];
+    for (const f of state.units) {
+      if (f.side === u.side || dist(f, u) !== 1 || (u.intimPrev ?? []).includes(f.id) || u.intimNow.includes(f.id)) continue;
+      const r = applyStageChange(f, 'atk', -1, AREA_STAGE_TURNS, { fromOther: true });
+      u.intimNow.push(f.id);
+      log.push({ unitId: u.id, ability: 'intimidate', target: f.id, applied: r.applied });
+    }
+  }
 }
 
 // 적이 기절한 순간: 쓰러뜨린 아군 100%, 그 순간 살아 있는 다른 아군 각 shareRatio
@@ -143,9 +176,25 @@ const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
 export function applyMove(state, userId, moveId, aim, rng) {
   const W = effectiveWeather(state); // 에어록·날씨부정 반영
   for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 등 스피드·이동력 특성용
+  // 플러스·마이너스 / 플라워기프트: 옆 동료를 보고 켠다 (데미지 계산이 읽음)
+  const nextTo = (u, pred) => state.units.some((o) => o !== u && o.side === u.side && dist(o, u) === 1 && pred(o));
+  for (const u of state.units) {
+    u.plusActive = (has(u, 'plus') || has(u, 'minus')) && nextTo(u, (o) => has(o, 'plus') || has(o, 'minus'));
+    u.flowerActive = W === 'sun' && (has(u, 'flower-gift') || nextTo(u, (o) => has(o, 'flower-gift')));
+  }
+  // 피뢰침·마중물: 주변 2칸 안의 대상을 노린 단일 전기/물 기술을 끌어온다 (아군·적 모두)
+  if (typeof aim === 'string' || aim?.unitId) {
+    const mv0 = MOVES[moveId], tId = typeof aim === 'string' ? aim : aim.unitId, tgt = byId(state, tId);
+    if (tgt && (mv0.shape?.type ?? 'single') === 'single') {
+      const type = moveTypeOf(byId(state, userId), mv0);
+      const rod = state.units.filter((o) => o.id !== userId && REDIRECT[o.ability] === type && dist(o, tgt) <= 2).sort((p, q) => dist(p, tgt) - dist(q, tgt))[0];
+      if (rod && rod !== tgt && !has(byId(state, userId), 'mold-breaker')) aim = { unitId: rod.id };
+    }
+  }
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = MOVES[moveId];
   a.acted = true;
+  if (has(a, 'truant')) a.loafNext = true; // 게으름: 다음 자기 차례는 쉰다
   a.moved = true;
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
@@ -157,7 +206,17 @@ export function applyMove(state, userId, moveId, aim, rng) {
     if (ab.flashFire) u.flashFire = true;
     abilityEvents.push({ unitId: u.id, ability: ab.ability });
   };
-  const ail = (t) => { if (move.ailment) statusChanges.push({ unitId: t.id, ailment: move.ailment, ...inflict(t, move.ailment, rng, move, W) }); };
+  const ail = (t) => {
+    if (!move.ailment) return;
+    const r = inflict(t, move.ailment, rng, move, W);
+    statusChanges.push({ unitId: t.id, ailment: move.ailment, ...r });
+    // 싱크로: 독·마비·화상을 건 상대에게도
+    if (r.ok && has(t, 'synchronize') && t !== a && SYNC_AILMENTS.includes(move.ailment)) {
+      const back = inflict(a, move.ailment, rng, null, W);
+      statusChanges.push({ unitId: a.id, ailment: move.ailment, ...back });
+      if (back.ok) abilityEvents.push({ unitId: t.id, ability: 'synchronize' });
+    }
+  };
 
   // 마비 25% 실패 → 혼란 50% 자해 (기술은 나가지 않고 행동 종료)
   const blocked = checkAction(a, rng);
@@ -204,6 +263,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
     const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread, weather: W });
     if (r.absorbed) absorb(d, r.absorbed);
     d.hp = Math.max(0, d.hp - r.damage);
+    // 옹골참: HP 가득에서 한 방이면 1 남김 (한 층 한 번)
+    if (d.hp === 0 && hpBefore === d.maxHp && has(d, 'sturdy') && !d.sturdyUsed && !breaksDef) { d.hp = 1; d.sturdyUsed = true; abilityEvents.push({ unitId: d.id, ability: 'sturdy' }); }
     const fainted = d.hp === 0;
     if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
     else if (move.type === 'fire' && r.damage > 0 && d.status === 'freeze') { cure(d); thawed.push(d.id); } // 불꽃 공격에 맞으면 녹는다
@@ -307,7 +368,18 @@ export function endPhase(state, rng = Math.random) {
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
     if (has(u, 'speed-boost')) { applyStageChange(u, 'spe', 1); abilityLog.push({ unitId: u.id, ability: 'speed-boost' }); }
+    if (u.slowTurns > 0) u.slowTurns -= 1;
     if (u.status && ((has(u, 'shed-skin') && rng() < 1 / 3) || (has(u, 'hydration') && W === 'rain'))) { cure(u); abilityLog.push({ unitId: u.id, ability: u.ability }); }
+  }
+  // 나이트메어: 끝나는 편에 있으면 주변 2칸 안 잠든 상대 1/8
+  for (const n of state.units.filter((o) => o.side === ending && has(o, 'bad-dreams'))) {
+    for (const f of [...state.units]) {
+      if (f.side === n.side || f.status !== 'sleep' || dist(f, n) > 2 || magicGuard(f)) continue;
+      const hpBefore = f.hp;
+      f.hp = Math.max(0, f.hp - Math.max(1, Math.floor(f.maxHp / 8)));
+      abilityLog.push({ unitId: n.id, ability: 'bad-dreams', target: f.id, damage: hpBefore - f.hp });
+      if (f.hp === 0) { knockOut(state, f, null); events.push({ unitId: f.id, kind: 'fainted' }); }
+    }
   }
   checkResult(state);
   state.log.expired = [];
@@ -322,7 +394,10 @@ export function endPhase(state, rng = Math.random) {
   for (const u of state.units) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false;
+    u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
+    u.trapped = state.units.some((o) => o.side !== u.side && dist(o, u) === 1 && traps(o, u)); // 묶기
     if (state.result) continue;
+    if (u.loafNext) { u.loafNext = false; u.moved = true; u.acted = true; abilityLog.push({ unitId: u.id, ability: 'truant' }); continue; } // 게으름
     if (W === 'sun' && u.status === 'freeze') { cure(u); events.push({ unitId: u.id, kind: 'thawed' }); } // 쾌청: 녹는다
     const st = phaseStart(u, rng);
     if (st.event) events.push({ unitId: u.id, kind: st.event });

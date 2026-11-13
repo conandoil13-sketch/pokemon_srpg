@@ -46,6 +46,9 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   if (has(attacker, 'iron-fist') && PUNCH.includes(move.id)) m *= 1.2;
   if (has(attacker, 'solar-power') && weather === 'sun' && !physical) m *= 1.5;
   if (attacker.flashFire && type === 'fire') m *= 1.5;
+  if (attacker.slowTurns > 0 && physical) m *= 0.5;            // 슬로스타트
+  if (attacker.plusActive && !physical) m *= 1.5;               // 플러스·마이너스 (전투가 옆 동료를 보고 켬)
+  if (attacker.flowerActive && physical) m *= 1.5;              // 플라워기프트 (쾌청 + 본인/옆)
   return m;
 }
 // 화상의 물리 반감을 무시하는가 (근성)
@@ -60,6 +63,7 @@ export function defendMult(attacker, defender, move, { typeMult }) {
   if ((def(attacker, defender, 'filter') || def(attacker, defender, 'solid-rock')) && typeMult > 1) m *= 0.75;
   if (def(attacker, defender, 'marvel-scale') && defender.status && physical) m /= 1.5;
   if (def(attacker, defender, 'dry-skin') && type === 'fire') m *= 1.25;
+  if (defender.flowerActive && !physical) m /= 1.5;
   return m;
 }
 
@@ -75,6 +79,8 @@ export function immunity(attacker, defender, move, typeMult = 1) {
   if (a === 'flash-fire' && type === 'fire') return { ability: a, flashFire: true };
   if (a === 'soundproof' && SOUND.includes(move.id)) return { ability: a };
   if (a === 'wonder-guard' && move.category !== 'status' && typeMult <= 1) return { ability: a };
+  if (a === 'lightning-rod' && type === 'electric') return { ability: a, boost: { spa: 1 } };
+  if (a === 'storm-drain' && type === 'water') return { ability: a, boost: { spa: 1 } };
   return null;
 }
 
@@ -120,6 +126,7 @@ export function stageGuard(unit, key, change, fromOther) {
 // ---- 스피드·이동력 (unit.fieldWeather = 지금 유효한 날씨, 전투가 넣어 줌) ----
 export function speedMult(unit) {
   const w = unit.fieldWeather;
+  if (unit.slowTurns > 0) return 0.5;
   if (has(unit, 'swift-swim') && w === 'rain') return 2;
   if (has(unit, 'chlorophyll') && w === 'sun') return 2;
   if (has(unit, 'quick-feet') && unit.status) return 1.5;
@@ -128,6 +135,7 @@ export function speedMult(unit) {
 export const ignoresParalysisSlow = (unit) => has(unit, 'quick-feet');
 export function moveBonus(unit) {
   const w = unit.fieldWeather;
+  if (unit.slowTurns > 0) return -1;
   if ((has(unit, 'swift-swim') && w === 'rain') || (has(unit, 'chlorophyll') && w === 'sun') || (has(unit, 'quick-feet') && unit.status)) return 1;
   return 0;
 }
@@ -153,3 +161,24 @@ export function phaseEndHp(unit, weather) {
 
 // ---- 접촉 반격 (접촉 = 거리 1 의 물리 기술) ----
 export const CONTACT_AILMENT = { static: ['paralysis'], 'poison-point': ['poison'], 'flame-body': ['burn'], 'effect-spore': ['paralysis', 'poison', 'sleep'] };
+
+// ---- SRPG 재해석 (스펙 §4-③) ----
+export const WEATHER_SETTER = { drizzle: 'rain', drought: 'sun', 'sand-stream': 'sand', 'snow-warning': 'hail' };
+export const REDIRECT = { 'lightning-rod': 'electric', 'storm-drain': 'water' };
+export const SYNC_AILMENTS = ['poison', 'toxic', 'paralysis', 'burn'];
+// 묶기: 옆의 상대(trapper 기준)를 다음 차례 이동력 1로
+export function traps(trapper, foe) {
+  if (has(trapper, 'shadow-tag')) return true;
+  if (has(trapper, 'arena-trap')) return !SPECIES[foe.species].types.includes('flying') && !has(foe, 'levitate');
+  if (has(trapper, 'magnet-pull')) return SPECIES[foe.species].types.includes('steel');
+  return false;
+}
+// 픽업·꿀모으기: 층 돌파 시 멤버마다 10% 로 코인 주머니 또는 경험 사탕
+export function pickupLoot(members, rng) {
+  const out = [];
+  for (const m of members) {
+    const a = SPECIES[m.species].abilities[m.abilitySlot ?? 0] ?? SPECIES[m.species].abilities[0];
+    if ((a === 'pickup' || a === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'coins' : 'candy');
+  }
+  return out;
+}

@@ -43,7 +43,8 @@ export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 export const moveBudget = (unit) => {
   const m = SPECIES[unit.species].move;
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
-  return Math.max(1, base + moveBonus(unit)); // 쓱쓱·엽록소·속보 +1
+  if (unit.trapped) return 1; // 개미지옥·그림자밟기·자력
+  return Math.max(1, base + moveBonus(unit)); // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1
 };
 
 export const speedMultiplier = (unit) => (unit.status === 'paralysis' ? 0.5 : 1);

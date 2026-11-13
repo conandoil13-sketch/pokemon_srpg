@@ -201,3 +201,95 @@ test('serene grace, shield dust, color change, anger point, damp', () => {
   assert.equal(res.blocked, 'damp');
   assert.ok(dp.s.units.includes(dp.c));
 });
+
+// ---- Task 5: SRPG 재해석 ----
+import { moveUnit } from '../src/core/battle.js';
+import { pickupLoot } from '../src/core/abilities.js';
+import { MAP } from '../src/data/map.js';
+import { newParty } from '../src/core/progress.js';
+
+test('intimidate on arrival, not twice in a row on the same target', () => {
+  const { s, c, r } = duel('intimidate');
+  c.x = 3; moveUnit(s, 'ally-chimchar', 5, 5);
+  assert.equal(r.stages.atk, -1);
+  endPhase(s, seq([])); endPhase(s, seq([])); // 다음 아군 차례
+  moveUnit(s, 'ally-chimchar', 5, 4); moveUnit(s, 'ally-chimchar', 5, 5);
+  assert.equal(r.stages.atk, -1, 'same target not again on the next turn');
+});
+
+test('weather abilities set the floor weather; slowest wins; fog is kept', () => {
+  const party = newParty();
+  const map = { ...MAP, enemies: MAP.enemies.map((e, i) => (i === 0 ? { ...e, species: 'politoed', ability: 'drizzle' } : e)) };
+  const s = createBattle(map, party);
+  assert.equal(s.weather, 'rain');
+  const fog = createBattle({ ...map, weather: 'fog' }, party);
+  assert.equal(fog.weather, 'fog');
+});
+
+test('lightning rod pulls single electric moves within 2 tiles and boosts special attack', () => {
+  const { s, c, r } = duel();
+  const g = s.units.find((u) => u.id === 'enemy-gible'); g.x = 7; g.y = 5; g.ability = 'lightning-rod'; g.hp = g.maxHp = 999;
+  const hp = r.hp;
+  applyMove(s, 'ally-chimchar', 'thunder-shock', 'enemy-riolu', () => 0.5);
+  assert.equal(r.hp, hp);
+  assert.equal(g.stages.spa, 1);
+});
+
+test('arena trap pins adjacent foes to 1 tile of movement', () => {
+  const { s, c, r } = duel(null, 'arena-trap');
+  endPhase(s, seq([])); endPhase(s, seq([])); // 아군 차례 시작: 옆의 개미지옥
+  const g = Array.from({ length: 12 }, () => '.'.repeat(16));
+  const steps = [...reachable(g, s.units, c).keys()].map((k) => k.split(',').map(Number)).map(([x, y]) => Math.abs(x - 5) + Math.abs(y - 5));
+  assert.equal(Math.max(...steps), 1);
+});
+
+test('sturdy survives one full-HP knockout per floor', () => {
+  const { s, r } = duel(null, 'sturdy');
+  r.maxHp = 5; r.hp = 5;
+  applyMove(s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.99]));
+  assert.equal(r.hp, 1);
+  r.hp = r.maxHp;
+  applyMove(s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.99]));
+  assert.ok(!s.units.includes(r));
+});
+
+test('truant rests after acting; slow start halves attack for 5 own turns', () => {
+  const { s, c } = duel('truant');
+  applyMove(s, 'ally-chimchar', 'scratch', 'enemy-riolu', () => 0.5);
+  endPhase(s, seq([])); endPhase(s, seq([]));
+  assert.equal(c.acted, true);
+  const d = plain('snorlax');
+  const ss = mk('regigigas', 'slow-start', { slowTurns: 5 }), n = mk('regigigas', 'run-away');
+  assert.ok(near(expectedDamage(ss, d, M('tackle'), '.') / expectedDamage(n, d, M('tackle'), '.'), 0.5));
+});
+
+test('trace copies the nearest foe; download raises the right attack stat', () => {
+  const map = { ...MAP, enemies: MAP.enemies.map((e) => ({ ...e, ability: 'static' })) };
+  const party = newParty(); party[1].species = 'porygon'; party[1].abilitySlot = 0;
+  const s = createBattle(map, party);
+  const p = s.units.find((u) => u.species === 'porygon');
+  assert.equal(p.ability, 'static');
+});
+
+test('plus/minus with a partner; flower gift in sun; bad dreams; synchronize', () => {
+  const { s, c, r } = duel('plus');
+  const p = s.units.find((u) => u.id === 'ally-chimchar');
+  const mate = makeUnit({ species: 'minun', side: 'ally', x: 5, y: 6, level: 40, ability: 'minus' }); s.units.push(mate);
+  const r1 = applyMove(s, 'ally-chimchar', 'ember', 'enemy-riolu', () => 0.5).damage;
+  s.units = s.units.filter((u) => u !== mate); p.acted = false;
+  const r0 = applyMove(s, 'ally-chimchar', 'ember', 'enemy-riolu', () => 0.5).damage;
+  assert.ok(near(r1 / r0, 1.5, 0.15));
+  const bd = duel('bad-dreams'); bd.r.status = 'sleep'; bd.r.statusTurns = 3; const hp = bd.r.hp;
+  endPhase(bd.s, seq([]));
+  assert.equal(bd.r.hp, hp - Math.max(1, Math.floor(bd.r.maxHp / 8)));
+  const sy = duel(null, 'synchronize');
+  applyMove(sy.s, 'ally-chimchar', 'thunder-wave', 'enemy-riolu', seq([0]));
+  assert.equal(sy.c.status, 'paralysis');
+});
+
+test('pickup sometimes finds loot after a floor', () => {
+  const members = [{ species: 'meowth', abilitySlot: 0 }];
+  assert.deepEqual(pickupLoot(members, seq([0.05, 0.2])), ['coins']);
+  assert.deepEqual(pickupLoot(members, seq([0.05, 0.8])), ['candy']);
+  assert.deepEqual(pickupLoot(members, seq([0.5])), []);
+});
