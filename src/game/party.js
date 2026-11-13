@@ -63,7 +63,7 @@ export function createParty({ game, onBack, onEvolve }) {
   }
 
   function row(ctx, m, y, out, focused) {
-    ui.drawWindow(ctx, 2, y, W - 4, ROW_H - 2, focused ? '#fff8d8' : undefined);
+    ui.drawWindow(ctx, 2, y, W - 4, ROW_H - 1, focused ? '#fff8d8' : undefined);
     ctx.save();
     ctx.beginPath(); ctx.rect(4, y + 2, 26, ROW_H - 6); ctx.clip();
     drawPortrait(ctx, m.species, 'Normal', -3, y - 4);
@@ -77,8 +77,8 @@ export function createParty({ game, onBack, onEvolve }) {
     }
     const growth = SPECIES[m.species].growth;
     const next = m.level >= MAX_LEVEL ? 0 : expForLevel(growth, m.level + 1) - m.exp;
-    drawText(ctx, `다음 Lv까지 ${next}`, 34, y + 14, '#707070', null, 'small');
-    drawText(ctx, m.moves.map(moveName).join(' · '), 124, y + 14, '#384868', null, 'small');
+    drawText(ctx, `다음 Lv까지 ${next}`, 34, y + 13, '#707070', null, 'small');
+    drawText(ctx, m.moves.map(moveName).join(' · '), 124, y + 13, '#384868', null, 'small');
   }
 
   return {
