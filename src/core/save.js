@@ -4,14 +4,16 @@ import { MOVES } from '../data/moves.js';
 import { expForLevel, MAX_LEVEL } from './stats.js';
 import { startingMoves } from './learn.js';
 import { newParty } from './progress.js';
+import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 1;
+const VERSION = 2;
+const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
 
-// GameState = { version, party: Member[], cleared: string[], items: { evoStone } }
-export const newGame = () => ({ version: VERSION, party: newParty(), cleared: [], items: { evoStone: 0 } });
+// GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
+export const newGame = () => ({ version: VERSION, party: newParty(), items: { evoStone: 0 }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null });
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
 
@@ -27,6 +29,25 @@ function cleanMember(m) {
   moves = [...new Set(moves)].slice(0, 4);
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES);
   return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves };
+}
+
+const isDungeon = (id) => typeof id === 'string' && DUNGEONS.some((d) => d.id === id);
+const dungeonIds = (arr) => [...new Set((Array.isArray(arr) ? arr : []).filter(isDungeon))];
+
+function cleanRun(r) {
+  if (!r || typeof r !== 'object' || !isDungeon(r.dungeonId)) return null;
+  const d = dungeonById(r.dungeonId);
+  if (!Number.isInteger(r.floor) || r.floor < 1 || r.floor > d.floors || !Number.isInteger(r.seed)) return null;
+  return {
+    dungeonId: r.dungeonId,
+    floor: r.floor,
+    seed: r.seed >>> 0,
+    faintedLast: (Array.isArray(r.faintedLast) ? r.faintedLast : []).filter((sp) => own(SPECIES, sp)),
+    loot: {
+      evoStone: clampInt(r.loot?.evoStone, 0, 99),
+      candy: (Array.isArray(r.loot?.candy) ? r.loot.candy : []).map((f) => clampInt(f, 1, d.floors)),
+    },
+  };
 }
 
 export function loadGame(storage) {
@@ -45,15 +66,20 @@ export function loadGame(storage) {
     warn('corrupted save ignored');
     return null;
   }
-  if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
+  if (data?.version === 1) data = { ...data, cleared: [], unlocked: [], best: {}, run: null }; // v1 → v2: 고정 스테이지 기록은 버림
+  else if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
     const party = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
     if (!party.length) return null;
     return {
       version: VERSION,
       party,
-      cleared: (Array.isArray(data.cleared) ? data.cleared : []).filter((x) => typeof x === 'string'),
       items: { evoStone: clampInt(data.items?.evoStone, 0, 999) },
+      unlocked: [...new Set([FIRST_DUNGEON, ...dungeonIds(data.unlocked)])],
+      best: Object.fromEntries(Object.entries(data.best && typeof data.best === 'object' ? data.best : {})
+        .filter(([id]) => isDungeon(id)).map(([id, f]) => [id, clampInt(f, 0, dungeonById(id).floors)])),
+      cleared: dungeonIds(data.cleared),
+      run: cleanRun(data.run),
     };
   } catch (e) {
     warn(`invalid save ignored: ${e.message}`); // 어떤 이상한 형태든 부팅을 막지 않는다
