@@ -85,6 +85,12 @@ assets/sprites/pmd/portrait/0392/Normal.png  (선택: Determined.png, Pain.png)
 - 초상화는 정보창과 대사창에 쓰입니다 (공격 시 Determined, 피격 시 Pain).
 - **라이선스**: 커뮤니티 제작분은 CC BY-NC 4.0 (비상업 + 출처 표기, 각 폴더의 `credits.txt`). `CHUNSOFT` 로 표기된 부분은 원작 게임 스프라이트입니다. 이 폴더는 git 에 올라가지 않도록 설정되어 있습니다.
 
+## 맵 타일
+
+- 타일은 그림 파일 없이 코드로 그립니다 (`src/render/tiles.js`). 4~5세대 DS 필드풍: 모래 물가의 물, 뾰족한 긴 풀숲, 이어지는 숲, 입체 바위. 동굴 테마는 같은 구조에 돌바닥·수정 덤불·암벽.
+- 물·풀숲·벽은 4분할 오토타일로 경계가 둥글게 이어집니다 (`src/render/autotile.js`).
+- 브라우저 없이 타일을 PNG 로 미리 보기: `node tools/tile-preview.js out.png field test` (테마 `field`/`cave`, 맵 `map`/`town`/`test`).
+
 ## 기술 이펙트 (pixelfx)
 
 - 공격·피격·랭크·상태이상 연출은 [pixelfx](https://github.com/patch-gg/pixelfx) (MIT, © Patch · Hugo Duprez, 일부 Hollow Crown) 의 픽셀 이펙트를 씁니다. 라이선스 원문: `src/vendor/pixelfx/LICENSE`, `NOTICE.md`.
