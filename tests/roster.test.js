@@ -23,3 +23,26 @@ test('toggleSortie: full, last one, ditto, toggles', () => {
   assert.deepEqual(toggleSortie(g, 'piplup'), { ok: false, reason: 'last' });
   assert.deepEqual(g.sortie, ['piplup']);
 });
+
+// ---- 진화한 출전 멤버 ----
+import { renameSortie } from '../src/core/roster.js';
+import { evolveMember } from '../src/core/progress.js';
+
+test('evolving a sortie member keeps it deployed in the same slot', () => {
+  const g = newGame();
+  const m = g.party.find((x) => x.species === 'chimchar');
+  m.level = 14;
+  evolveMember(m, 'monferno');
+  renameSortie(g, 'chimchar', 'monferno');
+  assert.deepEqual(g.sortie, ['monferno', 'piplup', 'turtwig', 'shinx']);
+  assert.deepEqual(deployed(g).map((x) => x.species), ['ditto', 'monferno', 'piplup', 'turtwig', 'shinx']);
+});
+
+test('stale sortie entries never leave a dead slot', () => {
+  const g = newGame();
+  g.party.find((x) => x.species === 'chimchar').species = 'monferno'; // rename 누락 상황
+  assert.deepEqual(deployed(g).map((x) => x.species), ['ditto', 'piplup', 'turtwig', 'shinx']);
+  assert.deepEqual(toggleSortie(g, 'monferno'), { ok: true }, 'room for it again');
+  g.sortie = ['ghost-entry', 'piplup'];
+  assert.deepEqual(toggleSortie(g, 'piplup'), { ok: false, reason: 'last' }, 'stale entries do not count');
+});

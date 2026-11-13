@@ -10,7 +10,7 @@ import { createTown } from './game/town.js';
 import { createDungeonSelect } from './game/dungeonSelect.js';
 import { createFloorMenu } from './game/floorMenu.js';
 import { generateFloor } from './core/floorgen.js';
-import { deployed } from './core/roster.js';
+import { deployed, renameSortie } from './core/roster.js';
 import { createGachaScene } from './game/gacha.js';
 import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun, addBattleCoins, addFloorCoins } from './core/run.js';
 import { dungeonById } from './data/dungeons.js';
@@ -50,7 +50,8 @@ function evolveChain(list, done) {
     if (!to) { evolveChain(rest, done); return; }
     if (first.stone) game.items.evoStone -= 1; // 진화의돌은 실제로 진화할 때만 소모
     requestSprites([to]);
-    scene = createEvolution({ member, to, onDone: () => evolveChain(rest, done) });
+    const from = member.species;
+    scene = createEvolution({ member, to, onDone: () => { renameSortie(game, from, to); evolveChain(rest, done); } }); // 출전 중이었다면 같은 자리 유지
   };
   if (options.length === 1) { evolveTo(options[0]); return; }
   requestSprites(options);
