@@ -52,3 +52,47 @@ test('readiness helpers', () => {
   assert.equal(stoneEvolutionReady(st), true);
   assert.equal(stoneEvolutionReady({ evolution: null }), false);
 });
+
+// ---- 분기 진화 ----
+import { classifyBranches, levelEvolutionOptions, stoneEvolutionOptions, pickEvolution } from '../src/core/evolution.js';
+
+const lv = (minLevel, extra = {}) => ({ trigger: 'level-up', minLevel, minHappiness: null, item: null, extra: false, ...extra });
+const two = { length: 2, order: 1, prevLevel: null };
+
+test('wurmple-like: same original level on two branches → random', () => {
+  const b = classifyBranches('wurmple', [{ to: 'silcoon', details: [lv(7)] }, { to: 'cascoon', details: [lv(7)] }], { length: 3, order: 1, prevLevel: null });
+  assert.ok(b.every((x) => x.rule.random === true && x.rule.level === 7));
+  const sp = { evolutions: b };
+  assert.deepEqual(levelEvolutionOptions(sp, 7), ['silcoon', 'cascoon']);
+  assert.deepEqual(pickEvolution(['silcoon', 'cascoon'], sp, () => 0), { auto: 'silcoon' });
+  assert.deepEqual(pickEvolution(['silcoon', 'cascoon'], sp, () => 0.99), { auto: 'cascoon' });
+});
+
+test('eevee-like: stones ×3, friendship ×2 at 20, other ×2 at 25 → choose', () => {
+  const stone = (item) => ({ ...lv(null), trigger: 'use-item', item });
+  const b = classifyBranches('eevee', [
+    { to: 'vaporeon', details: [stone('water-stone')] }, { to: 'jolteon', details: [stone('thunder-stone')] }, { to: 'flareon', details: [stone('fire-stone')] },
+    { to: 'espeon', details: [lv(null, { minHappiness: 160 })] }, { to: 'umbreon', details: [lv(null, { minHappiness: 160 })] },
+    { to: 'leafeon', details: [lv(null, { extra: true })] }, { to: 'glaceon', details: [lv(null, { extra: true })] },
+  ], two);
+  const sp = { evolutions: b };
+  assert.deepEqual(stoneEvolutionOptions(sp), ['vaporeon', 'jolteon', 'flareon']);
+  assert.deepEqual(levelEvolutionOptions(sp, 19), []);
+  assert.deepEqual(levelEvolutionOptions(sp, 20), ['espeon', 'umbreon']);
+  assert.deepEqual(levelEvolutionOptions(sp, 25), ['espeon', 'umbreon', 'leafeon', 'glaceon']);
+  assert.deepEqual(pickEvolution(['espeon', 'umbreon'], sp, () => 0), { choose: ['espeon', 'umbreon'] });
+  assert.ok(b.every((x) => !x.rule.random));
+});
+
+test('tyrogue-like: three "other" branches at the same replacement level → choose', () => {
+  const b = classifyBranches('tyrogue', ['hitmonlee', 'hitmonchan', 'hitmontop'].map((to) => ({ to, details: [lv(20, { extra: true })] })), two);
+  const sp = { evolutions: b };
+  assert.deepEqual(levelEvolutionOptions(sp, 25), ['hitmonlee', 'hitmonchan', 'hitmontop']);
+  assert.ok('choose' in pickEvolution(levelEvolutionOptions(sp, 25), sp, () => 0));
+});
+
+test('single branch → auto, none → null', () => {
+  const sp = { evolutions: classifyBranches('x', [{ to: 'y', details: [lv(14)] }], two) };
+  assert.deepEqual(pickEvolution(levelEvolutionOptions(sp, 14), sp, () => 0), { auto: 'y' });
+  assert.equal(pickEvolution([], sp, () => 0), null);
+});
