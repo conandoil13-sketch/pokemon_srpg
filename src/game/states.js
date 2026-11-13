@@ -29,7 +29,7 @@ const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
 import { josa } from '../data/text.js';
 
-const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕' };
+const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕', coins: '코인 주머니' };
 const TARGET_LABEL = { self: '자신', enemy: '적 하나', enemies: '주변 적 전체', ally: '아군 하나', allies: '주변 아군' };
 const isAttack = (mv) => mv.category !== 'status';
 const DIR_OF = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
@@ -295,7 +295,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; });
     } else if (a.item) {
       moveLocked = true;
-      showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item], '을/를')} 얻었다!`], openAction);
+      showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item] ?? '아이템', '을/를')} 얻었다!`], openAction); // 모르는 아이템이어도 멈추지 않게
     } else openAction();
   }
 

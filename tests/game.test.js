@@ -389,3 +389,16 @@ test('a new battle starts with no effects', () => {
   const game = createGame({ rng: () => 0.5 });
   assert.equal(game.fx.count, 0);
 });
+
+test('every chest item opens without freezing (coin pouch too)', () => {
+  for (const item of ['evoStone', 'candy', 'coins']) {
+    const map = stairsMap(); map.chests = [{ x: 2, y: 4, item }];
+    const game = createGame({ rng: createRng(5), map, onExit() {} });
+    assert.ok(run(game, (m) => m === 'idle'));
+    game.handle(at(2, 5)); game.handle({ type: 'confirm' });
+    assert.doesNotThrow(() => { game.handle(at(2, 4)); game.handle({ type: 'confirm' }); run(game, (m) => m === 'notice'); }, item);
+    assert.equal(game.mode, 'notice', item);
+    game.handle({ type: 'confirm' });
+    assert.equal(game.mode, 'action', item);
+  }
+});
