@@ -9,6 +9,7 @@ import { TILE } from './tiles.js';
 import { drawPortrait } from './sprites.js';
 import { STAT_KEYS } from '../core/stages.js';
 import { STATUS_KO } from '../core/status.js';
+import { ABILITIES } from '../data/abilities.js';
 
 export const STATUS_COLOR = { paralysis: '#e0b818', burn: '#e07030', poison: '#a050c0', toxic: '#702890', sleep: '#909090', freeze: '#60b8e8', confusion: '#d060a0' };
 
@@ -106,7 +107,7 @@ export function drawMenu(ctx, items, selected, x, y) {
 export const menuIndexAt = (items, x, y, py) => Math.floor((py - y - 4) / ROW);
 
 // 커서 위 유닛 정보: 초상화 + 이름 + 타입 + HP
-export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false } = {}) {
+export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false, warn = null } = {}) {
   const s = SPECIES[unit.species];
   if (hidden) { // 안개 속: 정체 숨김
     const w = 140, h = 52, x = onLeftHalf ? W - w - 2 : 2, y = 2;
@@ -118,10 +119,13 @@ export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false } = {}) {
     return;
   }
   const stages = stageLine(unit);
-  const w = 140, h = stages ? 64 : 52;
+  const w = 140, h = 64 + (stages ? 12 : 0) + (warn ? 12 : 0);
   const x = onLeftHalf ? W - w - 2 : 2, y = 2;
   drawWindow(ctx, x, y, w, h);
-  if (stages) drawText(ctx, stages, x + 6, y + 51, '#5848a0', null, 'small');
+  const ab = ABILITIES[unit.ability];
+  if (ab) drawText(ctx, `특성 ${ab.name}`, x + 6, y + 51, ab.inactive ? '#909090' : '#305830', null, 'small');
+  if (stages) drawText(ctx, stages, x + 6, y + 63, '#5848a0', null, 'small');
+  if (warn) drawText(ctx, warn, x + 6, y + h - 13, '#e03030', '#f8d0d0', 'small');
   ctx.fillStyle = unit.side === 'ally' ? '#3870f8' : '#f83838';
   ctx.fillRect(x + 4, y + 4, 44, 44);
   drawPortrait(ctx, unit.species, 'Normal', x + 6, y + 6);

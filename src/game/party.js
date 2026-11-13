@@ -1,6 +1,8 @@
 // 편성소: 출전 멤버(메타몽 + 4) 정보, 출전 멤버 바꾸기, 진화의돌 사용
 import { SPECIES } from '../data/species.js';
-import { stoneTargets } from '../core/progress.js';
+import { stoneTargets, abilityOf, swapAbility, ABILITY_SWAP_COST } from '../core/progress.js';
+import { lineRoot } from '../core/gacha.js';
+import { ABILITIES } from '../data/abilities.js';
 import { stoneEvolutionOptions } from '../core/evolution.js';
 import { deployed, toggleSortie } from '../core/roster.js';
 import { SORTIE_SIZE } from '../core/save.js';
@@ -10,8 +12,20 @@ import { drawText, textWidth } from '../render/font.js';
 import { drawPortrait } from '../render/sprites.js';
 import { W, H } from '../render/screen.js';
 import { nameOf, moveName } from './learnFlow.js';
+import { josa } from '../data/text.js';
 
 const ROW_H = 26, PAGE = 6;
+
+// 작은 글씨 줄바꿈 (폭 기준)
+export function fitLines(text, width) {
+  const out = [];
+  let cur = '';
+  for (const ch of text) {
+    if (textWidth(cur + ch, 'small') > width && cur) { out.push(cur); cur = ch.trim() ? ch : ''; } else cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
 
 export function evolutionHint(member) {
   const evos = SPECIES[member.species].evolutions;
@@ -24,21 +38,29 @@ export function evolutionHint(member) {
 
 const REASON = { full: ['출전 자리가 꽉 찼다.', '먼저 다른 동료를 빼자.'], last: ['최소 1마리는', '출전해야 한다.'], ditto: ['메타몽은 항상 출전한다.'] };
 
-export function createParty({ game, onBack, onEvolve }) {
-  let mode = 'menu'; // menu | sortie | pick | msg
+export function createParty({ game, onBack, onEvolve, onSave = () => {} }) {
+  let mode = 'menu'; // menu | sortie | pick | ability | msg
   let cursor = 0, msg = null, msgBack = 'menu';
   const menu = () => [
     { label: '출전 멤버 바꾸기', enabled: true },
     { label: `진화의돌 사용 (${game.items.evoStone}개)`, enabled: true },
+    { label: `특성 바꾸기 (결정 ${ABILITY_SWAP_COST})`, enabled: true },
     { label: '돌아가기', enabled: true },
   ];
+  // 특성 바꾸기 목록: 특성이 둘이고 계열 결정이 충분해야 고를 수 있다
+  const shardsOf = (m) => game.shards[lineRoot(m.species)] ?? 0;
+  const canSwap = (m) => SPECIES[m.species].abilities.length > 1 && shardsOf(m) >= ABILITY_SWAP_COST;
+  const abilityItems = () => [...game.party.map((m) => ({
+    label: `${nameOf(m.species)} ${ABILITIES[abilityOf(m)]?.name ?? ''} (결정 ${shardsOf(m)})`, enabled: canSwap(m),
+  })), { label: '그만둔다', enabled: true }];
   const targets = () => stoneTargets(game.party);
   const bench = () => game.party.filter((m) => m.species !== 'ditto'); // 메타몽 외 전체 동료
   const say = (lines, back) => { msg = lines; msgBack = back; mode = 'msg'; };
 
   function chooseMenu() {
     if (cursor === 0) { mode = 'sortie'; cursor = 0; return; }
-    if (cursor === 2) { onBack(); return; }
+    if (cursor === 3) { onBack(); return; }
+    if (cursor === 2) { mode = 'ability'; cursor = 0; return; }
     if (game.items.evoStone <= 0) { say(['진화의돌을 가지고 있지 않다.'], 'menu'); return; }
     if (!targets().length) { say(['진화의돌로 진화할 수 있는', '포켓몬이 없다.'], 'menu'); return; }
     mode = 'pick'; cursor = 0;
@@ -91,7 +113,7 @@ export function createParty({ game, onBack, onEvolve }) {
         else { mode = 'menu'; cursor = 0; }
         return;
       }
-      const n = mode === 'menu' ? 3 : mode === 'sortie' ? bench().length : targets().length + 1;
+      const n = mode === 'menu' ? 4 : mode === 'sortie' ? bench().length : mode === 'ability' ? game.party.length + 1 : targets().length + 1;
       if (ev.type === 'dir' && ev.dy && n) cursor = (cursor + ev.dy + n) % n;
       if (!pick) return;
       if (mode === 'menu') chooseMenu();
@@ -100,6 +122,15 @@ export function createParty({ game, onBack, onEvolve }) {
         if (!m) return;
         const r = toggleSortie(game, m.species);
         if (!r.ok) say(REASON[r.reason], 'sortie');
+      } else if (mode === 'ability') {
+        const m = game.party[cursor];
+        if (!m) { mode = 'menu'; cursor = 2; return; }
+        if (SPECIES[m.species].abilities.length < 2) { say([`${nameOf(m.species)}의 특성은 하나뿐이다.`], 'ability'); return; }
+        const before = ABILITIES[abilityOf(m)]?.name;
+        const r = swapAbility(game, m.species);
+        if (!r.ok) { say([`${nameOf(m.species)}의 결정이 모자란다.`, `(${ABILITY_SWAP_COST}개 필요, 지금 ${shardsOf(m)}개)`], 'ability'); return; }
+        onSave();
+        say([`${nameOf(m.species)}의 특성이`, `${before} → ${josa(ABILITIES[abilityOf(m)].name, '으로/로')} 바뀌었다!`], 'ability');
       } else if (cursor >= targets().length) { mode = 'menu'; cursor = 0; }
       else {
         const m = targets()[cursor];
@@ -114,7 +145,14 @@ export function createParty({ game, onBack, onEvolve }) {
       else drawDeployed(ctx);
       if (mode === 'msg') ui.drawMessage(ctx, msg, null, Math.floor(time * 3) % 2 === 0);
       else if (mode === 'menu') { const r = ui.menuRect(menu(), 0, 0); ui.drawMenu(ctx, menu(), cursor, 2, H - 2 - r.h); }
-      else if (mode === 'pick') {
+      else if (mode === 'ability') {
+        const all = abilityItems(), page = Math.floor(cursor / PAGE), m = game.party[cursor];
+        const items = all.slice(page * PAGE, page * PAGE + PAGE); // 동료가 많으면 6줄씩
+        const r = ui.menuRect(items, 0, 0);
+        ui.drawMenu(ctx, items, cursor - page * PAGE, 2, Math.max(2, H - 2 - r.h - 30));
+        ui.drawWindow(ctx, 2, H - 30, W - 4, 28);
+        if (m) fitLines(ABILITIES[abilityOf(m)]?.desc ?? '', W - 14).slice(0, 2).forEach((l, i) => drawText(ctx, l, 6, H - 27 + i * 12, '#384868', null, 'small'));
+      } else if (mode === 'pick') {
         const items = [...targets().map((m) => ({ label: `${nameOf(m.species)} Lv.${m.level}`, enabled: true })), { label: '그만둔다', enabled: true }];
         ui.drawMenu(ctx, items, cursor, 2, H - 2 - ui.menuRect(items, 0, 0).h);
       }

@@ -181,6 +181,7 @@ const go = {
     scene = createParty({
       game,
       onBack: () => go.town(null, TOWN.partySpot),
+      onSave: () => save(),
       onEvolve: (member, options) => evolveChain([{ species: member.species, options, stone: true }], () => { save(); go.party(); }),
     });
   },

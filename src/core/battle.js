@@ -96,9 +96,10 @@ const byId = (state, id) => state.units.find((u) => u.id === id);
 export function moveUnit(state, id, x, y) {
   const u = byId(state, id);
   u.x = x; u.y = y; u.moved = true;
+  state.log.arriveAbilityEvents = [];
   // 위협: 이동을 마쳤을 때 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
   if (has(u, 'intimidate')) {
-    const log = (state.log.arriveAbilityEvents = []);
+    const log = state.log.arriveAbilityEvents;
     u.intimNow ??= [];
     for (const f of state.units) {
       if (f.side === u.side || dist(f, u) !== 1 || (u.intimPrev ?? []).includes(f.id) || u.intimNow.includes(f.id)) continue;
