@@ -8,6 +8,7 @@ import { dirFromDelta } from './pmdData.js';
 import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage } from './ui.js';
 import { shade } from './pixels.js';
+import { STAT_KO } from '../core/stages.js';
 
 const AUTO = 1.1;
 
@@ -28,9 +29,108 @@ export function attackMessages(attacker, defender, move, result) {
   return { used, mid, faint };
 }
 
+// 랭크 변화 대사 (changes: applyMove 의 stageChanges, byId: 유닛 찾기 객체/함수)
+export function stageMessages(changes, byId) {
+  const get = typeof byId === 'function' ? byId : (id) => byId[id];
+  return changes.map((c) => {
+    const who = label(get(c.unitId)), stat = STAT_KO[c.key];
+    if (c.applied === 0) return `${who}의 ${josa(stat, '은/는')} 더 이상 ${c.change > 0 ? '오르지 않는다' : '떨어지지 않는다'}!`;
+    const n = Math.abs(c.applied), mag = n >= 3 ? '매우 크게 ' : n === 2 ? '크게 ' : '';
+    return `${who}의 ${josa(stat, '이/가')} ${mag}${c.applied > 0 ? '올라갔다' : '떨어졌다'}!`;
+  });
+}
+
+// 대사 창 폭에 맞춰 두 줄로 (단어 단위)
+const MSG_W = 190;
+export function wrapMessage(text) {
+  if (textWidth(text) <= MSG_W) return text;
+  const words = text.split(' ');
+  for (let k = words.length - 1; k > 0; k--) {
+    const a = words.slice(0, k).join(' ');
+    if (textWidth(a) <= MSG_W) return [a, words.slice(k).join(' ')];
+  }
+  return text;
+}
+
+const UP = '#e04838', DOWN = '#3868e0';
+function drawArrow(ctx, x, y, up, color) {
+  ctx.fillStyle = color;
+  for (let i = 0; i < 4; i++) ctx.fillRect(x - i, up ? y + i : y + 3 - i, i * 2 + 1, 1);
+  ctx.fillRect(x - 1, up ? y + 4 : y - 3, 3, 3);
+}
+
+// 대상 위 ▲/▼ + "공격+2" (월드 좌표)
+function drawStagePops(ctx, changes, get, age) {
+  const rise = Math.min(8, age * 20);
+  const per = {};
+  for (const c of changes) {
+    if (!c.applied) continue;
+    const u = get(c.unitId);
+    if (!u) continue;
+    const n = (per[u.id] = (per[u.id] ?? 0) + 1) - 1;
+    const p = center(u);
+    const up = c.applied > 0, col = up ? UP : DOWN;
+    const txt = `${STAT_KO[c.key]}${up ? '+' : '-'}${Math.abs(c.applied)}`;
+    const w = textWidth(txt, 'small') + 7;
+    const x = Math.max(1, Math.round(p.x - w / 2)), y = Math.max(1, Math.round(p.y - 30 - rise + n * 10)); // 맵 가장자리에서 잘리지 않게
+    drawArrow(ctx, x + 2, y + 2, up, col);
+    drawText(ctx, txt, x + 7, y, col, '#f8f8f8', 'small');
+  }
+}
+
 const center = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE / 2 });
 
-export function createMapAttack({ attacker, defender, move, result, hpBefore }) {
+export function createMapAttack(opts) {
+  return opts.result.kind === 'status' ? createStatusAnim(opts) : createAttack(opts);
+}
+
+function stageSteps(changes, get) {
+  if (!changes?.length) return [];
+  const msgs = stageMessages(changes, get);
+  return [{ k: 'stage', d: 0.5 }, ...changes.map((c, n) => ({ k: 'msg', d: AUTO, text: wrapMessage(msgs[n]), who: get(c.unitId), emo: c.applied > 0 ? 'Determined' : 'Pain', stage: true }))];
+}
+
+// 변화기: 짧게 뛰기 → (빗나감) → ▲▼ 팝업 + 대사
+function createStatusAnim({ attacker, defender, move, result, lookup }) {
+  const get = lookup ?? ((id) => [attacker, defender].find((u) => u?.id === id));
+  const target = defender ?? attacker;
+  const dir = target === attacker ? null : dirFromDelta(target.x - attacker.x, target.y - attacker.y);
+  const missed = (result.missed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}에게는 맞지 않았다!`), who: get(id), emo: 'Normal' }));
+  const nothing = !result.stageChanges.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
+  const steps = [{ k: 'act', d: 0.45 }, ...missed, ...stageSteps(result.stageChanges, get), ...nothing];
+  let i = 0, t = 0, total = 0;
+  let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
+  const step = () => steps[i];
+  const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
+  return {
+    defender: target,
+    get done() { return i >= steps.length; },
+    update(dt) {
+      if (i >= steps.length) return;
+      t += dt; total += dt;
+      if (t >= step().d) { t = 0; i++; const s = step(); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
+    },
+    advance() { if (step()?.k === 'msg') t = step().d; },
+    unitPose(u) {
+      const s = step();
+      if (!s || u !== attacker) return null;
+      const hop = s.k === 'act' ? -Math.round(4 * Math.sin(Math.PI * Math.min(1, t / 0.45))) : 0;
+      return { anim: 'Idle', t: total, loop: true, dir: dir ?? undefined, dy: hop };
+    },
+    drawWorld(ctx) {
+      const age = stageAge();
+      if (age !== null && step()) drawStagePops(ctx, result.stageChanges, get, age);
+    },
+    drawScreen(ctx) {
+      const s = step();
+      if (!s) return;
+      drawMessage(ctx, text, { species: who.species, side: who.side, emotion: emo }, s.k === 'msg' && Math.floor(t * 3) % 2 === 0);
+    },
+  };
+}
+
+function createAttack({ attacker, defender, move, result, hpBefore, lookup }) {
+  const get = lookup ?? ((id) => [attacker, defender].find((u) => u.id === id));
   const landed = result.hit && result.typeMult > 0;
   const special = move.category === 'special';
   const animName = special ? 'Shoot' : 'Attack';
@@ -47,6 +147,7 @@ export function createMapAttack({ attacker, defender, move, result, hpBefore }) 
     { k: 'impact', d: 0.6 },
     ...msgs.mid.map((text) => ({ k: 'msg', d: AUTO, text, who: defender, emo: 'Pain' })),
     ...(msgs.faint ? [{ k: 'faint', d: 0.6 }, { k: 'msg', d: AUTO, text: msgs.faint, who: defender, emo: 'Pain' }] : []),
+    ...stageSteps(result.stageChanges, get),
   ];
   let i = 0, t = 0, total = 0;
   let text = msgs.used, who = attacker, emo = 'Determined';
@@ -118,7 +219,8 @@ export function createMapAttack({ attacker, defender, move, result, hpBefore }) 
         }
       }
       // 데미지 숫자 / MISS
-      if (s.k === 'impact' || (passed('impact') && !passed('faint') && s.k === 'msg')) {
+      if (s.k === 'stage' || s.stage) drawStagePops(ctx, result.stageChanges, get, s.k === 'stage' ? t : 0.6);
+      if (s.k === 'impact' || (passed('impact') && !passed('faint') && s.k === 'msg' && !s.stage)) {
         const age = s.k === 'impact' ? t : 0.6;
         const rise = Math.min(8, age * 20);
         const pop = result.typeMult === 0 ? '효과 없음' : !result.hit ? 'MISS' : `${result.damage}`;
