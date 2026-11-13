@@ -1,10 +1,10 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
-import { createBattle, unitAt, moveUnit, applyAttack, endPhase, spec } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyAttack, endPhase, spec, arrive } from '../core/battle.js';
 import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
 import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
-import { drawMap, TILE } from '../render/tiles.js';
+import { drawMap, drawChest, TILE } from '../render/tiles.js';
 import { drawUnitSprite, drawShadow, DIR } from '../render/sprites.js';
 import { dirFromDelta } from '../render/pmdData.js';
 import * as ui from '../render/ui.js';
@@ -20,18 +20,24 @@ const MARGIN = 2; // 카메라: 커서를 화면 가장자리에서 최소 이 �
 
 const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
-export function createGame({ rng, map, party, onExit }) {
+import { josa } from '../data/text.js';
+
+const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕' };
+
+export function createGame({ rng, map, party, hpRatio, theme = 'field', onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0;
+  let notice = null; // { lines, then } 대사 후 다음 단계
   const cam = { x: 0, y: 0 };
   const facing = {};
 
   function reset() {
-    st = createBattle(map, party);
+    st = createBattle(map, party, { hpRatio });
     mode = 'banner';
-    cursor = { x: 2, y: 5 };
-    sel = walk = anim = banner = pause = focus = null;
+    const first = st.units.find((u) => u.side === 'ally');
+    cursor = first ? { x: first.x, y: first.y } : { x: 2, y: 5 };
+    sel = walk = anim = banner = pause = focus = notice = null;
     for (const u of st.units) facing[u.id] = u.side === 'ally' ? DIR.Right : DIR.Left;
     const t = camTarget(cursor);
     cam.x = t.x; cam.y = t.y;
@@ -151,6 +157,22 @@ export function createGame({ rng, map, party, onExit }) {
     return { x: sx < W / 2 ? W - w - 2 : 2, y: 2 };
   }
 
+  // 아군 이동 완료: 상자 열기 → 행동 메뉴, 계단 → 즉시 층 클리어 (취소 불가)
+  function afterAllyMove() {
+    const a = arrive(st, sel.id);
+    if (a.stairs) {
+      sel.acted = true;
+      showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; });
+    } else if (a.item) {
+      showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item], '을/를')} 얻었다!`], openAction);
+    } else openAction();
+  }
+
+  function showNotice(lines, then) {
+    notice = { lines, then };
+    mode = 'notice';
+  }
+
   function openAction() {
     menu = sel.moves.map((m) => ({ label: MOVES[m].name, enabled: targetsFor(sel, m).length > 0, moveId: m }));
     menu.push({ label: '대기', enabled: true });
@@ -202,6 +224,9 @@ export function createGame({ rng, map, party, onExit }) {
           else { reset(); playerPhase(); }
         }
         return;
+      case 'notice':
+        if ((ev.type === 'confirm' || ev.type === 'click') && notice) { const then = notice.then; notice = null; then(); }
+        return;
       case 'anim':
         if ((ev.type === 'confirm' || ev.type === 'click') && anim) anim.advance();
         return;
@@ -219,7 +244,7 @@ export function createGame({ rng, map, party, onExit }) {
         }
         if (ev.type === 'cancel') { sel = null; mode = 'idle'; return; }
         if (pick && reach.has(`${cursor.x},${cursor.y}`)) {
-          startWalk(sel, pathTo(st.grid, st.units, sel, cursor.x, cursor.y), openAction);
+          startWalk(sel, pathTo(st.grid, st.units, sel, cursor.x, cursor.y), afterAllyMove);
         }
         return;
       }
@@ -394,7 +419,8 @@ export function createGame({ rng, map, party, onExit }) {
     ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.translate(-cx, -cy);
-    drawMap(ctx, st.grid, time, cx, cy, W, H);
+    drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
+    for (const c of st.chests) drawChest(ctx, c.x, c.y);
     if (mode === 'selected') {
       ui.drawHighlights(ctx, toPts(reach), BLUE);
       ui.drawHighlights(ctx, atkTiles, RED);
@@ -418,6 +444,7 @@ export function createGame({ rng, map, party, onExit }) {
     if (mode === 'target') drawForecast(ctx, sel, targets[tIdx], move);
     if (banner) ui.drawBanner(ctx, banner.text, banner.sub, banner.color, Math.min(1, banner.t));
     if (anim) anim.drawScreen(ctx);
+    if (notice) ui.drawMessage(ctx, notice.lines, null, Math.floor(time * 3) % 2 === 0);
     if (mode === 'result') drawResult(ctx, time);
   }
 
@@ -426,11 +453,13 @@ export function createGame({ rng, map, party, onExit }) {
   function drawResult(ctx, time) {
     ctx.fillStyle = 'rgba(16,16,24,0.6)';
     ctx.fillRect(0, 0, W, H);
-    const win = st.result === 'win';
+    const good = st.result !== 'lose';
+    const title = st.result === 'stairs' ? '층 돌파!' : good ? '승리!' : '패배...';
     ui.drawWindow(ctx, 40, 52, 176, 88);
-    ui.bigText(ctx, win ? '승리!' : '패배...', W / 2, 62, win ? '#d8a000' : '#c03030', '#d8d8d0');
-    if (win) centered(ctx, `${st.turn}턴 만에 클리어`, 94);
-    if (resultT >= RESULT_LOCK && Math.floor(time * 2) % 2 === 0) centered(ctx, onExit ? 'Z 키로 마을로 돌아가기' : 'Z 키로 다시 하기', 116, '#606878');
+    ui.bigText(ctx, title, W / 2, 62, good ? '#d8a000' : '#c03030', '#d8d8d0');
+    if (st.result === 'stairs') centered(ctx, '계단을 내려간다', 94);
+    else if (good) centered(ctx, st.bossFloor ? '보스를 쓰러뜨렸다!' : `${st.turn}턴 만에 클리어`, 94);
+    if (resultT >= RESULT_LOCK && Math.floor(time * 2) % 2 === 0) centered(ctx, onExit ? 'Z 키로 계속' : 'Z 키로 다시 하기', 116, '#606878');
   }
 
   playerPhase();

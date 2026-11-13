@@ -47,3 +47,39 @@ test('mashing confirm right after the last KO does not skip the result screen', 
   game.handle({ type: 'confirm' }); // 결과 화면 진입 직후 연타
   assert.equal(game.mode, 'result');
 });
+
+// ---- 던전: 계단 · 상자 ----
+import { MAP } from '../src/data/map.js';
+const stairsMap = () => {
+  const tiles = MAP.tiles.slice();
+  tiles[5] = tiles[5].slice(0, 4) + '>' + tiles[5].slice(5);
+  return { ...MAP, tiles, stairs: { x: 4, y: 5 }, chests: [{ x: 2, y: 4, item: 'evoStone' }] };
+};
+const at = (x, y) => ({ type: 'cursor', px: x * 24 + 12, py: y * 24 + 12 });
+
+test('reaching the stairs clears the floor immediately (no action menu, no cancel)', () => {
+  const exits = [];
+  const game = createGame({ rng: createRng(5), map: stairsMap(), onExit: (r, log) => exits.push([r, log]) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  game.handle(at(2, 5)); game.handle({ type: 'confirm' });
+  game.handle(at(4, 5)); game.handle({ type: 'confirm' });
+  assert.ok(run(game, (m) => m === 'notice'), `mode ${game.mode}`);
+  game.handle({ type: 'cancel' });
+  assert.equal(game.mode, 'notice');
+  game.handle({ type: 'confirm' });
+  assert.equal(game.mode, 'result');
+  assert.ok(run(game, () => false, null, 1) === false);
+  game.handle({ type: 'confirm' });
+  assert.equal(exits[0][0], 'stairs');
+});
+
+test('stepping on a chest opens it, then the action menu opens', () => {
+  const game = createGame({ rng: createRng(5), map: stairsMap(), onExit() {} });
+  assert.ok(run(game, (m) => m === 'idle'));
+  game.handle(at(2, 5)); game.handle({ type: 'confirm' });
+  game.handle(at(2, 4)); game.handle({ type: 'confirm' });
+  assert.ok(run(game, (m) => m === 'notice'));
+  assert.deepEqual(game.state.log.loot, ['evoStone']);
+  game.handle({ type: 'confirm' });
+  assert.equal(game.mode, 'action');
+});

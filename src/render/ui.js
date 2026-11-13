@@ -84,6 +84,7 @@ export function drawUnitInfo(ctx, unit, onLeftHalf) {
   ctx.fillRect(x + 4, y + 4, 44, 44);
   drawPortrait(ctx, unit.species, 'Normal', x + 6, y + 6);
   drawText(ctx, s.name, x + 52, y + 4);
+  if (unit.boss) drawText(ctx, '보스', x + 56 + textWidth(s.name), y + 6, '#e03030', '#f8d0d0', 'small');
   s.types.forEach((t, i) => drawTypeBadge(ctx, t, x + 52 + i * 34, y + 20));
   drawText(ctx, 'HP', x + 52, y + 35, '#f8a000', '#d8d8d0', 'small');
   drawHpBar(ctx, x + 66, y + 37, 34, unit.hp, unit.maxHp);
