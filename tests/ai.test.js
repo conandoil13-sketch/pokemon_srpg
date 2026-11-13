@@ -59,3 +59,46 @@ test('approach uses walking distance, not straight-line distance across water', 
   // 물가(4,0)이 아니라 아래쪽 우회로로 내려가야 한다
   assert.ok(plan.moveTo.y > 0, JSON.stringify(plan.moveTo));
 });
+
+// ---- 변화기 ----
+const mkm = (species, side, x, y, moves) => makeUnit({ species, side, x, y, level: 30, moves });
+
+test('buffs itself when no foe can be attacked this turn, still approaching', () => {
+  const foe = mkm('scyther', 'enemy', 15, 5, ['swords-dance', 'slash']);
+  const ally = mkm('luxray', 'ally', 0, 5, ['tackle']);
+  const s = state(16, 12, [foe, ally]);
+  const plan = planEnemyAction(s, foe);
+  assert.deepEqual(plan.attack, { moveId: 'swords-dance', targetId: foe.id });
+  assert.ok(manhattan(plan.moveTo, ally) < manhattan(foe, ally));
+});
+
+test('does not buff a stat already at +2 or with 2+ turns left', () => {
+  const foe = mkm('scyther', 'enemy', 15, 5, ['swords-dance', 'slash']);
+  const ally = mkm('luxray', 'ally', 0, 5, ['tackle']);
+  foe.stages.atk = 2; foe.turns.atk = 1;
+  assert.equal(planEnemyAction(state(16, 12, [foe, ally]), foe).attack, null);
+  foe.stages.atk = 1; foe.turns.atk = 2;
+  assert.equal(planEnemyAction(state(16, 12, [foe, ally]), foe).attack, null);
+});
+
+test('no area debuff when no foe ends up within range', () => {
+  const foe = mkm('bidoof', 'enemy', 15, 5, ['growl']);
+  const ally = mkm('luxray', 'ally', 0, 5, ['tackle']);
+  assert.equal(planEnemyAction(state(16, 12, [foe, ally]), foe).attack, null);
+});
+
+test('uses an area debuff on foes in range when it has no attack', () => {
+  const foe = mkm('bidoof', 'enemy', 4, 2, ['growl']);
+  const ally = mkm('luxray', 'ally', 2, 2, ['tackle']);
+  const plan = planEnemyAction(state(9, 5, [foe, ally]), foe);
+  assert.equal(plan.attack?.moveId, 'growl');
+  assert.ok(manhattan(plan.moveTo, ally) <= 2);
+});
+
+test('attacks instead of buffing when it can hit hard now', () => {
+  const foe = mkm('scyther', 'enemy', 4, 2, ['swords-dance', 'slash']);
+  const ally = mkm('luxray', 'ally', 2, 2, ['tackle']);
+  ally.hp = 10;
+  const plan = planEnemyAction(state(9, 5, [foe, ally]), foe);
+  assert.equal(plan.attack.moveId, 'slash');
+});
