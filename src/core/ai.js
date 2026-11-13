@@ -114,7 +114,12 @@ const SLEEP_LOCK = 2;
 function ailmentValue(state, user, r, move) {
   const a = move.ailment;
   if (!a || !canInflict(r, a, move).ok) return 0;
-  if (a === 'sleep' && state.units.filter((u) => u.side === r.side && (u.status === 'sleep' || u.status === 'freeze')).length >= SLEEP_LOCK) return 0;
+  if (a === 'sleep') {
+    // 상대 편이 이미 2마리 이상 쉬고 있거나, 깨어 있는 마지막 하나라면 재우지 않는다 (소수 편성 보호)
+    const side = state.units.filter((u) => u.side === r.side);
+    const resting = side.filter((u) => u.status === 'sleep' || u.status === 'freeze').length;
+    if (resting >= Math.min(SLEEP_LOCK, side.length - 1)) return 0;
+  }
   const out = bestDamage(r, [user]);
   switch (a) {
     case 'sleep': case 'freeze': return out * 1.5;

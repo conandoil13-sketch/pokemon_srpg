@@ -1,7 +1,7 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
 import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
-import { STATUS_KO } from '../core/status.js';
+import { STATUS_KO, canInflict } from '../core/status.js';
 import { wrapMessage } from '../render/mapAttack.js';
 import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
 import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
@@ -30,6 +30,12 @@ const TARGET_LABEL = { self: '자신', enemy: '적 하나', enemies: '주변 적
 const pickOne = (mv) => !mv.kind || mv.kind === 'enemy' || mv.kind === 'ally'; // 대상을 직접 고르는 기술
 const helpful = (mv) => mv.kind === 'self' || mv.kind === 'ally' || mv.kind === 'allies';
 export const effectSummary = (mv) => [...(mv.statChanges ?? []).map((c) => `${STAT_KO[API_STAT[c.stat]]} ${c.change > 0 ? '+' : ''}${c.change}`), ...(mv.ailment ? [STATUS_KO[mv.ailment]] : [])].join(' ');
+// 상태이상 변화기 예상 창 경고: 면역 / 이미 상태이상 (없으면 null)
+export function ailmentNote(target, mv) {
+  if (!mv.ailment) return null;
+  const r = canInflict(target, mv.ailment, mv);
+  return r.ok ? null : r.reason === 'immune' ? '효과 없음' : '이미 상태이상';
+}
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
 export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
@@ -142,6 +148,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     sel = null;
     endPhase(st, rng);
     const lines = phaseLines();
+    if (st.result) { noticeChain(lines, () => { mode = 'result'; }); return; } // 결과가 났으면 다음 턴 배너 없이
     showBanner('상대 턴', null, '#f84040', () => noticeChain(lines, () => {
       if (st.result) { mode = 'result'; return; }
       enemyQueue = enemyTurnOrder(st).map((u) => u.id);
@@ -156,6 +163,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!id) {
       endPhase(st, rng);
       cursor = { ...(allyUnits()[0] ?? cursor) };
+      if (st.result) { noticeChain(phaseLines(), () => { mode = 'result'; }); return; }
       playerPhase(phaseLines());
       return;
     }
@@ -483,6 +491,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, effectSummary(mv), 92, y + 20, '#5848a0');
     const foes = (one ? [one] : list).filter((u) => u.side !== a.side);
     if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x])}%`, 10, y + 35);
+    const note = one ? ailmentNote(one, mv) : null;
+    if (note) drawText(ctx, note, W - 12 - textWidth(note), y + 35, '#808080');
     else if (!one) drawText(ctx, list.length ? `대상 ${list.length}마리` : '범위 안에 대상이 없다', 10, y + 35, list.length ? '#383838' : '#a0a0a0');
   }
 

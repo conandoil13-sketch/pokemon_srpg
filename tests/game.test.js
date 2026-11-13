@@ -208,3 +208,23 @@ test('status messages', () => {
   assert.deepEqual(statusMessages([{ unitId: 'e', ailment: 'sleep', ok: false, reason: 'already' }], by, true), ['상대 리오르에게는 효과가 없는 것 같다...']);
   assert.deepEqual(statusMessages([{ unitId: 'e', ailment: 'burn', ok: false, reason: 'already' }], by, false), []);
 });
+
+test('no next-phase banner once status damage decides the floor', () => {
+  const game = createGame({ rng: createRng(4) });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  const st = game.state;
+  st.units = st.units.filter((u) => u.side === 'ally' || u.id === 'enemy-riolu');
+  const r = st.units.find((u) => u.id === 'enemy-riolu'); r.status = 'poison'; r.hp = 1;
+  game.handle({ type: 'endTurn' });
+  let bannerAfter = false;
+  assert.ok(advance(game, (g) => { if (st.result && g.mode === 'banner') bannerAfter = true; return g.mode === 'result'; }));
+  assert.equal(bannerAfter, false);
+});
+
+import { ailmentNote } from '../src/game/states.js';
+test('status forecast warns about immune or already-affected targets', () => {
+  const ground = { species: 'gible', status: null, confusion: 0 };
+  assert.equal(ailmentNote(ground, { id: 'thunder-wave', type: 'electric', ailment: 'paralysis' }), '효과 없음');
+  assert.equal(ailmentNote({ species: 'pikachu', status: 'poison', confusion: 0 }, { id: 'sleep-powder', type: 'grass', ailment: 'sleep' }), '이미 상태이상');
+  assert.equal(ailmentNote({ species: 'pikachu', status: null, confusion: 0 }, { id: 'sleep-powder', type: 'grass', ailment: 'sleep' }), null);
+});
