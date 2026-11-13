@@ -29,6 +29,13 @@ const MARGIN = 2; // 카메라: 커서를 화면 가장자리에서 최소 이 �
 
 const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
+// 예상 창 숫자: 명중·최소·최대 데미지 (날씨·다수 명중 반영)
+export function forecastFor(a, d, mv, tile, weather = null, spread = 1) {
+  const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread, weather });
+  const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread, weather });
+  return { hit: hitChance(a, d, mv, tile, weather), min: min.damage, max: max.damage, typeMult: min.typeMult };
+}
+
 import { josa } from '../data/text.js';
 
 const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕', coins: '코인 주머니' };
@@ -221,6 +228,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const u = st.units.find((o) => o.id === id);
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
     const plan = planEnemyAction(st, u, { unseen: enemyUnseen });
+    // 안개: 이동한 뒤에도 안개 속이면 기술을 쓰지 않는다 (대사로 정체가 드러나지 않게)
+    if (st.weather === 'fog' && plan.attack && isHidden(plan.moveTo, allyUnits())) plan.attack = null;
     focus = u;
     cursor = { x: u.x, y: u.y };
     pause = { t: 0.35, fn: () => {
@@ -520,8 +529,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 상태이상 지속 표시: 살아 있는 유닛의 상태와 맞춘다 (없어진 건 멈추고, 새로 생긴 건 붙인다)
   function syncStatusFx() {
-    const wanted = new Map();
+    const wanted = new Map(), hidden = hiddenIds();
     for (const u of st.units) {
+      if (hidden.has(u.id)) continue; // 안개 속 유닛에는 상태 표시를 그리지 않는다
       const kinds = [u.status, u.confusion > 0 ? 'confusion' : null].filter(Boolean);
       for (const k of kinds) {
         const loop = fxForAilment(k).loop;
@@ -611,11 +621,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     list.slice(0, 3).forEach((d, i) => {
       const tile = st.grid[d.y][d.x], ry = y + 20 + i * 13;
-      const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread });
-      const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread });
+      const fc = forecastFor(a, d, mv, tile, st.weather, spread);
+      const min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
       const mine = d.side === a.side;
       drawText(ctx, `${spec(d).name}${mine ? ' (아군)' : ''}`, 10, ry, mine ? '#d03020' : '#383838', null, 'small');
-      drawText(ctx, min.typeMult === 0 ? '효과 없음' : `${hitChance(a, d, mv, tile)}%  ${min.damage}~${max.damage}`, 110, ry, '#383838', null, 'small');
+      drawText(ctx, min.typeMult === 0 ? '효과 없음' : `${fc.hit}%  ${min.damage}~${max.damage}`, 110, ry, '#383838', null, 'small');
       if (min.typeMult && max.damage >= d.hp) drawText(ctx, '기절?', 206, ry, '#e03030', null, 'small');
     });
     if (list.length > 3) drawText(ctx, `외 ${list.length - 3}마리`, 10, y + 20 + 3 * 13, '#707070', null, 'small');
@@ -625,9 +635,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function drawForecast(ctx, a, d, moveId) {
     const mv = MOVES[moveId];
     const tile = st.grid[d.y][d.x];
-    const hit = hitChance(a, d, mv, tile);
-    const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile });
-    const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile });
+    const fc = forecastFor(a, d, mv, tile, st.weather);
+    const hit = fc.hit, min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
     const y = (d.y * TILE - cam.y) > H / 2 ? 2 : H - 54;
     ui.drawWindow(ctx, 2, y, W - 4, 52);
     drawText(ctx, `${spec(a).name} → ${spec(d).name}`, 10, y + 5);
@@ -653,7 +662,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, mv.name, 10, y + 20);
     drawText(ctx, effectSummary(mv), 92, y + 20, '#5848a0');
     const foes = (one ? [one] : list).filter((u) => u.side !== a.side);
-    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x])}%`, 10, y + 35);
+    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x], st.weather)}%`, 10, y + 35);
     const note = one ? ailmentNote(one, mv) : null;
     if (note) drawText(ctx, note, W - 12 - textWidth(note), y + 35, '#808080');
     else if (!one) drawText(ctx, list.length ? `대상 ${list.length}마리` : '범위 안에 대상이 없다', 10, y + 35, list.length ? '#383838' : '#a0a0a0');
@@ -726,11 +735,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     fxm.draw(ctx, 'back', { x: cx, y: cy });
     drawUnits(ctx);
     fxm.draw(ctx, 'front', { x: cx, y: cy });
+    ctx.save(); ctx.translate(cx, cy); drawWeather(ctx, st.weather, time); ctx.restore(); // 날씨: 유닛·이펙트 위, 커서·HP 바·숫자·UI 아래
     if (['idle', 'selected', 'target'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
     if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);
     ctx.restore();
-    drawWeather(ctx, st.weather, time); // 날씨 덮개: 유닛 위, UI 아래
 
     const onLeft = cursor.x * TILE - cx < W / 2;
     if (mode === 'idle' || mode === 'selected' || mode === 'enemy') {
