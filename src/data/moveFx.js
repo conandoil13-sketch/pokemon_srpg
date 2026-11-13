@@ -11,24 +11,43 @@ export const TYPE_PALETTE = {
 export const RANK_UP_PAL = PAL.blood;   // 오르면 빨강
 export const RANK_DOWN_PAL = PAL.water; // 내리면 파랑
 
-const pal = (type) => PAL[TYPE_PALETTE[type]] ?? PAL.bone;
+// 악 타입: 내장 night 는 거의 검정이라 맵 위에서 안 보임 → 보랏빛 검정에서 밝은 연보라까지
+const DARK_PAL = ['#120c1a', '#24182e', '#3a2a48', '#5a4470', '#8a6aa8', '#c0a0e0', '#f0e0ff'];
+const pal = (type) => (type === 'dark' ? DARK_PAL : PAL[TYPE_PALETTE[type]] ?? PAL.bone);
 const bright = (p) => p.slice(-4); // 보조 색이 주인공처럼 보이는 이펙트용 밝은 쪽
 const spec = (id, opts = {}, timeScale = 1, layer = 'front', extra = {}) => ({ id, opts, timeScale, layer, ...extra });
 const SELF_KO = { 'self-destruct': 'explosions/small-explosion', explosion: 'explosions/big-explosion' };
 const AREA_REACH = 40; // 주변 충격파 반경(px) ≈ 주변 1칸 + 여유
 
+// 위력 단계 (사용자 결정): 약 ≤50 작고 귀엽게 · 중 · 강 ≥90 겹치고 밝고 크게
+export const powerTier = (power) => (!power || power <= 50 ? 'weak' : power >= 90 ? 'strong' : 'mid');
+const TIER = {
+  weak: { light: 0.6, reach: 28, life: 0.7 },
+  mid: { light: 1, reach: AREA_REACH, life: 1 },
+  strong: { light: 1.4, reach: 56, life: 1.4 },
+};
+
 function rule(move, distance) {
   if (SELF_KO[move.id]) return { selfKO: spec(SELF_KO[move.id], {}, 2, 'front') }; // 원래 색, 크게
   const p = pal(move.type), type = move.shape?.type ?? 'single';
-  const spark = spec('impacts/hit-spark', { palette: p }, 1);
-  const thud = spec('impacts/blunt-hit', { palette: p }, 1.5);
+  const tier = powerTier(move.power), T = TIER[tier];
+  const cute = spec('pickups/collect-burst', { palette: p, light: T.light }, 1.6, 'front', { dy: 22 }); // 약: 작은 반짝임 (원래 중심이 발밑 30px 위 → 몸 가운데로)
+  const spark = tier === 'weak' ? cute : spec('impacts/hit-spark', { palette: p, light: T.light }, 1);
+  const thud = tier === 'weak' ? cute : spec('impacts/blunt-hit', { palette: p, light: T.light }, 1.5);
+  const out = rule2(move, distance, p, type, T, spark, thud);
+  if (tier === 'strong' && out.hit) out.hit2 = spec('impacts/blunt-hit', { palette: p, light: T.light }, 1.5); // 강: 묵직한 충격 겹침
+  return out;
+}
+
+function rule2(move, distance, p, type, T, spark, thud) {
+  const AREA_REACH = T.reach, L = (s) => s * T.life;
   switch (type) {
-    case 'line': return { travel: spec('arcane/arcane-beam', { palette: p }, 1.5, 'front', { life: 0.45, clip: true }), hit: spark };
-    case 'cone': return { cast: spec(move.type === 'ice' ? 'ice/frost-breath' : 'fire/fire-breath', { palette: p }, 1, 'front', { life: 0.6 }), hit: spark };
+    case 'line': return { travel: spec('arcane/arcane-beam', { palette: p, light: T.light }, 1.5, 'front', { life: L(0.45), clip: true }), hit: spark };
+    case 'cone': return { cast: spec(move.type === 'ice' ? 'ice/frost-breath' : 'fire/fire-breath', { palette: p, light: T.light }, 1, 'front', { life: L(0.6) }), hit: spark };
     case 'around':
       if (move.type === 'ground' || move.type === 'rock') return { cast: spec('impacts/ground-slam', { palette: p, reach: AREA_REACH }, 2, 'back'), hit: thud };
       return { cast: spec('lightning/thunderclap', { palette: p, sparks: bright(p), reach: AREA_REACH }, 2, 'back'), hit: thud };
-    case 'blast': return { travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), burst: spec('impacts/blunt-hit', { palette: p, light: 1.3 }, 1.5) }; // 착탄 십자 5칸에 하나씩 (plasma-explosion 은 화면에 너무 큼)
+    case 'blast': return { travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), burst: spec('impacts/blunt-hit', { palette: p, light: 1.3 * T.light }, 1.5) }; // 착탄 십자 5칸에 하나씩 (plasma-explosion 은 화면에 너무 큼)
     default:
       if (distance >= 2) {
         if (move.category === 'special') return { cast: spec('arcane/spell-charge', { palette: p }, 2, 'front', { life: 0.3 }), travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), hit: thud };

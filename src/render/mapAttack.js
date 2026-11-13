@@ -306,6 +306,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
         const base = strong ? { ...spec.hit, opts: { ...spec.hit.opts, light: 1.5 } } : spec.hit;
         ok = !!spawnSafe(fx, base, feet(d), { dir }) && ok;
         if (strong) spawnSafe(fx, { ...base, opts: { ...base.opts, seed: 99 } }, feet(d), { dir, delay: 0.08 });
+        if (spec.hit2) spawnSafe(fx, spec.hit2, feet(d), { dir, delay: 0.05 }); // 강한 기술: 충격 한 겹 더
         if (h.crit) spawnSafe(fx, { id: 'impacts/crit-hit', opts: {}, timeScale: 1.5, layer: 'front' }, feet(d), { dir });
       }
       fallbackHit = !ok;

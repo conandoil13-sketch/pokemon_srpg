@@ -23,6 +23,7 @@ import * as status_sleep from './fx/status/sleep.js';
 import * as status_frozen from './fx/status/frozen.js';
 import * as status_confused from './fx/status/confused.js';
 import * as nature_acid_splash from './fx/nature/acid-splash.js';
+import * as pickups_collect_burst from './fx/pickups/collect-burst.js';
 export const FX = {
   'impacts/hit-spark': impacts_hit_spark,
   'impacts/blunt-hit': impacts_blunt_hit,
@@ -48,4 +49,5 @@ export const FX = {
   'status/frozen': status_frozen,
   'status/confused': status_confused,
   'nature/acid-splash': nature_acid_splash,
+  'pickups/collect-burst': pickups_collect_burst,
 };

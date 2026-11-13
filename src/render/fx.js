@@ -17,7 +17,7 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
       const mod = FX[spec?.id];
       if (!mod) throw new Error(`no effect ${spec?.id}`);
       const o = ORIENT[dir] ?? ORIENT.right;
-      const fx = createFx(mod, { ...(spec.opts ?? {}), x: at.x, y: at.y, flip: o.flip, angle: o.angle, ...(actor ? { actor } : {}) });
+      const fx = createFx(mod, { ...(spec.opts ?? {}), x: at.x + (spec.dx ?? 0), y: at.y + (spec.dy ?? 0), flip: o.flip, angle: o.angle, ...(actor ? { actor } : {}) });
       const e = { fx, actor: actor ?? null, layer: spec.layer ?? 'front', timeScale: spec.timeScale ?? 1, delay, life: spec.life ?? null, age: 0, stopped: false, clipTo, dir, at, key, getPos };
       list.push(e);
       log.push(spec.id); if (log.length > 200) log.shift();

@@ -89,6 +89,7 @@ assets/sprites/pmd/portrait/0392/Normal.png  (선택: Determined.png, Pain.png)
 
 - 공격·피격·랭크·상태이상 연출은 [pixelfx](https://github.com/patch-gg/pixelfx) (MIT, © Patch · Hugo Duprez, 일부 Hollow Crown) 의 픽셀 이펙트를 씁니다. 라이선스 원문: `src/vendor/pixelfx/LICENSE`, `NOTICE.md`.
 - 기술마다 **모양·분류로 고른 틀 × 타입 색**: 근접은 타격 불꽃, 원거리 특수는 구체가 날아감, 직선은 빔, 부채꼴은 숨결, 주변은 충격파, 착탄은 십자 폭발. 자폭·대폭발은 전용 큰 폭발 + 화면 흔들림.
+- 위력에 따라 세기가 달라집니다: 위력 50 이하는 작은 반짝임(귀엽게), 90 이상은 충격이 한 겹 더 겹치고 더 밝고 넓게.
 - 랭크는 오르면 빨강, 내리면 파랑. 상태이상은 걸릴 때 한 번 + 걸려 있는 동안 몸 위에 계속 표시.
 - 고르는 규칙: `src/data/moveFx.js`, 기술별 예외: `src/data/moveFx.json`.
 - 이펙트를 늘릴 때: pixelfx 를 받아 둔 경로로 `node tools/vendor-pixelfx.js <pixelfx 경로>` (목록은 그 파일의 `FX_FILES`).
