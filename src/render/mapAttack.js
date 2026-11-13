@@ -9,6 +9,9 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
+import { fxForMove, fxForStage, fxForAilment } from '../data/moveFx.js';
+import { actorFor, bodyAt } from './fxActor.js';
+import { idleFrameSource } from './sprites.js';
 
 const AUTO = 1.1;
 
@@ -96,13 +99,34 @@ function drawStagePops(ctx, changes, get, age) {
 
 const center = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE / 2 });
 
+// ---- pixelfx 연결 ----
+const feet = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE - 4 });
+const dirName = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'up' : 'down');
+// 이펙트 하나가 실패해도 연출은 계속 (실패하면 null → 예전 그림으로)
+function spawnSafe(fx, spec, at, opts) {
+  if (!fx || !spec) return null;
+  try { return fx.spawn(spec, at, opts); } catch { return null; }
+}
+// 몸에 붙는 이펙트: 우리 스프라이트 모양 actor 와 그 원점
+function onBody(fx, spec, u) {
+  const actor = actorFor(u.species, idleFrameSource(u.species));
+  return spawnSafe(fx, spec, bodyAt(actor, u.x * TILE + TILE / 2, u.y * TILE + TILE / 2), { actor });
+}
+// 랭크·상태이상 걸림 (세 연출 공통): 단계에 들어갈 때 한 번
+function spawnChangeFx(fx, s, result, get) {
+  if (s.k === 'stage') for (const c of result.stageChanges ?? []) { const u = get(c.unitId); if (u && c.applied) onBody(fx, fxForStage(c.applied), u); }
+  if (s.pop) { const u = get(s.pop.unitId); if (u) onBody(fx, fxForAilment(s.pop.ailment).inflict, u); }
+}
+// 직선 빔: 이펙트의 손 위치(15, -24)가 사용자 중심에 오도록 원점을 방향별로 옮긴다
+const BEAM_HAND = { right: [15, -24], left: [-15, -24], up: [-24, -15], down: [24, 15] };
+
 export function createMapAttack(opts) {
   if (opts.result.blocked) return createBlockedAnim(opts);
   return opts.result.kind === 'status' ? createStatusAnim(opts) : createAttack(opts);
 }
 
 // 마비로 기술 실패 / 혼란 자해. 사용자만 등장
-function createBlockedAnim({ attacker, result }) {
+function createBlockedAnim({ attacker, result, fx }) {
   const who = label(attacker);
   const hpBefore = attacker.hp + (result.selfHit?.damage ?? 0);
   const steps = result.blocked === 'paralysis'
@@ -116,13 +140,14 @@ function createBlockedAnim({ attacker, result }) {
   let text = steps[0].text, emo = steps[0].emo;
   const step = () => steps[i];
   const passed = (k) => steps.slice(0, i).some((s) => s.k === k);
+  const enter = (s) => { if (s?.k === 'impact') spawnSafe(fx, { id: 'impacts/hit-spark', opts: {}, timeScale: 1, layer: 'front' }, feet(attacker)); };
   return {
     defender: attacker,
     get done() { return i >= steps.length; },
     update(dt) {
       if (i >= steps.length) return;
       t += dt; total += dt;
-      if (t >= step().d) { t = 0; i++; const s = step(); if (s?.text) { text = s.text; emo = s.emo; } }
+      if (t >= step().d) { t = 0; i++; const s = step(); enter(s); if (s?.text) { text = s.text; emo = s.emo; } }
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
     unitPose(u) {
@@ -159,7 +184,7 @@ function stageSteps(changes, get) {
 }
 
 // 변화기: 짧게 뛰기 → (빗나감) → ▲▼ 팝업 + 대사
-function createStatusAnim({ attacker, defender, move, result, lookup }) {
+function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const get = lookup ?? ((id) => [attacker, defender].find((u) => u?.id === id));
   const target = defender ?? attacker;
   const dir = target === attacker ? null : dirFromDelta(target.x - attacker.x, target.y - attacker.y);
@@ -170,13 +195,14 @@ function createStatusAnim({ attacker, defender, move, result, lookup }) {
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
+  const enter = (s) => { if (s) spawnChangeFx(fx, s, result, get); };
   return {
     defender: target,
     get done() { return i >= steps.length; },
     update(dt) {
       if (i >= steps.length) return;
       t += dt; total += dt;
-      if (t >= step().d) { t = 0; i++; const s = step(); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
+      if (t >= step().d) { t = 0; i++; const s = step(); enter(s); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
     unitPose(u) {
@@ -201,7 +227,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup }) {
 // 공격기 (단일·범위 공통). defenders: 맞기 전 대상들, aim: 조준 (탄 끝점 계산용)
 const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
-function createAttack({ attacker, defender, defenders: ds, move, result, hpBefore, lookup, aim, endPt: givenEnd }) {
+function createAttack({ attacker, defender, defenders: ds, move, result, hpBefore, lookup, aim, endPt: givenEnd, fx }) {
   const defenders = ds ?? (defender ? [defender] : []);
   const hits = result.hits ?? (defender ? [{ unitId: defender.id, ...result, hpBefore }] : []);
   const hitOf = (u) => hits.find((h) => h.unitId === u.id);
@@ -238,7 +264,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const steps = [
     { k: 'act', d: actLen },
     ...(travel ? [{ k: 'travel', d: 0.25 }] : []),
-    { k: 'impact', d: 0.6 },
+    { k: 'impact', d: result.selfKO ? 1.2 : 0.6 },
     ...mid.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: 'Pain' })),
     ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
@@ -250,6 +276,43 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const step = () => steps[i];
   const passed = (k) => steps.slice(0, i).some((x) => x.k === k);
 
+  // pixelfx: 단계에 들어갈 때 한 번씩
+  const dist0 = defenders[0] ? Math.abs(defenders[0].x - attacker.x) + Math.abs(defenders[0].y - attacker.y) : 1;
+  const spec = fx ? fxForMove(move, { distance: dist0 }) : null;
+  const dir = dirName(focusPt.x - attacker.x, focusPt.y - attacker.y);
+  let shot = null, fallbackHit = !spec, fallbackShot = !spec, shakeT = 0;
+  function enter(s) {
+    if (!s || !spec) return;
+    if (s.k === 'act' && spec.cast) spawnSafe(fx, spec.cast, feet(attacker), { dir });
+    if (s.k === 'travel' && spec.travel) {
+      if (spec.travel.clip) {
+        const len = (Math.abs(endPt.x - attacker.x) + Math.abs(endPt.y - attacker.y)) * TILE + TILE / 2;
+        const [hx, hy] = BEAM_HAND[dir], c = center(attacker);
+        fallbackShot = !spawnSafe(fx, spec.travel, { x: c.x - hx, y: c.y - hy }, { dir, clipTo: len + 15 }); // 손 위치만큼 더
+      } else {
+        shot = spawnSafe(fx, spec.travel, feet(attacker), { dir });
+        fallbackShot = !shot;
+      }
+    }
+    if (s.k === 'impact') {
+      if (shot) { try { shot.fx.stop(); } catch { /* 무시 */ } }
+      if (spec.burst && aim?.x !== undefined) for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) spawnSafe(fx, spec.burst, feet({ x: aim.x + dx, y: aim.y + dy }), { delay: dx || dy ? 0.06 : 0 }); // 착탄 십자
+      if (spec.selfKO) { spawnSafe(fx, spec.selfKO, feet(attacker)); shakeT = 0.4; }
+      let ok = true;
+      for (const d of defenders) {
+        const h = hitOf(d);
+        if (!h || !h.hit || h.typeMult === 0 || !spec.hit) continue;
+        const strong = h.typeMult > 1;
+        const base = strong ? { ...spec.hit, opts: { ...spec.hit.opts, light: 1.5 } } : spec.hit;
+        ok = !!spawnSafe(fx, base, feet(d), { dir }) && ok;
+        if (strong) spawnSafe(fx, { ...base, opts: { ...base.opts, seed: 99 } }, feet(d), { dir, delay: 0.08 });
+        if (h.crit) spawnSafe(fx, { id: 'impacts/crit-hit', opts: {}, timeScale: 1.5, layer: 'front' }, feet(d), { dir });
+      }
+      fallbackHit = !ok;
+    }
+    spawnChangeFx(fx, s, result, get);
+  }
+
   function shownHp(d) {
     const h = hitOf(d), before = h?.hpBefore ?? d.hp;
     if (passed('impact')) return d.hp;
@@ -257,14 +320,18 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     return before;
   }
 
+  enter(steps[0]);
   return {
     defender: defenders[0] ?? null,
     extraUnits: [attacker, ...defenders], // 기절해 목록에서 빠져도 연출 동안 그린다
     get done() { return i >= steps.length; },
+    get shake() { return shakeT > 0 ? (Math.floor(shakeT * 30) % 2 ? 2 : -2) : 0; },
     update(dt) {
+      if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
+      if (shot && step()?.k === 'travel') { const a = feet(attacker), e = feet(endPt), k = Math.min(1, t / step().d); shot.fx.options.x = a.x + (e.x - a.x) * k; shot.fx.options.y = a.y - 6 + (e.y - a.y) * k; }
       if (i >= steps.length) return;
       t += dt; total += dt;
-      if (t >= step().d) { t = 0; i++; const s = step(); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
+      if (t >= step().d) { t = 0; i++; const s = step(); enter(s); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
 
@@ -295,7 +362,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
       if (!s) return;
       const a = center(attacker);
       const color = TYPE_COLORS[move.type];
-      if (s.k === 'travel') {
+      if (s.k === 'travel' && fallbackShot) {
         const e = center(endPt), k = t / s.d;
         const x = Math.round(a.x + (e.x - a.x) * k), y = Math.round(a.y - 6 + (e.y - a.y) * k);
         ctx.fillStyle = shade(color, 0.55); ctx.fillRect(x - 4, y - 4, 8, 8);
@@ -305,7 +372,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
       for (const d of defenders) {
         const h = hitOf(d); if (!h) continue;
         const p = center(d), landed = h.hit && h.typeMult > 0;
-        if (s.k === 'impact' && landed && t < 0.35) {
+        if (s.k === 'impact' && landed && t < 0.35 && fallbackHit) {
           const r = 4 + (t / 0.35) * 12;
           for (let n = 0; n < 8; n++) {
             const ang = (n / 8) * Math.PI * 2;
