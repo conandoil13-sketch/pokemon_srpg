@@ -1,7 +1,7 @@
 // 부트스트랩 + 장면 관리 + 게임 루프
 // 흐름: 타이틀 → 마을 → 던전 선택 → [층 시작(저장) → 전투 → 결산 → 진화… → 다음 층/귀환]… → 마을 · 편성소
 import { createScreen } from './render/screen.js';
-import { loadSprites } from './render/sprites.js';
+import { requestSprites } from './render/sprites.js';
 import { loadFonts } from './render/font.js';
 import { bindInput } from './game/input.js';
 import { createGame } from './game/states.js';
@@ -18,13 +18,13 @@ import { createEvolution } from './game/evolution.js';
 import { createParty } from './game/party.js';
 import { createRng } from './core/rng.js';
 import { newGame, loadGame, saveGame } from './core/save.js';
-import { SPECIES, validateData } from './data/species.js';
+import { validateData } from './data/species.js';
 import { TOWN } from './data/town.js';
 
 validateData();
 const canvas = document.getElementById('game');
 const { ctx, getScale } = createScreen(canvas);
-await Promise.all([loadFonts(), loadSprites(Object.keys(SPECIES))]);
+await loadFonts(); // 스프라이트는 화면에 나올 종족만 그때그때 (requestSprites)
 
 // localStorage 접근 자체가 막힌 환경에서도 게임은 돌아가게
 const storage = {
@@ -44,6 +44,7 @@ function evolveChain(list, done) {
   if (!member) { evolveChain(rest, done); return; }
   // (Task 6 에서 갈래 선택 창을 붙인다) 지금은 첫 갈래
   const to = first.to ?? first.options[0];
+  requestSprites([to]);
   scene = createEvolution({ member, to, onDone: () => evolveChain(rest, done) });
 }
 
@@ -54,6 +55,7 @@ function startFloor() {
   const run = game.run;
   const d = dungeonById(run.dungeonId);
   const map = generateFloor(d, run.floor, floorSeed(run));
+  requestSprites([...game.party.map((m) => m.species), ...map.enemies.map((e) => e.species)]);
   save(); // 층 시작 시점 저장 (같은 시드 → 같은 맵으로 재개)
   scene = createGame({
     rng, map, party: game.party, hpRatio: floorStartHp(run), theme: d.theme,
@@ -121,6 +123,7 @@ const go = {
     });
   },
   town: (message = null, spawn = TOWN.start) => {
+    requestSprites([...game.party.map((m) => m.species), ...TOWN.objects.filter((o) => o.species).map((o) => o.species)]);
     scene = createTown({ onSortie: go.select, onParty: go.party, message, spawn, leader: game.party[0].species });
   },
   select: () => {
@@ -136,6 +139,7 @@ const go = {
     });
   },
   party: () => {
+    requestSprites(game.party.map((m) => m.species));
     scene = createParty({
       game,
       onBack: () => go.town(null, TOWN.partySpot),

@@ -48,17 +48,30 @@ async function loadPmd(key) {
   return { data, sheets, base };
 }
 
-export async function loadSprites(keys) {
-  await Promise.all(keys.map(async (key) => {
-    pmd[key] = await loadPmd(key);
-    const dir = `${pmd[key]?.base ?? PMD_BASES[0]}/portrait/${pad4(SPECIES[key].dex)}`;
-    await Promise.all(EMOTIONS.map(async (e) => { portraits[`${key}/${e}`] = await loadImage(`${dir}/${e}.png`); }));
-    if (!pmd[key] && !warned) {
-      warned = true;
-      console.warn('[sprites] PMD sprite folder not found for some Pokémon — using placeholder pixel art.');
-    }
-  }));
+// 종족 하나의 PMD 시트·초상화 로드 (기본 로더)
+async function loadOne(key) {
+  pmd[key] = await loadPmd(key);
+  const dir = `${pmd[key]?.base ?? PMD_BASES[0]}/portrait/${pad4(SPECIES[key].dex)}`;
+  await Promise.all(EMOTIONS.map(async (e) => { portraits[`${key}/${e}`] = await loadImage(`${dir}/${e}.png`); }));
+  if (!pmd[key] && !warned) {
+    warned = true;
+    console.warn('[sprites] PMD sprite folder not found for some Pokémon — using placeholder pixel art.');
+  }
 }
+
+// 지연 로딩: 필요한 종족만, 종족마다 한 번만 요청. 로드 전·실패 시엔 임시 도트로 그린다
+let loader = loadOne;
+const requested = new Map(); // key → Promise
+export const setSpriteLoader = (fn) => { loader = fn; requested.clear(); }; // 테스트용
+
+export function requestSprites(keys) {
+  return Promise.all([...new Set(keys)].map((key) => {
+    if (!requested.has(key)) requested.set(key, Promise.resolve().then(() => loader(key)).catch(() => {}));
+    return requested.get(key);
+  })).then(() => {});
+}
+
+export const loadSprites = requestSprites; // 이전 이름
 
 export const hasPmd = (key) => !!pmd[key];
 
