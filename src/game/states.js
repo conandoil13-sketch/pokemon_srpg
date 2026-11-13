@@ -6,7 +6,7 @@ import { wrapMessage } from '../render/mapAttack.js';
 import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
-import { isHidden, WEATHER_KO } from '../core/weather.js';
+import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
@@ -621,7 +621,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     list.slice(0, 3).forEach((d, i) => {
       const tile = st.grid[d.y][d.x], ry = y + 20 + i * 13;
-      const fc = forecastFor(a, d, mv, tile, st.weather, spread);
+      const fc = forecastFor(a, d, mv, tile, effectiveWeather(st), spread);
       const min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
       const mine = d.side === a.side;
       drawText(ctx, `${spec(d).name}${mine ? ' (아군)' : ''}`, 10, ry, mine ? '#d03020' : '#383838', null, 'small');
@@ -635,7 +635,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function drawForecast(ctx, a, d, moveId) {
     const mv = MOVES[moveId];
     const tile = st.grid[d.y][d.x];
-    const fc = forecastFor(a, d, mv, tile, st.weather);
+    const fc = forecastFor(a, d, mv, tile, effectiveWeather(st));
     const hit = fc.hit, min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
     const y = (d.y * TILE - cam.y) > H / 2 ? 2 : H - 54;
     ui.drawWindow(ctx, 2, y, W - 4, 52);
@@ -662,7 +662,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, mv.name, 10, y + 20);
     drawText(ctx, effectSummary(mv), 92, y + 20, '#5848a0');
     const foes = (one ? [one] : list).filter((u) => u.side !== a.side);
-    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x], st.weather)}%`, 10, y + 35);
+    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x], effectiveWeather(st))}%`, 10, y + 35);
     const note = one ? ailmentNote(one, mv) : null;
     if (note) drawText(ctx, note, W - 12 - textWidth(note), y + 35, '#808080');
     else if (!one) drawText(ctx, list.length ? `대상 ${list.length}마리` : '범위 안에 대상이 없다', 10, y + 35, list.length ? '#383838' : '#a0a0a0');

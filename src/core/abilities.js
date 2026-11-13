@@ -79,11 +79,13 @@ export function immunity(attacker, defender, move, typeMult = 1) {
 }
 
 // 명중: base → { value, sure }
-export function accuracyFor(attacker, defender, move, base) {
+export function accuracyFor(attacker, defender, move, base, weather = null) {
   if (has(attacker, 'no-guard') || has(defender, 'no-guard')) return { value: 100, sure: true };
   let v = base;
   if (has(attacker, 'compound-eyes')) v *= 1.3;
   if (has(attacker, 'hustle') && move.category === 'physical') v *= 0.8;
+  if ((def(attacker, defender, 'sand-veil') && weather === 'sand') || (def(attacker, defender, 'snow-cloak') && weather === 'hail')) v -= 20;
+  if (def(attacker, defender, 'tangled-feet') && defender.confusion > 0) v -= 20;
   return { value: v, sure: false };
 }
 
@@ -93,3 +95,61 @@ export function critRate(attacker, defender) {
   return has(attacker, 'super-luck') ? 1 / 8 : 1 / 16;
 }
 export const critMult = (attacker) => (has(attacker, 'sniper') ? 2.25 : 1.5);
+
+// ---- 상태이상 ----
+const STATUS_IMMUNE = {
+  immunity: ['poison', 'toxic'], insomnia: ['sleep'], 'vital-spirit': ['sleep'], limber: ['paralysis'],
+  'magma-armor': ['freeze'], 'water-veil': ['burn'], 'own-tempo': ['confusion'],
+};
+const PRIMARY = ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze'];
+export function blocksAilment(unit, ailment, weather = null) {
+  if (STATUS_IMMUNE[unit.ability]?.includes(ailment)) return true;
+  return has(unit, 'leaf-guard') && weather === 'sun' && PRIMARY.includes(ailment);
+}
+
+// ---- 랭크: 다른 포켓몬 때문에 떨어지는 걸 막음 / 단순 ----
+export function stageGuard(unit, key, change, fromOther) {
+  if (fromOther && change < 0) {
+    if (has(unit, 'clear-body') || has(unit, 'white-smoke')) return 0;
+    if (has(unit, 'hyper-cutter') && key === 'atk') return 0;
+    if (has(unit, 'keen-eye') && key === 'acc') return 0;
+  }
+  return has(unit, 'simple') ? change * 2 : change;
+}
+
+// ---- 스피드·이동력 (unit.fieldWeather = 지금 유효한 날씨, 전투가 넣어 줌) ----
+export function speedMult(unit) {
+  const w = unit.fieldWeather;
+  if (has(unit, 'swift-swim') && w === 'rain') return 2;
+  if (has(unit, 'chlorophyll') && w === 'sun') return 2;
+  if (has(unit, 'quick-feet') && unit.status) return 1.5;
+  return 1;
+}
+export const ignoresParalysisSlow = (unit) => has(unit, 'quick-feet');
+export function moveBonus(unit) {
+  const w = unit.fieldWeather;
+  if ((has(unit, 'swift-swim') && w === 'rain') || (has(unit, 'chlorophyll') && w === 'sun') || (has(unit, 'quick-feet') && unit.status)) return 1;
+  return 0;
+}
+
+// ---- 날씨 피해 면역 / 기술 외 피해 무효 ----
+export const magicGuard = (unit) => has(unit, 'magic-guard');
+export function weatherChipImmune(unit, weather) {
+  if (magicGuard(unit)) return true;
+  if (weather === 'sand' && has(unit, 'sand-veil')) return true;
+  if (weather === 'hail' && (has(unit, 'snow-cloak') || has(unit, 'ice-body'))) return true;
+  return false;
+}
+// 차례 끝 특성 HP 변화: 양수 회복, 음수 피해 (최대 HP 비율)
+export function phaseEndHp(unit, weather) {
+  const a = unit.ability;
+  if (a === 'rain-dish' && weather === 'rain') return 1 / 16;
+  if (a === 'ice-body' && weather === 'hail') return 1 / 16;
+  if (a === 'dry-skin' && weather === 'rain') return 1 / 8;
+  if (a === 'dry-skin' && weather === 'sun') return -1 / 8;
+  if (a === 'solar-power' && weather === 'sun') return -1 / 8;
+  return 0;
+}
+
+// ---- 접촉 반격 (접촉 = 거리 1 의 물리 기술) ----
+export const CONTACT_AILMENT = { static: ['paralysis'], 'poison-point': ['poison'], 'flame-body': ['burn'], 'effect-spore': ['paralysis', 'poison', 'sleep'] };

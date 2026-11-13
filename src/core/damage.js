@@ -11,7 +11,7 @@ const sp = (unit) => SPECIES[unit.species];
 export function hitChance(attacker, defender, move, defTile, weather = null) {
   const acc = weatherAccuracy(weather, move, move.accuracy);
   if (acc.sure) return 100; // 비의 번개·싸라기눈의 눈보라: 반드시 명중
-  const ab = accuracyFor(attacker, defender, move, acc.value); // 특성 (복안·의욕·노가드)
+  const ab = accuracyFor(attacker, defender, move, acc.value, weather); // 특성 (복안·의욕·노가드·모래숨기 …)
   if (ab.sure) return 100;
   acc.value = ab.value;
   const speGap = Math.floor((effectiveStat(defender, 'spe') - effectiveStat(attacker, 'spe')) / 10);
@@ -22,8 +22,10 @@ export function hitChance(attacker, defender, move, defTile, weather = null) {
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)
 function baseDamage(attacker, defender, move, defTile, weather = null) {
   const physical = move.category === 'physical';
-  const A = effectiveStat(attacker, physical ? 'atk' : 'spa');
-  let D = effectiveStat(defender, physical ? 'def' : 'spd');
+  // 천진: 상대 랭크를 무시 (틀깨기면 천진도 무시)
+  const aKey = physical ? 'atk' : 'spa', dKey = physical ? 'def' : 'spd';
+  const A = defender.ability === 'unaware' && attacker.ability !== 'mold-breaker' ? attacker.stats[aKey] : effectiveStat(attacker, aKey);
+  let D = attacker.ability === 'unaware' ? defender.stats[dKey] : effectiveStat(defender, dKey);
   if (defTile === '^') D *= 1.2;
   const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;
   const stab = stabMult(attacker, move, weather);

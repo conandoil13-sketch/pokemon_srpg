@@ -1,5 +1,6 @@
 // 적 AI (순수 함수, spec §5)
 import { SPECIES } from '../data/species.js';
+import { effectiveWeather } from './weather.js';
 import { MOVES } from '../data/moves.js';
 import { reachable, tilesInRange, manhattan, canEnter, TILE_COST } from './pathfind.js';
 import { expectedDamage, hitChance } from './damage.js';
@@ -91,7 +92,7 @@ function threatAt(threats, unit, x, y, tile) {
 // unseen: 안개 속이라 이번 적 차례에 보이지 않는 상대 id (공격·위협 계산에서 뺀다, 다가가는 목표로는 씀)
 export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
   if (unit.acted) return { moveTo: { x: unit.x, y: unit.y }, attack: null }; // 잠듦·얼음으로 쉬는 중
-  W = state.weather ?? null;
+  W = effectiveWeather(state); // 에어록·날씨부정 반영
   const reach = reachable(state.grid, state.units, unit);
   const allFoes = state.units.filter((u) => u.side !== unit.side);
   const foes = allFoes.filter((u) => !unseen.has(u.id));

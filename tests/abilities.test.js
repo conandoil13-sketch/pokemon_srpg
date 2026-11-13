@@ -86,3 +86,118 @@ test('battle applies absorbs: heal, speed boost, flash fire power-up', () => {
   assert.equal(r.flashFire, true);
   assert.ok(s.log.abilityEvents.some((e) => e.ability === 'flash-fire'));
 });
+
+// ---- Task 4: 상태·랭크·날씨·페이즈·접촉 ----
+import { canInflict, inflict } from '../src/core/status.js';
+import { applyStageChange } from '../src/core/stages.js';
+import { endPhase } from '../src/core/battle.js';
+import { reachable } from '../src/core/pathfind.js';
+const duel = (cAb, rAb) => {
+  const s = createBattle();
+  s.units = s.units.filter((u) => u.id === 'ally-chimchar' || u.id === 'enemy-riolu' || u.id === 'enemy-gible');
+  const c = s.units.find((u) => u.id === 'ally-chimchar'), r = s.units.find((u) => u.id === 'enemy-riolu'), g = s.units.find((u) => u.id === 'enemy-gible');
+  c.x = 5; c.y = 5; r.x = 6; r.y = 5; g.x = 12; g.y = 1;
+  c.ability = cAb ?? 'run-away'; r.ability = rAb ?? 'run-away'; r.hp = r.maxHp = 999;
+  return { s, c, r };
+};
+const seq = (vals) => { let i = 0; return () => vals[i++] ?? 0.5; };
+
+test('status immunities and early bird', () => {
+  const u = (ab) => mk('pikachu', ab);
+  assert.equal(canInflict(u('immunity'), 'poison').ok, false);
+  assert.equal(canInflict(u('immunity'), 'toxic').ok, false);
+  assert.equal(canInflict(u('insomnia'), 'sleep').ok, false);
+  assert.equal(canInflict(u('vital-spirit'), 'sleep').ok, false);
+  assert.equal(canInflict(u('limber'), 'paralysis').ok, false);
+  assert.equal(canInflict(u('magma-armor'), 'freeze').ok, false);
+  assert.equal(canInflict(u('water-veil'), 'burn').ok, false);
+  assert.equal(canInflict(u('own-tempo'), 'confusion').ok, false);
+  assert.equal(canInflict(u('leaf-guard'), 'burn', null, 'sun').ok, false);
+  assert.equal(canInflict(u('leaf-guard'), 'burn', null, null).ok, true);
+  const eb = u('early-bird'); inflict(eb, 'sleep', () => 0.99); assert.equal(eb.statusTurns, 2); // 3 → 2 (절반 올림)
+});
+
+test('stage abilities: clear body, hyper cutter, keen eye, simple, unaware', () => {
+  const cb = mk('tentacool', 'clear-body');
+  assert.equal(applyStageChange(cb, 'def', -1, 3, { fromOther: true }).applied, 0);
+  assert.equal(applyStageChange(cb, 'def', -1, 3, { fromOther: false }).applied, -1);
+  assert.equal(applyStageChange(mk('krabby', 'hyper-cutter'), 'atk', -1, 3, { fromOther: true }).applied, 0);
+  assert.equal(applyStageChange(mk('pidgey', 'keen-eye'), 'acc', -1, 3, { fromOther: true }).applied, 0);
+  const sp = mk('numel', 'simple'); applyStageChange(sp, 'atk', 1); assert.equal(sp.stages.atk, 2);
+  const a = plain('machop'); a.stages.atk = 2;
+  const d0 = plain('snorlax'), d1 = mk('snorlax', 'unaware');
+  assert.ok(near(expectedDamage(a, d1, M('karate-chop'), '.') / expectedDamage(a, d0, M('karate-chop'), '.'), 0.5));
+});
+
+test('phase-end abilities: speed boost, shed skin, poison heal, weather heals and hurts, magic guard', () => {
+  const { s, c } = duel('speed-boost');
+  endPhase(s, seq([]));
+  assert.equal(c.stages.spe, 1);
+  const t = duel('shed-skin'); t.c.status = 'burn'; endPhase(t.s, seq([0.2])); assert.equal(t.c.status, null);
+  const p = duel('poison-heal'); p.c.status = 'poison'; p.c.hp = 10; endPhase(p.s, seq([])); assert.equal(p.c.hp, Math.min(p.c.maxHp, 10 + Math.floor(p.c.maxHp / 8)));
+  const rd = duel('rain-dish'); rd.s.weather = 'rain'; rd.c.hp = 10; endPhase(rd.s, seq([])); assert.equal(rd.c.hp, 10 + Math.max(1, Math.floor(rd.c.maxHp / 16)));
+  const ds = duel('dry-skin'); ds.s.weather = 'sun'; const hp = ds.c.hp; endPhase(ds.s, seq([])); assert.equal(ds.c.hp, hp - Math.max(1, Math.floor(ds.c.maxHp / 8)));
+  const sp = duel('solar-power'); sp.s.weather = 'sun'; const hp2 = sp.c.hp; endPhase(sp.s, seq([])); assert.ok(sp.c.hp < hp2);
+  const hy = duel('hydration'); hy.s.weather = 'rain'; hy.c.status = 'paralysis'; endPhase(hy.s, seq([])); assert.equal(hy.c.status, null);
+  const mg = duel('magic-guard'); mg.c.status = 'poison'; mg.s.weather = 'sand'; const hp3 = mg.c.hp; endPhase(mg.s, seq([])); assert.equal(mg.c.hp, hp3);
+  const sv = duel('sand-veil'); sv.s.weather = 'sand'; const hp4 = sv.c.hp; endPhase(sv.s, seq([])); assert.equal(sv.c.hp, hp4);
+  const full = duel('rain-dish'); full.s.weather = 'rain'; endPhase(full.s, seq([])); assert.equal(full.c.hp, full.c.maxHp); // 최대치 넘지 않음
+});
+
+test('weather speed abilities add movement; air lock cancels weather', () => {
+  const g = Array.from({ length: 11 }, () => '.'.repeat(11));
+  const far = (m) => Math.max(...[...m.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return Math.abs(x - 5) + Math.abs(y - 5); }));
+  const u = mk('lotad', 'swift-swim', { x: 5, y: 5 });
+  const base = far(reachable(g, [u], u));
+  u.fieldWeather = 'rain';
+  assert.equal(far(reachable(g, [u], u)), base + 1);
+  const { s, c, r } = duel(null, 'air-lock'); s.weather = 'rain';
+  const res = applyMove(s, 'ally-chimchar', 'ember', 'enemy-riolu', () => 0.5);
+  const s2 = duel(null, null); s2.s.weather = 'rain';
+  const res2 = applyMove(s2.s, 'ally-chimchar', 'ember', 'enemy-riolu', () => 0.5);
+  assert.ok(res.damage > res2.damage); // 비의 불꽃 반감이 사라짐
+});
+
+test('sand veil and tangled feet lower accuracy against them', () => {
+  const a = plain('machop'), sv = mk('sandshrew', 'sand-veil'), d = plain('sandshrew');
+  assert.equal(hitChance(a, sv, M('tackle'), '.', 'sand'), hitChance(a, d, M('tackle'), '.', 'sand') - 20);
+  const tf = mk('spinda', 'tangled-feet', { confusion: 2 }), d2 = plain('spinda');
+  assert.equal(hitChance(a, tf, M('tackle'), '.'), hitChance(a, d2, M('tackle'), '.') - 20);
+});
+
+test('contact abilities hit back only on adjacent physical moves', () => {
+  const st = duel(null, 'static');
+  applyMove(st.s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.5, 0.1]));
+  assert.equal(st.c.status, 'paralysis');
+  const sp = duel(null, 'static'); sp.r.x = 7;
+  applyMove(sp.s, 'ally-chimchar', 'ember', 'enemy-riolu', seq([0.5, 0.99, 0.5, 0.1, 0.1]));
+  assert.equal(sp.c.status, null);
+  const rs = duel(null, 'rough-skin'); const hp = rs.c.hp;
+  applyMove(rs.s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.5]));
+  assert.equal(rs.c.hp, hp - Math.max(1, Math.floor(rs.c.maxHp / 8)));
+  const am = duel(null, 'aftermath'); am.r.hp = 1; const hp2 = am.c.hp;
+  applyMove(am.s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.5]));
+  assert.equal(am.c.hp, hp2 - Math.max(1, Math.floor(am.c.maxHp / 4)));
+  const mg = duel('magic-guard', 'rough-skin'); const hp3 = mg.c.hp;
+  applyMove(mg.s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.5]));
+  assert.equal(mg.c.hp, hp3);
+});
+
+test('serene grace, shield dust, color change, anger point, damp', () => {
+  const sg = duel('serene-grace'); // 불꽃세례 화상 10% → 20%
+  applyMove(sg.s, 'ally-chimchar', 'ember', 'enemy-riolu', seq([0.5, 0.99, 0.5, 0.15]));
+  assert.equal(sg.r.status, 'burn');
+  const sd = duel(null, 'shield-dust');
+  applyMove(sd.s, 'ally-chimchar', 'ember', 'enemy-riolu', seq([0.5, 0.99, 0.5, 0.01]));
+  assert.equal(sd.r.status, null);
+  const cc = duel(null, 'color-change');
+  applyMove(cc.s, 'ally-chimchar', 'ember', 'enemy-riolu', seq([0.5, 0.99, 0.5, 0.99]));
+  assert.equal(cc.r.typeOverride, 'fire');
+  const ap = duel(null, 'anger-point');
+  applyMove(ap.s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0, 0.5]));
+  assert.equal(ap.r.stages.atk, 6);
+  const dp = duel(null, 'damp');
+  const res = applyMove(dp.s, 'ally-chimchar', 'self-destruct', { self: true }, seq([]));
+  assert.equal(res.blocked, 'damp');
+  assert.ok(dp.s.units.includes(dp.c));
+});

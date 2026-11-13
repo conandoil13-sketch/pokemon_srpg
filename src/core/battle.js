@@ -7,8 +7,8 @@ import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage } from './damage.js';
 import { unitsHit } from './shapes.js';
-import { phaseEndWeather } from './weather.js';
-import { immunity } from './abilities.js';
+import { phaseEndWeather, effectiveWeather } from './weather.js';
+import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS } from './stages.js';
 import { statsAt, expYield } from './stats.js';
@@ -49,7 +49,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     units.push(u);
   });
   for (const e of mapDef.enemies) units.push(makeUnit({ ...e, side: 'enemy', id: uniqueId(units, 'enemy', e.species) }));
-  return {
+  const state = {
     grid: mapDef.tiles.slice(),
     width: mapDef.tiles[0].length,
     height: mapDef.tiles.length,
@@ -63,6 +63,9 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     bossFloor: units.some((u) => u.boss),
     weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
   };
+  for (const u of units) u.fieldWeather = effectiveWeather(state); // 날씨 특성(쓱쓱 등)이 처음부터 이동력에 반영
+  return state;
+
 }
 
 export const unitAt = (state, x, y) => state.units.find((u) => u.x === x && u.y === y);
@@ -124,11 +127,11 @@ export function targetsOf(state, user, move, focus) {
   }
 }
 
-function changeStats(unit, list, out, turns = STAGE_TURNS) {
+function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false) {
   for (const { stat, change } of list) {
     const key = API_STAT[stat];
     if (!key) continue;
-    const r = applyStageChange(unit, key, change, turns);
+    const r = applyStageChange(unit, key, change, turns, { fromOther });
     out.push({ unitId: unit.id, key, change, applied: r.applied, after: r.after });
   }
 }
@@ -138,6 +141,8 @@ const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
 
 // aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
 export function applyMove(state, userId, moveId, aim, rng) {
+  const W = effectiveWeather(state); // 에어록·날씨부정 반영
+  for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 등 스피드·이동력 특성용
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = MOVES[moveId];
   a.acted = true;
@@ -152,7 +157,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     if (ab.flashFire) u.flashFire = true;
     abilityEvents.push({ unitId: u.id, ability: ab.ability });
   };
-  const ail = (t) => { if (move.ailment) statusChanges.push({ unitId: t.id, ailment: move.ailment, ...inflict(t, move.ailment, rng, move, state.weather) }); };
+  const ail = (t) => { if (move.ailment) statusChanges.push({ unitId: t.id, ailment: move.ailment, ...inflict(t, move.ailment, rng, move, W) }); };
 
   // 마비 25% 실패 → 혼란 50% 자해 (기술은 나가지 않고 행동 종료)
   const blocked = checkAction(a, rng);
@@ -168,26 +173,35 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return out;
   }
 
+  // 습기: 주변 2칸에 습기가 있으면 자폭·대폭발 불발
+  if (SELF_KO.includes(move.id) && state.units.some((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2)) {
+    abilityEvents.push({ unitId: state.units.find((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2).id, ability: 'damp' });
+    return { kind, blocked: 'damp', stageChanges, statusChanges, thawed, missed: [], abilityEvents };
+  }
+
   if (kind === 'status') {
     const missed = [];
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
       const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
       if (ab) { absorb(t, ab); continue; }
-      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], state.weather))) { missed.push(t.id); continue; }
-      changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS);
+      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
+      changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a);
       ail(t);
     }
     return { kind, stageChanges, statusChanges, thawed, missed };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const spread = targets.length >= 2 ? 0.75 : 1;
-  const roll = (chance) => !chance || rng() * 100 < chance; // 확률 0 = 100%
+  const roll = (chance) => !chance || rng() * 100 < chance * (has(a, 'serene-grace') ? 2 : 1); // 확률 0 = 100%, 하늘의은총 2배
   const hits = [], expGained = {}, knocked = [];
   let anyLanded = false;
+  const contactBase = move.category === 'physical';
+  const breaksDef = has(a, 'mold-breaker');
   for (const d of targets) {
+    const contact = contactBase && dist(a, d) === 1;
     const hpBefore = d.hp;
-    const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread, weather: state.weather });
+    const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread, weather: W });
     if (r.absorbed) absorb(d, r.absorbed);
     d.hp = Math.max(0, d.hp - r.damage);
     const fainted = d.hp === 0;
@@ -196,8 +210,29 @@ export function applyMove(state, userId, moveId, aim, rng) {
     // 대상 부가효과: 맞았고 면역이 아니고 버텼을 때
     const landed = r.hit && r.typeMult > 0;
     anyLanded ||= landed;
-    if (landed && !fainted && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS);
-    if (landed && !fainted && move.ailment && roll(move.ailmentChance)) ail(d);
+    const dust = !breaksDef && has(d, 'shield-dust'); // 인분: 받는 부가효과 무효
+    if (landed && !fainted && !dust && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, true);
+    if (landed && !fainted && !dust && move.ailment && roll(move.ailmentChance)) ail(d);
+    if (landed && !fainted && r.damage > 0) {
+      if (has(d, 'color-change') && d.typeOverride !== moveTypeOf(a, move)) { d.typeOverride = moveTypeOf(a, move); abilityEvents.push({ unitId: d.id, ability: 'color-change' }); }
+      if (r.crit && has(d, 'anger-point')) { changeStats(d, [{ stat: 'attack', change: 12 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'anger-point' }); }
+    }
+    // 접촉 반격 (거리 1 물리기): 정전기·독가시·불꽃몸·포자 30%, 까칠한피부 1/8, 유폭(기절 시) 1/4
+    if (landed && r.damage > 0 && contact && state.units.includes(a)) {
+      const spell = CONTACT_AILMENT[d.ability];
+      if (spell && rng() * 100 < 30) {
+        const ail2 = spell[spell.length > 1 ? Math.floor(rng() * spell.length) : 0];
+        const res = inflict(a, ail2, rng, null, W);
+        statusChanges.push({ unitId: a.id, ailment: ail2, ...res });
+        if (res.ok) abilityEvents.push({ unitId: d.id, ability: d.ability });
+      }
+      const recoil = has(d, 'rough-skin') ? 1 / 8 : fainted && has(d, 'aftermath') && !state.units.some((u) => has(u, 'damp')) ? 1 / 4 : 0;
+      if (recoil && !magicGuard(a)) {
+        a.hp = Math.max(0, a.hp - Math.max(1, Math.floor(a.maxHp * recoil)));
+        abilityEvents.push({ unitId: d.id, ability: d.ability, damage: true });
+        if (a.hp === 0) knockOut(state, a, null);
+      }
+    }
     hits.push({ unitId: d.id, ...r, fainted, hpBefore });
   }
   // 경험치는 공격이 끝난 뒤 살아 있는 아군 기준 (목록 순서에 따라 달라지지 않게)
@@ -238,8 +273,16 @@ export function arrive(state, unitId) {
 export function endPhase(state, rng = Math.random) {
   const ending = state.phase === 'player' ? 'ally' : 'enemy';
   const events = (state.log.statusEvents = []);
+  const abilityLog = (state.log.phaseAbilityEvents = []); // 차례 끝·시작 특성 발동 (화면 알림용)
+  const W = effectiveWeather(state);
+  for (const u of state.units) u.fieldWeather = W;
   for (const u of state.units.filter((o) => o.side === ending)) {
     const r = phaseEnd(u);
+    // 포이즌힐: 독이면 피해 대신 1/8 회복, 매직가드: 상태 피해 없음
+    if (r.damage && (r.kind === 'poison' || r.kind === 'toxic') && has(u, 'poison-heal')) {
+      u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp / 8))); abilityLog.push({ unitId: u.id, ability: 'poison-heal' }); r.damage = 0;
+    }
+    if (r.damage && magicGuard(u)) r.damage = 0;
     if (r.damage) {
       const hpBefore = u.hp;
       u.hp = Math.max(0, u.hp - r.damage);
@@ -248,13 +291,23 @@ export function endPhase(state, rng = Math.random) {
     }
     if (r.confusionEnded) events.push({ unitId: u.id, kind: 'confusionEnd' });
     // 모래바람·싸라기눈 피해 (상태 피해 다음, 보상도 같은 규칙)
-    const w = phaseEndWeather(u, state.weather);
+    const w = weatherChipImmune(u, W) ? null : phaseEndWeather(u, W);
     if (w) {
       const hpBefore = u.hp;
       u.hp = Math.max(0, u.hp - w.damage);
       events.push({ unitId: u.id, kind: w.kind, damage: w.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
-      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); }
+      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
+    // 특성: 날씨 회복·피해, 가속, 탈피, 촉촉바디
+    const hpRate = phaseEndHp(u, W);
+    if (hpRate > 0 && u.hp < u.maxHp) { u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * hpRate))); abilityLog.push({ unitId: u.id, ability: u.ability }); }
+    if (hpRate < 0 && !magicGuard(u)) {
+      u.hp = Math.max(0, u.hp - Math.max(1, Math.floor(u.maxHp * -hpRate)));
+      abilityLog.push({ unitId: u.id, ability: u.ability, damage: true });
+      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
+    }
+    if (has(u, 'speed-boost')) { applyStageChange(u, 'spe', 1); abilityLog.push({ unitId: u.id, ability: 'speed-boost' }); }
+    if (u.status && ((has(u, 'shed-skin') && rng() < 1 / 3) || (has(u, 'hydration') && W === 'rain'))) { cure(u); abilityLog.push({ unitId: u.id, ability: u.ability }); }
   }
   checkResult(state);
   state.log.expired = [];
@@ -270,7 +323,7 @@ export function endPhase(state, rng = Math.random) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false;
     if (state.result) continue;
-    if (state.weather === 'sun' && u.status === 'freeze') { cure(u); events.push({ unitId: u.id, kind: 'thawed' }); } // 쾌청: 녹는다
+    if (W === 'sun' && u.status === 'freeze') { cure(u); events.push({ unitId: u.id, kind: 'thawed' }); } // 쾌청: 녹는다
     const st = phaseStart(u, rng);
     if (st.event) events.push({ unitId: u.id, kind: st.event });
     if (st.skip) { u.moved = true; u.acted = true; }

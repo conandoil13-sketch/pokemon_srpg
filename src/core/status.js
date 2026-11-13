@@ -3,6 +3,7 @@
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { weatherBlocksAilment } from './weather.js';
+import { blocksAilment, has, moveBonus, ignoresParalysisSlow } from './abilities.js';
 
 export const STATUS_KO = { paralysis: '마비', burn: '화상', poison: '독', toxic: '맹독', sleep: '잠듦', freeze: '얼음', confusion: '혼란' };
 const PRIMARY = ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze'];
@@ -20,6 +21,7 @@ const types = (unit) => SPECIES[unit.species].types;
 // move: 거는 기술 (전기자석파처럼 기술 타입 상성으로 무효가 되는 경우)
 export function canInflict(unit, ailment, move, weather = null) {
   if (weatherBlocksAilment(weather, ailment)) return { ok: false, reason: 'weather' }; // 쾌청엔 얼지 않는다
+  if (blocksAilment(unit, ailment, weather)) return { ok: false, reason: 'ability' }; // 면역·불면·리프가드 …
   if (IMMUNE[ailment]?.some((t) => types(unit).includes(t))) return { ok: false, reason: 'immune' };
   if (move?.id === 'thunder-wave' && typeMultiplier(move.type, types(unit)) === 0) return { ok: false, reason: 'immune' };
   if (ailment === 'confusion') return unit.confusion > 0 ? { ok: false, reason: 'already' } : { ok: true };
@@ -32,6 +34,7 @@ export function inflict(unit, ailment, rng, move, weather = null) {
   if (ailment === 'confusion') { unit.confusion = 1 + Math.floor(rng() * 4); return r; }
   unit.status = ailment;
   unit.statusTurns = ailment === 'sleep' ? 1 + Math.floor(rng() * 3) : ailment === 'freeze' ? FREEZE_MAX : ailment === 'toxic' ? 1 : 0;
+  if (ailment === 'sleep' && has(unit, 'early-bird')) unit.statusTurns = Math.ceil(unit.statusTurns / 2); // 일찍기상
   return r;
 }
 
@@ -39,7 +42,8 @@ export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 
 export const moveBudget = (unit) => {
   const m = SPECIES[unit.species].move;
-  return unit.status === 'paralysis' ? Math.max(1, Math.floor(m / 2)) : m;
+  const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
+  return Math.max(1, base + moveBonus(unit)); // 쓱쓱·엽록소·속보 +1
 };
 
 export const speedMultiplier = (unit) => (unit.status === 'paralysis' ? 0.5 : 1);
