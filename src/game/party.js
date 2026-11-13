@@ -46,8 +46,7 @@ export function createParty({ game, onBack, onEvolve }) {
       else if (cursor >= targets().length) { mode = 'menu'; cursor = 0; }
       else {
         const m = targets()[cursor];
-        game.items.evoStone -= 1;
-        onEvolve(m, stoneEvolutionOptions(SPECIES[m.species]));
+        onEvolve(m, stoneEvolutionOptions(SPECIES[m.species])); // 돌은 실제로 진화할 때 차감 (main)
       }
     },
     update() {},

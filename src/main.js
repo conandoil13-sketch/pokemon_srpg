@@ -15,6 +15,7 @@ import { dungeonById } from './data/dungeons.js';
 import { josa } from './data/text.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
+import { createEvolutionChoice } from './game/evolutionChoice.js';
 import { createParty } from './game/party.js';
 import { createRng } from './core/rng.js';
 import { newGame, loadGame, saveGame } from './core/save.js';
@@ -36,16 +37,22 @@ const save = () => saveGame(storage, game);
 const rng = createRng(Date.now() & 0xffffffff);
 let scene;
 
-// 진화 연출을 차례로
+// 진화 연출을 차례로. 갈래가 여럿이면 먼저 "어느 모습으로 진화할까?" (진화하지 않으면 건너뜀)
 function evolveChain(list, done) {
   const [first, ...rest] = list;
   if (!first) { done(); return; }
   const member = game.party.find((m) => m.species === first.species);
   if (!member) { evolveChain(rest, done); return; }
-  // (Task 6 에서 갈래 선택 창을 붙인다) 지금은 첫 갈래
-  const to = first.to ?? first.options[0];
-  requestSprites([to]);
-  scene = createEvolution({ member, to, onDone: () => evolveChain(rest, done) });
+  const options = first.options ?? [first.to];
+  const evolveTo = (to) => {
+    if (!to) { evolveChain(rest, done); return; }
+    if (first.stone) game.items.evoStone -= 1; // 진화의돌은 실제로 진화할 때만 소모
+    requestSprites([to]);
+    scene = createEvolution({ member, to, onDone: () => evolveChain(rest, done) });
+  };
+  if (options.length === 1) { evolveTo(options[0]); return; }
+  requestSprites(options);
+  scene = createEvolutionChoice({ species: member.species, options, onPick: evolveTo });
 }
 
 const newSeed = () => ((Date.now() ^ Math.floor(rng() * 0x7fffffff)) >>> 0);
@@ -143,7 +150,7 @@ const go = {
     scene = createParty({
       game,
       onBack: () => go.town(null, TOWN.partySpot),
-      onEvolve: (member, options) => evolveChain([{ species: member.species, options }], () => { save(); go.party(); }),
+      onEvolve: (member, options) => evolveChain([{ species: member.species, options, stone: true }], () => { save(); go.party(); }),
     });
   },
 };

@@ -79,3 +79,33 @@ test('choose menu: clicking a menu row picks it, clicking elsewhere does nothing
   r.handle({ type: 'click', px: x, py: y });
   assert.equal(r.pending.confirming, true);
 });
+
+// ---- 진화 갈래 선택 ----
+import { createEvolutionChoice } from '../src/game/evolutionChoice.js';
+
+test('evolution choice: mashing Z never confirms anything', () => {
+  const picks = [];
+  const c = createEvolutionChoice({ species: 'eevee', options: ['espeon', 'umbreon'], onPick: (to) => picks.push(to) });
+  for (let i = 0; i < 20; i++) { c.update(0.1); c.handle({ type: 'confirm' }); }
+  assert.deepEqual(picks, []);
+});
+
+test('evolution choice: pick a branch → 예 → onPick(branch); "진화하지 않는다" → onPick(null)', () => {
+  const picks = [];
+  const c = createEvolutionChoice({ species: 'eevee', options: ['espeon', 'umbreon'], onPick: (to) => picks.push(to) });
+  c.update(CHOICE_LOCK + 0.05);
+  c.handle({ type: 'dir', dx: 0, dy: -1 }); // 마지막(진화하지 않는다) → 블래키
+  c.handle({ type: 'confirm' });           // 확인창 (기본 아니요)
+  c.update(CHOICE_LOCK + 0.05);
+  c.handle({ type: 'dir', dx: 0, dy: -1 }); // 예
+  c.handle({ type: 'confirm' });
+  assert.deepEqual(picks, ['umbreon']);
+
+  const c2 = createEvolutionChoice({ species: 'eevee', options: ['espeon', 'umbreon'], onPick: (to) => picks.push(to) });
+  c2.update(CHOICE_LOCK + 0.05);
+  c2.handle({ type: 'confirm' });          // 기본 커서 = 진화하지 않는다
+  c2.update(CHOICE_LOCK + 0.05);
+  c2.handle({ type: 'dir', dx: 0, dy: -1 });
+  c2.handle({ type: 'confirm' });
+  assert.deepEqual(picks, ['umbreon', null]);
+});
