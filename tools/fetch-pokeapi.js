@@ -13,6 +13,8 @@ const VERSION_GROUPS = ['platinum', 'heartgold-soulsilver', 'diamond-pearl']; //
 const GENERATION = 4;
 const CONCURRENCY = 8;
 const API = 'https://pokeapi.co/api/v2';
+const AILMENTS = ['paralysis', 'burn', 'poison', 'sleep', 'freeze', 'confusion'];
+const BAD_POISON = ['toxic', 'poison-fang'];
 const OUT = fileURLToPath(new URL('../src/data/generated/pokedex.js', import.meta.url));
 const CACHE = fileURLToPath(new URL('./.cache/', import.meta.url));
 
@@ -142,12 +144,19 @@ async function main() {
     const category = mv.damage_class.name;
     const statChanges = (mv.stat_changes ?? []).map((c) => ({ stat: c.stat.name, change: c.change }));
     const target = mv.target.name;
-    // 배울 수 있는 기술: 위력 있는 공격기, 또는 능력치를 바꾸고 지원하는 대상을 가진 변화기
-    // 변화기는 순수 능력치 변화(net-good-stats)만 — 뻐기기·부추기기(혼란), 추억의선물(기절), 비축하기(토해내기 연계)는 제외
-    const learnable = category === 'status' ? statChanges.length > 0 && !!TARGET_KIND[target] && mv.meta?.category?.name === 'net-good-stats' : power !== null;
+    // 상태이상: 지원하는 것만, 맹독(맹독·독독니)은 따로 구분
+    const rawAilment = mv.meta?.ailment?.name;
+    const ailment = BAD_POISON.includes(name) ? 'toxic' : AILMENTS.includes(rawAilment) ? rawAilment : null;
+    const effectKind = mv.meta?.category?.name ?? null;
+    // 배울 수 있는 기술: 위력 있는 공격기, 또는 지원하는 대상을 가진 변화기 중
+    //  순수 능력치 변화(net-good-stats) 또는 순수 상태이상(ailment)
+    //  — 뻐기기·부추기기(혼란+강화), 추억의선물(기절), 비축하기(토해내기 연계)는 제외
+    const learnable = category === 'status'
+      ? !!TARGET_KIND[target] && ((effectKind === 'net-good-stats' && statChanges.length > 0) || (effectKind === 'ailment' && !!ailment))
+      : power !== null;
     moves[name] = {
       api: name, name: ko(mv.names) ?? name, type, category, power, accuracy: accuracy ?? 100, learnable,
-      target, statChanges, statChance: mv.meta?.stat_chance ?? 0, effectKind: mv.meta?.category?.name ?? null,
+      target, statChanges, statChance: mv.meta?.stat_chance ?? 0, effectKind, ailment, ailmentChance: mv.meta?.ailment_chance ?? 0,
     };
   }));
 

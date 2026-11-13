@@ -1,6 +1,7 @@
 // 기술 습득 규칙 (순수). learnset: [[level, moveApi]] 레벨 오름차순
 export const FALLBACK_MOVE = 'tackle';
 const MAX_MOVES = 4;
+const MAX_STATUS = 2; // 시작 기술 중 변화기 최대 개수
 
 const learnable = (movesData, api) => movesData[api]?.learnable === true;
 
@@ -13,12 +14,16 @@ export function startingMoves(learnset, level, movesData) {
     if (i >= 0) out.splice(i, 1);
     out.push(api);
   }
-  const picked = out.slice(-MAX_MOVES);
-  // 공격기가 하나도 없으면 가장 최근 공격기(없으면 몸통박치기)로 가장 오래된 칸을 바꾼다
-  const attacks = (ms) => ms.filter((m) => movesData[m]?.category !== 'status');
-  if (attacks(picked).length) return picked;
-  const attack = attacks(out).at(-1) ?? FALLBACK_MOVE;
-  return [...picked.slice(picked.length >= MAX_MOVES ? 1 : 0), attack];
+  // 최근 것부터 4칸: 변화기는 최대 2개, 남는 칸은 더 오래된 공격기로 (습득 순서 유지)
+  const isStatus = (m) => movesData[m]?.category === 'status';
+  const picked = [];
+  let status = 0;
+  for (let i = out.length - 1; i >= 0 && picked.length < MAX_MOVES; i--) {
+    if (isStatus(out[i])) { if (status >= MAX_STATUS) continue; status++; }
+    picked.unshift(out[i]);
+  }
+  if (picked.some((m) => !isStatus(m))) return picked;
+  return [...picked.slice(picked.length >= MAX_MOVES ? 1 : 0), FALLBACK_MOVE]; // 공격기를 하나도 못 배웠으면 몸통박치기
 }
 
 // (fromExclusive, toInclusive] 구간에서 배우는 공격기, 레벨 순

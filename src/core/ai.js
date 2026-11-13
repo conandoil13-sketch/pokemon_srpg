@@ -5,6 +5,7 @@ import { reachable, tilesInRange, manhattan, canEnter, TILE_COST } from './pathf
 import { expectedDamage, hitChance } from './damage.js';
 import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
+import { canInflict } from './status.js';
 
 const KO_BONUS = 100;
 const THREAT_WEIGHT = 0.5;
@@ -53,6 +54,7 @@ function threatAt(threats, unit, x, y, tile) {
 }
 
 export function planEnemyAction(state, unit) {
+  if (unit.acted) return { moveTo: { x: unit.x, y: unit.y }, attack: null }; // 잠듦·얼음으로 쉬는 중
   const reach = reachable(state.grid, state.units, unit);
   const foes = state.units.filter((u) => u.side !== unit.side);
   const threats = threatMap(state, unit);
@@ -107,6 +109,29 @@ export function planEnemyAction(state, unit) {
   return { moveTo: approach, attack: buff ? buff.attack : null };
 }
 
+// 상태이상 가치 (스펙 §4). 상대가 이미 걸렸거나 면역이면 0, 상대 편 잠듦·얼음이 2 이상이면 잠듦 0
+const SLEEP_LOCK = 2;
+function ailmentValue(state, user, r, move) {
+  const a = move.ailment;
+  if (!a || !canInflict(r, a, move).ok) return 0;
+  if (a === 'sleep') {
+    // 상대 편이 이미 2마리 이상 쉬고 있거나, 깨어 있는 마지막 하나라면 재우지 않는다 (소수 편성 보호)
+    const side = state.units.filter((u) => u.side === r.side);
+    const resting = side.filter((u) => u.status === 'sleep' || u.status === 'freeze').length;
+    if (resting >= Math.min(SLEEP_LOCK, side.length - 1)) return 0;
+  }
+  const out = bestDamage(r, [user]);
+  switch (a) {
+    case 'sleep': case 'freeze': return out * 1.5;
+    case 'paralysis': return out * 0.5;
+    case 'burn': return (bestDamage(r, [user], 'physical') >= bestDamage(r, [user], 'special') ? out * 0.5 : out * 0.2) + (r.maxHp / 8) * 2;
+    case 'poison': return (r.maxHp / 8) * 3;
+    case 'toxic': return (r.maxHp / 16) * 6;
+    case 'confusion': return out * 0.4;
+    default: return 0;
+  }
+}
+
 const changesOf = (move) => move.statChanges.map(({ stat, change }) => ({ key: API_STAT[stat], change })).filter((c) => c.key);
 const ratio = (n, c) => stageMultiplier(Math.max(-6, Math.min(6, n + c))) / stageMultiplier(n);
 const OFFENSE = { atk: 'physical', spa: 'special' }, DEFENSE = { def: 'physical', spd: 'special' };
@@ -145,7 +170,7 @@ function positionalStatus(state, unit, ghost, move, foes) {
   const acc = { ...move, accuracy: move.accuracy ?? 100 };
   const valueOn = (r) => {
     const same = r.side === unit.side;
-    const v = ch.reduce((s, c) => s + changeValue(ghost, foes, same, r, c), 0);
+    const v = ch.reduce((s, c) => s + changeValue(ghost, foes, same, r, c), 0) + (same ? 0 : ailmentValue(state, ghost, r, move));
     return same ? v : v * hitChance(ghost, r, acc, tile(r)) / 100;
   };
   const near = (list, lo, hi) => list.filter((u) => { const d = manhattan(ghost, u); return d >= lo && d <= hi; });

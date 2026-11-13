@@ -275,3 +275,98 @@ test('stages tick only at the end of the owner side phase, expire after 3', () =
   assert.deepEqual(s.log.expired, [{ unitId: 'ally-chimchar', keys: ['atk'] }]);
   assert.equal(createBattle().units[0].stages.atk, 0, 'new floor starts clean');
 });
+
+// ---- 상태이상 ----
+import { confusionDamage } from '../src/core/damage.js';
+const rs = (vals) => { let i = 0; return () => vals[i++] ?? 0.5; };
+
+test('thunder wave paralyzes; ground is immune; already-statused fails', () => {
+  const s = stageBattle();
+  const r = applyMove(s, 'ally-chimchar', 'thunder-wave', 'enemy-riolu', rs([0]));
+  assert.equal(find(s, 'enemy-riolu').status, 'paralysis');
+  assert.deepEqual(r.statusChanges, [{ unitId: 'enemy-riolu', ailment: 'paralysis', ok: true }]);
+  const r2 = applyMove(stageBattle(), 'ally-chimchar', 'thunder-wave', 'enemy-gible', rs([0]));
+  assert.equal(r2.statusChanges[0].reason, 'immune');
+  const s3 = stageBattle(); find(s3, 'enemy-riolu').status = 'poison';
+  const r3 = applyMove(s3, 'ally-chimchar', 'sleep-powder', 'enemy-riolu', rs([0]));
+  assert.equal(r3.statusChanges[0].reason, 'already');
+});
+
+test('ember burns 10% (roll), not when the target faints', () => {
+  const run = (roll, hp = 999) => {
+    const s = stageBattle(); const t = find(s, 'enemy-riolu'); t.hp = hp;
+    applyMove(s, 'ally-chimchar', 'ember', 'enemy-riolu', rs([0.5, 0.99, 0, roll]));
+    return t.status;
+  };
+  assert.equal(run(0.05), 'burn');
+  assert.equal(run(0.5), null);
+  assert.equal(run(0.05, 1), null);
+});
+
+test('paralysis can stop the move; the unit still ends its action', () => {
+  const s = stageBattle(); const c = find(s, 'ally-chimchar'); c.status = 'paralysis';
+  const hp = find(s, 'enemy-riolu').hp;
+  const r = applyMove(s, 'ally-chimchar', 'scratch', 'enemy-riolu', rs([0.1]));
+  assert.equal(r.blocked, 'paralysis');
+  assert.equal(find(s, 'enemy-riolu').hp, hp);
+  assert.equal(c.acted, true);
+});
+
+test('confusion self-hit', () => {
+  const s = stageBattle(); const c = find(s, 'ally-chimchar'); c.confusion = 2;
+  const before = c.hp, dmg = confusionDamage(c);
+  const r = applyMove(s, 'ally-chimchar', 'scratch', 'enemy-riolu', rs([0.4]));
+  assert.equal(r.blocked, 'confusion');
+  assert.deepEqual(r.selfHit, { damage: dmg, fainted: false });
+  assert.equal(c.hp, before - dmg);
+});
+
+test('an enemy knocking itself out by confusion pays shared exp and coins', () => {
+  const s = stageBattle(); const r = find(s, 'enemy-riolu'); r.confusion = 2; r.hp = 1;
+  const res = applyMove(s, 'enemy-riolu', 'quick-attack', 'ally-chimchar', rs([0.4]));
+  assert.equal(res.selfHit.fainted, true);
+  assert.equal(find(s, 'enemy-riolu'), undefined);
+  assert.ok(s.log.coins > 0);
+  assert.ok(s.log.exp.chimchar > 0);
+});
+
+test('fire attacks thaw a frozen target; sleep and fire status moves do not', () => {
+  const s = stageBattle(); const t = find(s, 'enemy-riolu'); t.hp = 999; t.status = 'freeze'; t.statusTurns = 3;
+  const r = applyMove(s, 'ally-chimchar', 'ember', 'enemy-riolu', rs([0.5, 0.99, 0, 0.99]));
+  assert.deepEqual([r.thawed, t.status], [['enemy-riolu'], null]);
+  const s2 = stageBattle(); const t2 = find(s2, 'enemy-riolu'); t2.hp = 999; t2.status = 'sleep'; t2.statusTurns = 2;
+  applyMove(s2, 'ally-chimchar', 'ember', 'enemy-riolu', rs([0.5, 0.99, 0, 0.99]));
+  assert.equal(t2.status, 'sleep');
+  const s3 = stageBattle(); const t3 = find(s3, 'enemy-riolu'); t3.status = 'freeze'; t3.statusTurns = 3;
+  const r3 = applyMove(s3, 'ally-chimchar', 'will-o-wisp', 'enemy-riolu', rs([0]));
+  assert.deepEqual([r3.statusChanges[0].reason, t3.status], ['already', 'freeze']);
+});
+
+test('phase end: poison damage event; confusion end event', () => {
+  const s = stageBattle(); const c = find(s, 'ally-chimchar'); c.status = 'poison'; c.confusion = 1;
+  const hp = c.hp;
+  endPhase(s, rs([]));
+  assert.equal(c.hp, hp - Math.floor(c.maxHp / 8));
+  assert.deepEqual(s.log.statusEvents.filter((e) => e.unitId === 'ally-chimchar'), [
+    { unitId: 'ally-chimchar', kind: 'poison', damage: Math.floor(c.maxHp / 8) },
+    { unitId: 'ally-chimchar', kind: 'confusionEnd' },
+  ]);
+});
+
+test('last enemy fainting from poison wins the floor', () => {
+  const s = stageBattle();
+  s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-riolu');
+  const r = find(s, 'enemy-riolu'); r.status = 'poison'; r.hp = 1;
+  endPhase(s, rs([])); // 아군 끝 → 적 시작
+  endPhase(s, rs([])); // 적 끝: 독
+  assert.equal(s.result, 'win');
+  assert.ok(s.log.statusEvents.some((e) => e.unitId === 'enemy-riolu' && e.kind === 'fainted'));
+});
+
+test('a sleeping enemy skips its phase', () => {
+  const s = stageBattle(); const r = find(s, 'enemy-riolu'); r.status = 'sleep'; r.statusTurns = 2;
+  endPhase(s, rs([])); // 적 페이즈 시작
+  assert.deepEqual([r.acted, r.moved, r.statusTurns], [true, true, 1]);
+  assert.ok(s.log.statusEvents.some((e) => e.unitId === 'enemy-riolu' && e.kind === 'asleep'));
+  assert.equal(createBattle().units[0].status, null);
+});

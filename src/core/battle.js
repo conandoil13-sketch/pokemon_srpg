@@ -4,7 +4,8 @@ import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
-import { calcDamage, hitChance } from './damage.js';
+import { calcDamage, hitChance, confusionDamage } from './damage.js';
+import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { startingMoves } from './learn.js';
@@ -21,6 +22,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss }) {
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES),
     moved: false, acted: false,
     ...newStages(),
+    ...newStatus(),
     ...(boss ? { boss: true } : {}),
   };
 }
@@ -77,6 +79,26 @@ function awardExp(state, attacker, defender) {
   return gained;
 }
 
+// 쓰러뜨린 상대 없이 기절(상태 데미지·혼란 자해): 살아 있는 아군 전원 공유 비율
+function awardShare(state, defender) {
+  if (defender.side !== 'enemy') return;
+  const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
+  for (const u of state.units) {
+    if (u.side === 'ally' && u.hp > 0) state.log.exp[u.species] = (state.log.exp[u.species] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+  }
+}
+
+// 기절 처리 공통. by: 쓰러뜨린 유닛(없으면 상태 데미지·자해)
+function knockOut(state, d, by) {
+  state.units = state.units.filter((u) => u !== d);
+  let expGained = {};
+  if (by) expGained = awardExp(state, by, d);
+  else awardShare(state, d);
+  if (d.side === 'enemy' && (!by || by.side === 'ally')) state.log.coins += 3 + Math.floor(d.level / 3);
+  if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
+  return expGained;
+}
+
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
 // 기술이 실제로 닿는 유닛들 (move: id 또는 기술 객체, focus: 고른 대상)
@@ -108,35 +130,51 @@ export function applyMove(state, userId, moveId, focusId, rng) {
   const a = byId(state, userId), move = MOVES[moveId];
   a.acted = true;
   a.moved = true;
-  const stageChanges = [];
-  if (move.category === 'status') {
+  const stageChanges = [], statusChanges = [], thawed = [];
+  const kind = move.category === 'status' ? 'status' : 'attack';
+  const ail = (t) => { if (move.ailment) statusChanges.push({ unitId: t.id, ailment: move.ailment, ...inflict(t, move.ailment, rng, move) }); };
+
+  // 마비 25% 실패 → 혼란 50% 자해 (기술은 나가지 않고 행동 종료)
+  const blocked = checkAction(a, rng);
+  if (blocked) {
+    const out = { kind, blocked, stageChanges, statusChanges, thawed, missed: [] };
+    if (blocked === 'confusion') {
+      const damage = confusionDamage(a);
+      a.hp = Math.max(0, a.hp - damage);
+      out.selfHit = { damage, fainted: a.hp === 0 };
+      if (a.hp === 0) knockOut(state, a, null);
+      checkResult(state);
+    }
+    return out;
+  }
+
+  if (kind === 'status') {
     const missed = [];
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x]))) { missed.push(t.id); continue; }
-      changeStats(t, move.statChanges, stageChanges);
+      changeStats(t, move.statChanges ?? [], stageChanges);
+      ail(t);
     }
-    return { kind: 'status', stageChanges, missed };
+    return { kind, stageChanges, statusChanges, thawed, missed };
   }
   const d = byId(state, focusId);
   const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x] });
   d.hp = Math.max(0, d.hp - r.damage);
   const fainted = d.hp === 0;
   let expGained = {};
-  if (fainted) {
-    state.units = state.units.filter((u) => u !== d);
-    expGained = awardExp(state, a, d);
-    if (a.side === 'ally' && d.side === 'enemy') state.log.coins += 3 + Math.floor(d.level / 3);
-    if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
-  }
+  if (fainted) expGained = knockOut(state, d, a);
+  else if (move.type === 'fire' && r.damage > 0 && d.status === 'freeze') { cure(d); thawed.push(d.id); } // 불꽃 공격에 맞으면 녹는다
   // 부가효과: 맞았고 면역이 아닐 때만, 확률 0 = 100%
   const landed = r.hit && r.typeMult > 0;
   const toUser = move.effectKind === 'damage-raise', toTarget = move.effectKind === 'damage-lower' && !fainted;
   if (landed && move.statChanges?.length && (toUser || toTarget) && (!move.statChance || rng() * 100 < move.statChance)) {
     changeStats(toUser ? a : d, move.statChanges, stageChanges);
   }
+  // 상태이상 부가효과: 맞았고 면역이 아니고 대상이 버텼을 때, 확률 0 = 100%
+  if (landed && !fainted && move.ailment && (!move.ailmentChance || rng() * 100 < move.ailmentChance)) ail(d);
   checkResult(state);
-  return { kind: 'attack', ...r, fainted, expGained, stageChanges };
+  return { kind, ...r, fainted, expGained, stageChanges, statusChanges, thawed };
 }
 
 // 기존 호출 호환
@@ -160,8 +198,20 @@ export function arrive(state, unitId) {
   return out;
 }
 
-export function endPhase(state) {
+// 페이즈 전환: 끝나는 편 상태 데미지·혼란 → 랭크 만료 → 시작하는 편 잠듦·얼음
+export function endPhase(state, rng = Math.random) {
   const ending = state.phase === 'player' ? 'ally' : 'enemy';
+  const events = (state.log.statusEvents = []);
+  for (const u of state.units.filter((o) => o.side === ending)) {
+    const r = phaseEnd(u);
+    if (r.damage) {
+      u.hp = Math.max(0, u.hp - r.damage);
+      events.push({ unitId: u.id, kind: r.kind, damage: r.damage });
+      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
+    }
+    if (r.confusionEnded) events.push({ unitId: u.id, kind: 'confusionEnd' });
+  }
+  checkResult(state);
   state.log.expired = [];
   for (const u of state.units) {
     if (u.side !== ending || !u.turns) continue;
@@ -171,7 +221,14 @@ export function endPhase(state) {
   state.phase = state.phase === 'player' ? 'enemy' : 'player';
   if (state.phase === 'player') state.turn++;
   const side = state.phase === 'player' ? 'ally' : 'enemy';
-  for (const u of state.units) if (u.side === side) { u.moved = false; u.acted = false; }
+  for (const u of state.units) {
+    if (u.side !== side) continue;
+    u.moved = false; u.acted = false;
+    if (state.result) continue;
+    const st = phaseStart(u, rng);
+    if (st.event) events.push({ unitId: u.id, kind: st.event });
+    if (st.skip) { u.moved = true; u.acted = true; }
+  }
 }
 
 export function checkResult(state) {

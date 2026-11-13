@@ -6,7 +6,7 @@ import { TILE } from './tiles.js';
 import { animTiming, hasPmd, DIR } from './sprites.js';
 import { dirFromDelta } from './pmdData.js';
 import { drawText, textWidth } from './font.js';
-import { drawHpBar, drawMessage } from './ui.js';
+import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
 
@@ -38,6 +38,37 @@ export function stageMessages(changes, byId) {
     const n = Math.abs(c.applied), mag = n >= 3 ? '매우 크게 ' : n === 2 ? '크게 ' : '';
     return `${who}의 ${josa(stat, '이/가')} ${mag}${c.applied > 0 ? '올라갔다' : '떨어졌다'}!`;
   });
+}
+
+// 상태이상 대사. isStatusMove: 변화기면 실패도 알리고, 부가효과면 실패는 조용히
+const INFLICT = {
+  paralysis: '마비되어 기술이 나오기 어려워졌다!', burn: '화상을 입었다!', poison: '독에 걸렸다!', toxic: '맹독에 걸렸다!',
+  sleep: '잠들어 버렸다!', freeze: '얼어붙었다!', confusion: '혼란에 빠졌다!',
+};
+export function statusMessages(changes, byId, isStatusMove) {
+  const get = typeof byId === 'function' ? byId : (id) => byId[id];
+  return changes.flatMap((c) => {
+    const who = label(get(c.unitId));
+    if (c.ok) return [`${josa(who, '은/는')} ${INFLICT[c.ailment]}`];
+    return isStatusMove ? [`${who}에게는 효과가 없는 것 같다...`] : [];
+  });
+}
+
+function statusSteps(result, get, isStatusMove) {
+  const out = (result.thawed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}의 얼음이 녹았다!`), who: get(id), emo: 'Normal' }));
+  for (const c of result.statusChanges ?? []) {
+    const [text] = statusMessages([c], get, isStatusMove);
+    if (text) out.push({ k: 'msg', d: AUTO, text: wrapMessage(text), who: get(c.unitId), emo: c.ok ? 'Pain' : 'Normal', pop: c.ok ? c : null, stage: true });
+  }
+  return out;
+}
+
+// 상태 배지 팝업 (월드 좌표)
+function drawStatusPop(ctx, c, get) {
+  const u = get(c.unitId);
+  if (!u) return;
+  const p = center(u);
+  drawStatusBadge(ctx, c.ailment, Math.max(1, Math.round(p.x - 12)), Math.max(1, Math.round(p.y - 34)));
 }
 
 // 대사 창 폭에 맞춰 두 줄로 (단어 단위)
@@ -81,7 +112,59 @@ function drawStagePops(ctx, changes, get, age) {
 const center = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE / 2 });
 
 export function createMapAttack(opts) {
+  if (opts.result.blocked) return createBlockedAnim(opts);
   return opts.result.kind === 'status' ? createStatusAnim(opts) : createAttack(opts);
+}
+
+// 마비로 기술 실패 / 혼란 자해. 사용자만 등장
+function createBlockedAnim({ attacker, result }) {
+  const who = label(attacker);
+  const hpBefore = attacker.hp + (result.selfHit?.damage ?? 0);
+  const steps = result.blocked === 'paralysis'
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 몸이 저려서 움직일 수 없다!`), emo: 'Pain' }]
+    : [
+      { k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 혼란스러워 한다!`), emo: 'Normal' },
+      { k: 'impact', d: 0.6, text: wrapMessage('영문도 모르고 자신을 공격했다!'), emo: 'Pain' },
+      ...(result.selfHit?.fainted ? [{ k: 'faint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(who, '은/는')} 쓰러졌다!`, emo: 'Pain' }] : []),
+    ];
+  let i = 0, t = 0, total = 0;
+  let text = steps[0].text, emo = steps[0].emo;
+  const step = () => steps[i];
+  const passed = (k) => steps.slice(0, i).some((s) => s.k === k);
+  return {
+    defender: attacker,
+    get done() { return i >= steps.length; },
+    update(dt) {
+      if (i >= steps.length) return;
+      t += dt; total += dt;
+      if (t >= step().d) { t = 0; i++; const s = step(); if (s?.text) { text = s.text; emo = s.emo; } }
+    },
+    advance() { if (step()?.k === 'msg') t = step().d; },
+    unitPose(u) {
+      const s = step();
+      if (!s || u !== attacker) return null;
+      if (passed('faint')) return { hidden: true };
+      if (s.k === 'faint') return { anim: 'Hurt', t: 0.1, loop: false, hidden: Math.floor(t / 0.08) % 2 === 0 };
+      if (s.k === 'impact') return { anim: 'Hurt', t, loop: false, flash: Math.floor(t / 0.06) % 2 === 0 && t < 0.3 };
+      return { anim: 'Idle', t: total, loop: true };
+    },
+    drawWorld(ctx) {
+      const s = step();
+      if (!s || !result.selfHit || !(s.k === 'impact' || passed('impact')) || passed('faint')) return;
+      const p = center(attacker), bw = 22;
+      const shown = s.k === 'impact' ? hpBefore - result.selfHit.damage * Math.min(1, t / 0.45) : attacker.hp;
+      const pop = `${result.selfHit.damage}`;
+      drawText(ctx, pop, Math.round(p.x - textWidth(pop) / 2), Math.round(p.y - 30 - Math.min(8, (s.k === 'impact' ? t : 0.6) * 20)), '#ffffff', '#202020');
+      ctx.fillStyle = '#202020';
+      ctx.fillRect(Math.round(p.x - bw / 2) - 1, Math.round(p.y + 10), bw + 2, 7);
+      drawHpBar(ctx, Math.round(p.x - bw / 2), Math.round(p.y + 11), bw, shown, attacker.maxHp);
+    },
+    drawScreen(ctx) {
+      const s = step();
+      if (!s) return;
+      drawMessage(ctx, text, { species: attacker.species, side: attacker.side, emotion: emo }, s.k === 'msg' && Math.floor(t * 3) % 2 === 0);
+    },
+  };
 }
 
 function stageSteps(changes, get) {
@@ -96,8 +179,8 @@ function createStatusAnim({ attacker, defender, move, result, lookup }) {
   const target = defender ?? attacker;
   const dir = target === attacker ? null : dirFromDelta(target.x - attacker.x, target.y - attacker.y);
   const missed = (result.missed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}에게는 맞지 않았다!`), who: get(id), emo: 'Normal' }));
-  const nothing = !result.stageChanges.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...missed, ...stageSteps(result.stageChanges, get), ...nothing];
+  const nothing = !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
+  const steps = [{ k: 'act', d: 0.45 }, ...missed, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
@@ -120,6 +203,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup }) {
     drawWorld(ctx) {
       const age = stageAge();
       if (age !== null && step()) drawStagePops(ctx, result.stageChanges, get, age);
+      if (step()?.pop) drawStatusPop(ctx, step().pop, get);
     },
     drawScreen(ctx) {
       const s = step();
@@ -148,6 +232,7 @@ function createAttack({ attacker, defender, move, result, hpBefore, lookup }) {
     ...msgs.mid.map((text) => ({ k: 'msg', d: AUTO, text, who: defender, emo: 'Pain' })),
     ...(msgs.faint ? [{ k: 'faint', d: 0.6 }, { k: 'msg', d: AUTO, text: msgs.faint, who: defender, emo: 'Pain' }] : []),
     ...stageSteps(result.stageChanges, get),
+    ...statusSteps(result, get, false),
   ];
   let i = 0, t = 0, total = 0;
   let text = msgs.used, who = attacker, emo = 'Determined';
@@ -219,7 +304,8 @@ function createAttack({ attacker, defender, move, result, hpBefore, lookup }) {
         }
       }
       // 데미지 숫자 / MISS
-      if (s.k === 'stage' || s.stage) drawStagePops(ctx, result.stageChanges, get, s.k === 'stage' ? t : 0.6);
+      if (s.k === 'stage' || (s.stage && !s.pop)) drawStagePops(ctx, result.stageChanges, get, s.k === 'stage' ? t : 0.6);
+      if (s.pop) drawStatusPop(ctx, s.pop, get);
       if (s.k === 'impact' || (passed('impact') && !passed('faint') && s.k === 'msg' && !s.stage)) {
         const age = s.k === 'impact' ? t : 0.6;
         const rise = Math.min(8, age * 20);
