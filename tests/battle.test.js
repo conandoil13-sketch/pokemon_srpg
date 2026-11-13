@@ -79,7 +79,7 @@ test('immune attack leaves hp unchanged', () => {
   const s = createBattle();
   const murkrow = find(s, 'enemy-murkrow');
   const before = murkrow.hp;
-  const r = applyAttack(s, 'ally-chimchar', 'enemy-murkrow', 'earthquake', zero);
+  const r = applyAttack(s, 'ally-chimchar', 'enemy-murkrow', 'mud-slap', zero); // 단일 땅 기술 (지진은 이제 범위기)
   assert.equal(r.damage, 0);
   assert.equal(murkrow.hp, before);
 });
@@ -376,4 +376,78 @@ test('status damage events carry hpBefore, maxHp and position', () => {
   endPhase(s, rs([]));
   const e = s.log.statusEvents.find((x) => x.unitId === 'ally-chimchar');
   assert.deepEqual([e.hpBefore, e.maxHp, e.x, e.y], [30, c.maxHp, 5, 5]);
+});
+
+// ---- 범위 공격 · 자폭 ----
+const quakeBattle = () => { const s = stageBattle(); const g = find(s, 'enemy-gible'); g.x = 6; g.y = 6; return s; };
+
+test('earthquake hits foes and allies around, not the user, each ×0.75', () => {
+  const single = stageBattle();
+  single.units = single.units.filter((u) => u.id === 'ally-chimchar' || u.id === 'enemy-riolu');
+  const r1 = applyMove(single, 'ally-chimchar', 'earthquake', { self: true }, () => 0.5);
+  const s = quakeBattle(); const c = find(s, 'ally-chimchar'); const hp = c.hp;
+  const r = applyMove(s, 'ally-chimchar', 'earthquake', { self: true }, () => 0.5);
+  assert.deepEqual(r.hits.map((h) => h.unitId).sort(), ['ally-piplup', 'enemy-gible', 'enemy-riolu']);
+  assert.equal(c.hp, hp);
+  const multi = r.hits.find((h) => h.unitId === 'enemy-riolu').damage;
+  assert.ok(Math.abs(multi - r1.damage * 0.75) <= 1, `${multi} vs ${r1.damage}`);
+});
+
+test('each target rolls its own accuracy', () => {
+  const s = quakeBattle(); find(s, 'enemy-riolu').stages.eva = 2;
+  const rng = rs([0.5, 0.99, 0.5, 0.999, 0.5, 0.5, 0.99, 0.5]); // 팽도리 맞음, 리오르 빗나감, 딥상어동 맞음
+  const r = applyMove(s, 'ally-chimchar', 'earthquake', { self: true }, rng);
+  assert.deepEqual(r.hits.map((h) => [h.unitId, h.hit]), [['ally-piplup', true], ['enemy-riolu', false], ['enemy-gible', true]]);
+});
+
+test('user-side secondary effect applies once on a multi-target move', () => {
+  const m = ALL_MOVES['heat-wave'];
+  const saved = { effectKind: m.effectKind, statChanges: m.statChanges, statChance: m.statChance };
+  Object.assign(m, { effectKind: 'damage-raise', statChanges: [{ stat: 'defense', change: -1 }], statChance: 0 });
+  try {
+    const s = stageBattle(); const g = find(s, 'enemy-gible'); g.x = 6; g.y = 4; // 부채꼴(→): (6,5),(6,4),(6,6),(7,5)
+    applyMove(s, 'ally-chimchar', 'heat-wave', { dir: 'right' }, () => 0.5);
+    assert.equal(find(s, 'ally-chimchar').stages.def, -1);
+  } finally { Object.assign(m, saved); }
+});
+
+test('one quake knocking out a foe and an ally: exp only for the foe, ally logged', () => {
+  const s = quakeBattle(); find(s, 'enemy-riolu').hp = 1; find(s, 'ally-piplup').hp = 1;
+  applyMove(s, 'ally-chimchar', 'earthquake', { self: true }, () => 0.5);
+  assert.deepEqual(s.log.fainted, ['piplup']);
+  assert.ok(s.log.exp.chimchar > 0);
+  assert.equal(s.log.coins, 3 + Math.floor(find(createBattle(), 'enemy-riolu').level / 3));
+});
+
+test('self-destruct faints the user; enemy self-destruct pays nothing', () => {
+  const s = stageBattle(); find(s, 'enemy-riolu').hp = 999;
+  const r = applyMove(s, 'ally-chimchar', 'self-destruct', { self: true }, () => 0.5);
+  assert.equal(r.selfKO, true);
+  assert.equal(find(s, 'ally-chimchar'), undefined);
+  assert.ok(s.log.fainted.includes('chimchar'));
+  const s2 = stageBattle(); find(s2, 'ally-chimchar').hp = 999; find(s2, 'ally-piplup').hp = 999;
+  applyMove(s2, 'enemy-riolu', 'self-destruct', { self: true }, () => 0.5);
+  assert.deepEqual([s2.log.coins, Object.keys(s2.log.exp).length], [0, 0]);
+});
+
+test('self-destruct taking out the last foe and the last ally is a win', () => {
+  const s = stageBattle();
+  s.units = s.units.filter((u) => u.id === 'ally-chimchar' || u.id === 'enemy-riolu');
+  find(s, 'enemy-riolu').hp = 1;
+  applyMove(s, 'ally-chimchar', 'self-destruct', { self: true }, () => 0.5);
+  assert.equal(s.result, 'win');
+});
+
+test('a confused user that hits itself does not self-destruct', () => {
+  const s = stageBattle(); const c = find(s, 'ally-chimchar'); c.confusion = 2; c.hp = 999; c.maxHp = 999;
+  const r = applyMove(s, 'ally-chimchar', 'self-destruct', { self: true }, rs([0.4]));
+  assert.equal(r.blocked, 'confusion');
+  assert.ok(find(s, 'ally-chimchar'));
+});
+
+test('single-target results keep top-level fields', () => {
+  const s = stageBattle(); find(s, 'enemy-riolu').hp = 999;
+  const r = applyMove(s, 'ally-chimchar', 'scratch', 'enemy-riolu', () => 0.5);
+  assert.equal(r.hits.length, 1);
+  assert.deepEqual([r.hit, r.damage, r.fainted], [r.hits[0].hit, r.hits[0].damage, false]);
 });
