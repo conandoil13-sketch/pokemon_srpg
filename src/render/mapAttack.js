@@ -201,7 +201,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup }) {
 // 공격기 (단일·범위 공통). defenders: 맞기 전 대상들, aim: 조준 (탄 끝점 계산용)
 const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
-function createAttack({ attacker, defender, defenders: ds, move, result, hpBefore, lookup, aim }) {
+function createAttack({ attacker, defender, defenders: ds, move, result, hpBefore, lookup, aim, endPt: givenEnd }) {
   const defenders = ds ?? (defender ? [defender] : []);
   const hits = result.hits ?? (defender ? [{ unitId: defender.id, ...result, hpBefore }] : []);
   const hitOf = (u) => hits.find((h) => h.unitId === u.id);
@@ -216,8 +216,8 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const defDir = (d) => dirFromDelta(attacker.x - d.x, attacker.y - d.y);
   // 탄 끝점: 단일·착탄은 대상/착탄 칸, 직선은 끝 칸, 부채꼴·주변은 탄 없음
   const shapeType = move.shape?.type ?? 'single';
-  const endPt = shapeType === 'line' ? { x: attacker.x + VEC[aim.dir][0] * (move.shape.length ?? 3), y: attacker.y + VEC[aim.dir][1] * (move.shape.length ?? 3) }
-    : shapeType === 'blast' ? aim : shapeType === 'single' ? defenders[0] : null;
+  const endPt = givenEnd ?? (shapeType === 'line' ? { x: attacker.x + VEC[aim.dir][0] * (move.shape.length ?? 3), y: attacker.y + VEC[aim.dir][1] * (move.shape.length ?? 3) }
+    : shapeType === 'blast' ? aim : shapeType === 'single' ? defenders[0] : null);
   const travel = special && endPt && (shapeType !== 'single' || defenders[0]);
   const lunge = !special && !hasPmd(attacker.species);
   const many = defenders.length >= 2;

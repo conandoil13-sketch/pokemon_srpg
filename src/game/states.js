@@ -258,7 +258,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (pt) facing[attacker.id] = dirFromDelta(pt.x - attacker.x, pt.y - attacker.y);
       for (const d of defenders) facing[d.id] = dirFromDelta(attacker.x - d.x, attacker.y - d.y);
     }
-    anim = createAttackAnim({ attacker, defenders: result.blocked ? [] : defenders, move: mv, result, lookup, aim: a });
+    const lineEnd = mv.shape?.type === 'line' ? tilesOf(st, attacker, mv, a).at(-1) ?? { x: attacker.x, y: attacker.y } : null; // 벽·가장자리에서 멈춘 끝 칸
+    anim = createAttackAnim({ attacker, defenders: result.blocked ? [] : defenders, move: mv, result, lookup, aim: a, endPt: lineEnd });
     aims = null;
     animThen = then;
     focus = result.blocked || defenders.length !== 1 ? attacker : defenders[0];
@@ -422,8 +423,14 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
             return;
           }
           if (tile && (ev.type === 'cursor' || ev.type === 'click')) {
-            const i = aims.findIndex((a) => tilesOf(st, sel, MOVES[move], a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y));
-            if (i >= 0) { aIdx = i; cursor = aimPoint(curAim()); if (ev.type === 'click') fireAim(); }
+            // 그 칸이 중심인 조준 → 지금 조준이 그 칸을 덮으면 유지 → 그 칸을 덮는 첫 조준
+            const covers = (a) => tilesOf(st, sel, MOVES[move], a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y);
+            const centred = aims.findIndex((a) => { const p = aimPoint(a); return p.x === tile.x && p.y === tile.y; });
+            const i = centred >= 0 ? centred : covers(curAim()) ? aIdx : aims.findIndex(covers);
+            if (i < 0) return;
+            const same = i === aIdx;
+            aIdx = i; cursor = aimPoint(curAim());
+            if (ev.type === 'click' && same) fireAim(); // 다른 조준을 누르면 먼저 고르기만
           }
           return;
         }

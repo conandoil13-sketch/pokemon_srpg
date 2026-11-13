@@ -309,3 +309,16 @@ test('shape labels', () => {
   assert.deepEqual(['tackle', 'shadow-ball', 'hydro-pump', 'heat-wave', 'earthquake', 'fire-blast'].map((k) => shapeLabel(MV2[k])),
     ['단일 1', '단일 2~3', '직선 3', '앞 부채꼴', '주변 (아군도)', '착탄 2~3 십자']);
 });
+
+test('pointing at a tile picks the aim centred there, a click on another aim only selects it', () => {
+  const { game } = setupWith(['fire-blast'], { 'enemy-riolu': [5, 5], 'enemy-gible': [4, 4] });
+  game.handle({ type: 'confirm' });
+  const cam = game.camera, at = (x, y, type) => ({ type, px: x * 24 + 12 - Math.round(cam.x), py: y * 24 + 12 - Math.round(cam.y) });
+  game.handle(at(5, 5, 'cursor'));
+  assert.deepEqual(game.aim, { x: 5, y: 5 });
+  game.handle(at(4, 4, 'click'));
+  assert.equal(game.mode, 'target');
+  assert.deepEqual(game.aim, { x: 4, y: 4 });
+  game.handle(at(4, 4, 'click'));
+  assert.equal(game.mode, 'anim');
+});

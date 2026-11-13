@@ -209,3 +209,11 @@ test('planning one enemy stays fast', () => {
   planEnemyAction(state(16, 12, [foe, ...allies]), foe);
   assert.ok(performance.now() - t0 < 50, `${performance.now() - t0}ms`);
 });
+
+test('no area move whose net effect hurts its own side', () => {
+  const foe = mkm('rhydon', 'enemy', 2, 0, ['earthquake']);
+  const mate = mkm('pikachu', 'enemy', 1, 0, ['tackle']);
+  const ally = mkm('golem', 'ally', 3, 0, ['tackle']); ally.hp = ally.maxHp = 999;
+  const s = { grid: ['#...#'], width: 5, height: 1, units: [foe, mate, ally], phase: 'enemy', turn: 1, result: null };
+  assert.equal(planEnemyAction(s, foe).attack, null);
+});

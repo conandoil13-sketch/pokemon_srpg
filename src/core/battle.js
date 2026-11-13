@@ -91,10 +91,10 @@ function awardShare(state, defender) {
 
 // 기절 처리 공통. by: 쓰러뜨린 유닛(없으면 상태 데미지·자해). reward false: 보상 없음(자폭)
 // 같은 편끼리 쓰러뜨리면 경험치·코인 없음 (awardExp 는 아군→적만 지급)
-function knockOut(state, d, by, { reward = true } = {}) {
+function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   state.units = state.units.filter((u) => u !== d);
   let expGained = {};
-  if (by) expGained = awardExp(state, by, d);
+  if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
   else if (reward) awardShare(state, d);
   if (reward && d.side === 'enemy' && (!by || by.side === 'ally')) state.log.coins += 3 + Math.floor(d.level / 3);
   if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
@@ -167,14 +167,14 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const spread = targets.length >= 2 ? 0.75 : 1;
   const roll = (chance) => !chance || rng() * 100 < chance; // 확률 0 = 100%
-  const hits = [], expGained = {};
+  const hits = [], expGained = {}, knocked = [];
   let anyLanded = false;
   for (const d of targets) {
     const hpBefore = d.hp;
     const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread });
     d.hp = Math.max(0, d.hp - r.damage);
     const fainted = d.hp === 0;
-    if (fainted) for (const [sp, n] of Object.entries(knockOut(state, d, a))) expGained[sp] = (expGained[sp] ?? 0) + n;
+    if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
     else if (move.type === 'fire' && r.damage > 0 && d.status === 'freeze') { cure(d); thawed.push(d.id); } // 불꽃 공격에 맞으면 녹는다
     // 대상 부가효과: 맞았고 면역이 아니고 버텼을 때
     const landed = r.hit && r.typeMult > 0;
@@ -183,6 +183,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
     if (landed && !fainted && move.ailment && roll(move.ailmentChance)) ail(d);
     hits.push({ unitId: d.id, ...r, fainted, hpBefore });
   }
+  // 경험치는 공격이 끝난 뒤 살아 있는 아군 기준 (목록 순서에 따라 달라지지 않게)
+  for (const d of knocked) for (const [sp, n] of Object.entries(awardExp(state, a, d))) expGained[sp] = (expGained[sp] ?? 0) + n;
   // 사용자 부가효과(인파이트류): 한 명이라도 맞으면 한 번
   if (anyLanded && move.effectKind === 'damage-raise' && move.statChanges?.length && roll(move.statChance)) changeStats(a, move.statChanges, stageChanges);
   // 자폭: 빗나가도 쓴 쪽은 기절, 보상 없음

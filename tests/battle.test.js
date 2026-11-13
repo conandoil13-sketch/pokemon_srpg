@@ -451,3 +451,13 @@ test('single-target results keep top-level fields', () => {
   assert.equal(r.hits.length, 1);
   assert.deepEqual([r.hit, r.damage, r.fainted], [r.hits[0].hit, r.hits[0].damage, false]);
 });
+
+test('exp shares go to allies still standing after the whole attack', () => {
+  const s = quakeBattle();
+  const p = find(s, 'ally-piplup'); p.hp = 1;
+  s.units = [...s.units.filter((u) => u !== p), p]; // 팽도리를 목록 끝으로 (리오르보다 뒤)
+  find(s, 'enemy-riolu').hp = 1;
+  applyMove(s, 'ally-chimchar', 'earthquake', { self: true }, () => 0.5);
+  assert.equal(s.log.exp.piplup, undefined);
+  assert.ok(s.log.exp.chimchar > 0);
+});

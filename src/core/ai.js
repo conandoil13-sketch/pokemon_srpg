@@ -25,14 +25,15 @@ function aimScore(state, unit, ghost, move, aim, foes) {
   const sim = { ...state, units: state.units.map((u) => (u === unit ? ghost : u)) };
   const hit = unitsHit(sim, ghost, move, aim);
   const spread = hit.length >= 2 ? 0.75 : 1;
-  let score = 0, enemies = 0, kos = 0;
+  let score = 0, enemies = 0, kos = 0, mates = 0;
   for (const t of hit) {
     const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread);
     const ko = e >= t.hp;
     if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0); }
-    else score -= e * FRIENDLY_WEIGHT + (ko ? KO_BONUS : 0);
+    else { mates++; score -= e * FRIENDLY_WEIGHT + (ko ? KO_BONUS : 0); }
   }
   if (!enemies) return null;
+  if (mates && score <= 0) return null; // 같은 편을 휘말려 손해면 쓰지 않는다
   if (SELF_KO.includes(move.id)) {
     const sig = SIGNATURE_MOVES[unit.species] === move.id;
     if (!sig && !kos) return null; // 신중: 하나라도 쓰러뜨릴 때만
