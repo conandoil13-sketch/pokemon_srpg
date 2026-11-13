@@ -173,3 +173,23 @@ test('town NPCs are the party companions (everyone but the leader)', () => {
   // 동료가 없으면 NPC 도 없음
   assert.equal(createTown({ onSortie() {}, companions: [] }).objects.filter((o) => o.kind === 'npc').length, 0);
 });
+
+test('party office: sortie screen toggles members and explains refusals', async () => {
+  const { createParty } = await import('../src/game/party.js');
+  const { newMember } = await import('../src/core/progress.js');
+  const game = newGame();
+  game.party.push(newMember('pidgey', 8));
+  const p = createParty({ game, onBack() {}, onEvolve() {} });
+  p.handle({ type: 'confirm' });               // 출전 멤버 바꾸기
+  assert.equal(p.mode, 'sortie');
+  for (let i = 0; i < 4; i++) p.handle({ type: 'dir', dx: 0, dy: 1 }); // pidgey (5번째 동료)
+  p.handle({ type: 'confirm' });
+  assert.equal(p.mode, 'msg');                 // 꽉 찼다
+  p.handle({ type: 'confirm' });
+  assert.equal(p.mode, 'sortie');
+  p.handle({ type: 'dir', dx: 0, dy: -1 });     // shinx
+  p.handle({ type: 'confirm' });               // 빼기
+  p.handle({ type: 'dir', dx: 0, dy: 1 });      // pidgey
+  p.handle({ type: 'confirm' });               // 넣기
+  assert.deepEqual(game.sortie, ['chimchar', 'piplup', 'turtwig', 'pidgey']);
+});

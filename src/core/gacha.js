@@ -1,6 +1,7 @@
 // 뽑기 (순수, rng 주입): 1단계 포켓몬, 계열 최종형 종족값으로 희귀도, 같은 계열이 있으면 결정
 import { SPECIES } from '../data/species.js';
 import { newMember } from './progress.js';
+import { deployed } from './roster.js';
 
 export const GACHA_COST = 100;
 export const RARITY = [{ id: 'common', weight: 70 }, { id: 'rare', weight: 25 }, { id: 'epic', weight: 5 }];
@@ -39,8 +40,8 @@ export function lineRoot(key) {
 
 // 합류 레벨: 출전 동료 평균 - 2 (최소 5). 출전 정보가 없으면 메타몽 외 파티 평균
 export function joinLevel(game) {
-  const deployed = game.party.filter((m) => (game.sortie ?? []).includes(m.species));
-  const pool = deployed.length ? deployed : game.party.filter((m) => m.species !== 'ditto');
+  const out = game.sortie ? deployed(game).filter((m) => m.species !== 'ditto') : [];
+  const pool = out.length ? out : game.party.filter((m) => m.species !== 'ditto');
   if (!pool.length) return 5;
   const avg = pool.reduce((s, m) => s + m.level, 0) / pool.length;
   return Math.max(5, Math.round(avg) - 2);
