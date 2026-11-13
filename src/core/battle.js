@@ -6,6 +6,7 @@ import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage } from './damage.js';
 import { unitsHit } from './shapes.js';
+import { phaseEndWeather } from './weather.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT } from './stages.js';
 import { statsAt, expYield } from './stats.js';
@@ -56,6 +57,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
+    weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
   };
 }
 
@@ -138,7 +140,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   a.moved = true;
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
-  const ail = (t) => { if (move.ailment) statusChanges.push({ unitId: t.id, ailment: move.ailment, ...inflict(t, move.ailment, rng, move) }); };
+  const ail = (t) => { if (move.ailment) statusChanges.push({ unitId: t.id, ailment: move.ailment, ...inflict(t, move.ailment, rng, move, state.weather) }); };
 
   // 마비 25% 실패 → 혼란 50% 자해 (기술은 나가지 않고 행동 종료)
   const blocked = checkAction(a, rng);
@@ -158,7 +160,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     const missed = [];
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
-      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x]))) { missed.push(t.id); continue; }
+      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], state.weather))) { missed.push(t.id); continue; }
       changeStats(t, move.statChanges ?? [], stageChanges);
       ail(t);
     }
@@ -171,7 +173,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   let anyLanded = false;
   for (const d of targets) {
     const hpBefore = d.hp;
-    const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread });
+    const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread, weather: state.weather });
     d.hp = Math.max(0, d.hp - r.damage);
     const fainted = d.hp === 0;
     if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
@@ -230,6 +232,14 @@ export function endPhase(state, rng = Math.random) {
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
     if (r.confusionEnded) events.push({ unitId: u.id, kind: 'confusionEnd' });
+    // 모래바람·싸라기눈 피해 (상태 피해 다음, 보상도 같은 규칙)
+    const w = phaseEndWeather(u, state.weather);
+    if (w) {
+      const hpBefore = u.hp;
+      u.hp = Math.max(0, u.hp - w.damage);
+      events.push({ unitId: u.id, kind: w.kind, damage: w.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
+      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); }
+    }
   }
   checkResult(state);
   state.log.expired = [];
@@ -245,6 +255,7 @@ export function endPhase(state, rng = Math.random) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false;
     if (state.result) continue;
+    if (state.weather === 'sun' && u.status === 'freeze') { cure(u); events.push({ unitId: u.id, kind: 'thawed' }); } // 쾌청: 녹는다
     const st = phaseStart(u, rng);
     if (st.event) events.push({ unitId: u.id, kind: st.event });
     if (st.skip) { u.moved = true; u.acted = true; }

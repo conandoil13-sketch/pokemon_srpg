@@ -402,3 +402,68 @@ test('every chest item opens without freezing (coin pouch too)', () => {
     assert.equal(game.mode, 'action', item);
   }
 });
+
+// ---- 날씨 화면 ----
+import { drawWeather } from '../src/render/weatherFx.js';
+test('weather shows in the phase banner', () => {
+  const game = createGame({ rng: createRng(1), map: { ...MAP, weather: 'rain' } });
+  assert.match(game.bannerSub ?? '', /비/);
+  const plain = createGame({ rng: createRng(1) });
+  assert.doesNotMatch(plain.bannerSub ?? '', /비|쾌청|안개/);
+});
+
+test('fog hides far enemies until an ally comes within 4 tiles', () => {
+  const game = createGame({ rng: createRng(1), map: { ...MAP, weather: 'fog' } });
+  const st = game.state;
+  const e = st.units.find((u) => u.id === 'enemy-riolu');
+  for (const a of st.units.filter((u) => u.side === 'ally')) { a.x = 0; a.y = 0; }
+  e.x = 10; e.y = 5;
+  assert.ok(game.hiddenIds.has('enemy-riolu'));
+  const c = st.units.find((u) => u.id === 'ally-chimchar'); c.x = 7; c.y = 5;
+  assert.ok(!game.hiddenIds.has('enemy-riolu'));
+});
+
+test('weather damage notice text', () => {
+  const u = { id: 'a', species: 'chimchar', side: 'ally', x: 1, y: 1 };
+  const out = phaseNotices([{ unitId: 'a', kind: 'sand', damage: 3, hpBefore: 20, maxHp: 40, x: 1, y: 1 }], [], () => u);
+  assert.deepEqual(out[0].lines, ['불꽃숭이는 모래바람에 휘말렸다!']);
+  const out2 = phaseNotices([{ unitId: 'a', kind: 'hail', damage: 3, hpBefore: 20, maxHp: 40, x: 1, y: 1 }], [], () => u);
+  assert.deepEqual(out2[0].lines, ['불꽃숭이는 싸라기눈을 맞았다!']);
+});
+
+test('no weather draws nothing', () => {
+  assert.equal(drawWeather(null, null, 0), false);
+});
+
+// ---- 날씨 리뷰 수정 ----
+import { forecastFor } from '../src/game/states.js';
+import { makeUnit as mkG } from '../src/core/battle.js';
+test('forecast numbers include the weather', () => {
+  const a = mkG({ species: 'piplup', side: 'ally', x: 0, y: 0, level: 30, moves: ['water-gun'] });
+  const d = mkG({ species: 'pikachu', side: 'enemy', x: 1, y: 0, level: 30, moves: ['tackle'] });
+  const dry = forecastFor(a, d, MV2['water-gun'], '.', null), wet = forecastFor(a, d, MV2['water-gun'], '.', 'rain');
+  assert.ok(wet.max > dry.max);
+  assert.equal(forecastFor(a, d, MV2.tackle, '.', 'fog').hit, forecastFor(a, d, MV2.tackle, '.', null).hit - 10);
+  assert.equal(forecastFor(a, d, MV2.thunder, '"', 'rain').hit, 100);
+});
+
+test('a hidden enemy in fog stays silent (no self-buff that would name it)', () => {
+  const game = createGame({ rng: createRng(1), map: { ...MAP, weather: 'fog' } });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  const st = game.state;
+  st.units = st.units.filter((u) => u.side === 'ally' || u.id === 'enemy-bronzor');
+  for (const a of st.units.filter((u) => u.side === 'ally')) { a.x = 0; a.y = a.y; }
+  const b = st.units.find((u) => u.id === 'enemy-bronzor'); b.x = 15; b.y = 11; b.moves = ['defense-curl'];
+  game.handle({ type: 'endTurn' });
+  assert.ok(advance(game, (g) => g.state.turn >= 2 && g.mode === 'idle'));
+  assert.equal(b.stages.def, 0);
+});
+
+test('no lingering status effects on units hidden in fog', () => {
+  const game = createGame({ rng: createRng(1), map: { ...MAP, weather: 'fog' } });
+  const st = game.state;
+  for (const a of st.units.filter((u) => u.side === 'ally')) { a.x = 0; a.y = 0; }
+  const e = st.units.find((u) => u.id === 'enemy-riolu'); e.x = 12; e.y = 5; e.status = 'burn';
+  game.update(0.02);
+  assert.equal(game.fx.following, 0);
+});

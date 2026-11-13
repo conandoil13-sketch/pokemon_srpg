@@ -52,3 +52,8 @@ test('coverage', () => {
   assert.deepEqual(coverage(mv({ type: 'cone' })), [1, 2]);
   assert.deepEqual(coverage(mv({ type: 'around', radius: 1 })), [1, 2]);
 });
+
+test('line/cone aimed at a unit fall back to the direction of that unit', () => {
+  const e = U('e', 'enemy', 4, 7);
+  assert.deepEqual(key(tilesOf(S([me, e]), me, mv({ type: 'line', length: 3 }), { unitId: 'e' })), ['4,5', '4,6', '4,7']);
+});

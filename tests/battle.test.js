@@ -461,3 +461,33 @@ test('exp shares go to allies still standing after the whole attack', () => {
   assert.equal(s.log.exp.piplup, undefined);
   assert.ok(s.log.exp.chimchar > 0);
 });
+
+// ---- 날씨 ----
+test('sandstorm chips non rock/ground/steel units at their phase end', () => {
+  const s = stageBattle(); s.weather = 'sand';
+  const c = find(s, 'ally-chimchar'), hp = c.hp;
+  endPhase(s, rs([]));
+  assert.equal(c.hp, hp - Math.max(1, Math.floor(c.maxHp / 16)));
+  assert.ok(s.log.statusEvents.some((e) => e.unitId === 'ally-chimchar' && e.kind === 'sand'));
+});
+
+test('last enemy falling to hail wins the floor and pays the shared reward', () => {
+  const s = stageBattle(); s.weather = 'hail';
+  s.units = s.units.filter((u) => u.side === 'ally' || u.id === 'enemy-riolu');
+  find(s, 'enemy-riolu').hp = 1;
+  endPhase(s, rs([])); endPhase(s, rs([]));
+  assert.equal(s.result, 'win');
+  assert.ok(s.log.coins > 0);
+});
+
+test('harsh sun blocks freezing and thaws frozen units at their phase start', () => {
+  const s = stageBattle(); s.weather = 'sun';
+  const t = find(s, 'enemy-riolu'); t.hp = 999;
+  const r = applyMove(s, 'ally-chimchar', 'ice-beam', 'enemy-riolu', rs([0.5, 0.99, 0, 0.01]));
+  assert.equal(t.status, null);
+  assert.equal(r.statusChanges[0]?.reason, 'weather');
+  t.status = 'freeze'; t.statusTurns = 3;
+  endPhase(s, rs([0.9])); // 적 페이즈 시작
+  assert.equal(t.status, null);
+  assert.ok(s.log.statusEvents.some((e) => e.unitId === 'enemy-riolu' && e.kind === 'thawed'));
+});

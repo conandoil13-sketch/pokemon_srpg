@@ -6,6 +6,7 @@ import { wrapMessage } from '../render/mapAttack.js';
 import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
+import { isHidden, WEATHER_KO } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
@@ -18,6 +19,7 @@ import { drawText, textWidth } from '../render/font.js';
 import { W, H } from '../render/screen.js';
 import { createAttackAnim } from './attackAnim.js';
 import { createFxManager } from '../render/fx.js';
+import { drawWeather } from '../render/weatherFx.js';
 
 const STEP = 0.11; // 타일당 이동 시간(초)
 const BANNER = 1.4;
@@ -26,6 +28,13 @@ const BLUE = 'rgba(64,128,248,0.45)', RED = 'rgba(248,64,64,0.38)';
 const MARGIN = 2; // 카메라: 커서를 화면 가장자리에서 최소 이 칸만큼 안쪽에
 
 const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
+
+// 예상 창 숫자: 명중·최소·최대 데미지 (날씨·다수 명중 반영)
+export function forecastFor(a, d, mv, tile, weather = null, spread = 1) {
+  const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread, weather });
+  const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread, weather });
+  return { hit: hitChance(a, d, mv, tile, weather), min: min.damage, max: max.damage, typeMult: min.typeMult };
+}
 
 import { josa } from '../data/text.js';
 
@@ -45,6 +54,7 @@ export function ailmentNote(target, mv) {
 const STATUS_LINE = {
   poison: '독의 데미지를 입었다!', toxic: '독의 데미지를 입었다!', burn: '화상 데미지를 입었다!', fainted: '쓰러졌다!',
   asleep: '쿨쿨 잠들어 있다', woke: '눈을 떴다!', frozen: '얼어 버려서 움직일 수 없다!',
+  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!',
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 
@@ -77,7 +87,7 @@ const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
 export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
-  let aims = null, aIdx = 0; // 공격기 조준 후보와 현재 선택
+  let aims = null, aIdx = 0, enemyUnseen = new Set(); // 공격기 조준 후보와 현재 선택
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0, everyone;
   let notice = null; // { lines, then } 대사 후 다음 단계
@@ -129,6 +139,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max);
   }
 
+  // 안개: 지금 아군 누구에게서도 FOG_SIGHT 이상 떨어진 적 (실시간)
+  const hiddenIds = () => new Set(st.weather === 'fog' ? st.units.filter((u) => u.side === 'enemy' && isHidden(u, allyUnits())).map((u) => u.id) : []);
+
   // 공격기: 적이 하나 이상 맞는 조준만
   const attackAims = (unit, mv) => aimsOf(st, unit, mv).filter((a) => unitsHit(st, unit, mv, a).some((u) => u.side !== unit.side));
   const curAim = () => (aims ? aims[aIdx] : null);
@@ -178,7 +191,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 대사 뒤: 결과가 났으면 결과 화면, 아군이 전원 쉬면(잠듦·얼음) 바로 상대 턴
-  const playerPhase = (lines = []) => showBanner('아군 턴', floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`, '#4080f8',
+  const weatherTag = () => (st.weather ? ` · ${WEATHER_KO[st.weather]}` : '');
+  const playerPhase = (lines = []) => showBanner('아군 턴', (floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`) + weatherTag(), '#4080f8',
     () => noticeChain(lines, () => {
       focus = null;
       if (st.result) { mode = 'result'; return; }
@@ -194,6 +208,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     showBanner('상대 턴', null, '#f84040', () => noticeChain(lines, () => {
       if (st.result) { mode = 'result'; return; }
       enemyQueue = enemyTurnOrder(st).map((u) => u.id);
+      // 안개: 적 차례 시작 때 적 누구에게서도 먼 아군은 이번 차례 안 보인다
+      enemyUnseen = st.weather === 'fog' ? new Set(allyUnits().filter((a) => isHidden(a, st.units.filter((u) => u.side === 'enemy'))).map((a) => a.id)) : new Set();
       mode = 'enemy';
       nextEnemy();
     }));
@@ -211,7 +227,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     const u = st.units.find((o) => o.id === id);
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
-    const plan = planEnemyAction(st, u);
+    const plan = planEnemyAction(st, u, { unseen: enemyUnseen });
+    // 안개: 이동한 뒤에도 안개 속이면 기술을 쓰지 않는다 (대사로 정체가 드러나지 않게)
+    if (st.weather === 'fog' && plan.attack && isHidden(plan.moveTo, allyUnits())) plan.attack = null;
     focus = u;
     cursor = { x: u.x, y: u.y };
     pause = { t: 0.35, fn: () => {
@@ -511,8 +529,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 상태이상 지속 표시: 살아 있는 유닛의 상태와 맞춘다 (없어진 건 멈추고, 새로 생긴 건 붙인다)
   function syncStatusFx() {
-    const wanted = new Map();
+    const wanted = new Map(), hidden = hiddenIds();
     for (const u of st.units) {
+      if (hidden.has(u.id)) continue; // 안개 속 유닛에는 상태 표시를 그리지 않는다
       const kinds = [u.status, u.confusion > 0 ? 'confusion' : null].filter(Boolean);
       for (const k of kinds) {
         const loop = fxForAilment(k).loop;
@@ -554,6 +573,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function drawUnits(ctx) {
+    const hidden = hiddenIds();
     const list = [...st.units];
     for (const u of anim?.extraUnits ?? (anim?.defender ? [anim.defender] : [])) if (u && !list.includes(u)) list.push(u); // 기절 연출 중
     list.sort((a, b) => unitWorld(a).y - unitWorld(b).y);
@@ -571,6 +591,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const a = pose?.anim ?? (walking ? 'Walk' : resting && sleepAnim ? 'Sleep' : 'Idle');
       const t = pose ? pose.t : walking ? walk.t : resting && !sleepAnim ? 0 : clock;
       const restFilter = resting && !grey && !sleepAnim ? (u.status === 'freeze' ? 'grayscale(0.6) brightness(1.25)' : 'grayscale(1) brightness(0.85)') : null;
+      if (hidden.has(u.id)) { // 안개 속 적: 어두운 실루엣만
+        ctx.save(); ctx.globalAlpha = 0.55; ctx.filter = 'brightness(0)';
+        drawUnitSprite(ctx, u.species, 'Idle', facing[u.id], clock, cx, cy, true);
+        ctx.restore();
+        continue;
+      }
       if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.85)'; }
       if (restFilter) { ctx.save(); ctx.filter = restFilter; }
       if (pose?.flash) { ctx.save(); ctx.filter = 'brightness(3)'; }
@@ -595,11 +621,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     list.slice(0, 3).forEach((d, i) => {
       const tile = st.grid[d.y][d.x], ry = y + 20 + i * 13;
-      const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread });
-      const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread });
+      const fc = forecastFor(a, d, mv, tile, st.weather, spread);
+      const min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
       const mine = d.side === a.side;
       drawText(ctx, `${spec(d).name}${mine ? ' (아군)' : ''}`, 10, ry, mine ? '#d03020' : '#383838', null, 'small');
-      drawText(ctx, min.typeMult === 0 ? '효과 없음' : `${hitChance(a, d, mv, tile)}%  ${min.damage}~${max.damage}`, 110, ry, '#383838', null, 'small');
+      drawText(ctx, min.typeMult === 0 ? '효과 없음' : `${fc.hit}%  ${min.damage}~${max.damage}`, 110, ry, '#383838', null, 'small');
       if (min.typeMult && max.damage >= d.hp) drawText(ctx, '기절?', 206, ry, '#e03030', null, 'small');
     });
     if (list.length > 3) drawText(ctx, `외 ${list.length - 3}마리`, 10, y + 20 + 3 * 13, '#707070', null, 'small');
@@ -609,9 +635,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function drawForecast(ctx, a, d, moveId) {
     const mv = MOVES[moveId];
     const tile = st.grid[d.y][d.x];
-    const hit = hitChance(a, d, mv, tile);
-    const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile });
-    const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile });
+    const fc = forecastFor(a, d, mv, tile, st.weather);
+    const hit = fc.hit, min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
     const y = (d.y * TILE - cam.y) > H / 2 ? 2 : H - 54;
     ui.drawWindow(ctx, 2, y, W - 4, 52);
     drawText(ctx, `${spec(a).name} → ${spec(d).name}`, 10, y + 5);
@@ -637,7 +662,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, mv.name, 10, y + 20);
     drawText(ctx, effectSummary(mv), 92, y + 20, '#5848a0');
     const foes = (one ? [one] : list).filter((u) => u.side !== a.side);
-    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x])}%`, 10, y + 35);
+    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x], st.weather)}%`, 10, y + 35);
     const note = one ? ailmentNote(one, mv) : null;
     if (note) drawText(ctx, note, W - 12 - textWidth(note), y + 35, '#808080');
     else if (!one) drawText(ctx, list.length ? `대상 ${list.length}마리` : '범위 안에 대상이 없다', 10, y + 35, list.length ? '#383838' : '#a0a0a0');
@@ -710,6 +735,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     fxm.draw(ctx, 'back', { x: cx, y: cy });
     drawUnits(ctx);
     fxm.draw(ctx, 'front', { x: cx, y: cy });
+    ctx.save(); ctx.translate(cx, cy); drawWeather(ctx, st.weather, time); ctx.restore(); // 날씨: 유닛·이펙트 위, 커서·HP 바·숫자·UI 아래
     if (['idle', 'selected', 'target'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
     if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);
@@ -718,7 +744,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const onLeft = cursor.x * TILE - cx < W / 2;
     if (mode === 'idle' || mode === 'selected' || mode === 'enemy') {
       const u = unitAt(st, cursor.x, cursor.y);
-      if (u) ui.drawUnitInfo(ctx, u, onLeft);
+      if (u) ui.drawUnitInfo(ctx, u, onLeft, { hidden: hiddenIds().has(u.id) });
     }
     if (mode === 'action' || mode === 'endMenu') {
       ui.drawMenu(ctx, menu, menuSel, menuBox.x, menuBox.y);
@@ -750,5 +776,5 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   playerPhase();
 
-  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get fx() { return fxm; }, get shake() { return anim?.shake ?? 0; }, get camera() { return { ...cam }; } };
+  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get fx() { return fxm; }, get bannerSub() { return banner?.sub ?? null; }, get hiddenIds() { return hiddenIds(); }, get shake() { return anim?.shake ?? 0; }, get camera() { return { ...cam }; } };
 }

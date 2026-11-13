@@ -7,8 +7,17 @@ const inMap = (state, x, y) => x >= 0 && y >= 0 && x < state.width && y < state.
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const aimRangeOf = (move) => move.aimRange ?? move.shape?.range ?? move.range ?? [1, 1];
 
+// 직선·부채꼴에 대상 유닛으로 조준하면(옛 호출 방식) 그 유닛 쪽 방향으로 바꾼다
+function dirToward(state, user, aim) {
+  const u = aim.unitId ? state.units.find((o) => o.id === aim.unitId) : aim.x !== undefined ? aim : null;
+  if (!u) return 'right';
+  const dx = u.x - user.x, dy = u.y - user.y;
+  return Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'up' : 'down';
+}
+
 export function tilesOf(state, user, move, aim) {
   const s = move.shape ?? { type: 'single' };
+  if ((s.type === 'line' || s.type === 'cone') && !aim.dir) aim = { dir: dirToward(state, user, aim) };
   const keep = (ts) => ts.filter((t) => inMap(state, t.x, t.y));
   switch (s.type) {
     case 'line': {
