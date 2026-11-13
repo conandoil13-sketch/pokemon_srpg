@@ -117,7 +117,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function enemyPhase() {
     sel = null;
-    endPhase(st);
+    endPhase(st, rng);
     const expired = expiryLines();
     showBanner('상대 턴', null, '#f84040', () => noticeChain(expired, () => {
       enemyQueue = enemyTurnOrder(st).map((u) => u.id);
@@ -130,7 +130,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (st.result) { mode = 'result'; return; }
     const id = enemyQueue.shift();
     if (!id) {
-      endPhase(st);
+      endPhase(st, rng);
       cursor = { ...(allyUnits()[0] ?? cursor) };
       playerPhase(expiryLines());
       return;
