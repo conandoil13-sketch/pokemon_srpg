@@ -61,6 +61,18 @@ function gen4Types(pokemon) {
   return [...types].sort((a, b) => a.slot - b.slot).map((t) => t.type.name);
 }
 
+// 특성 후보 (4세대 기준): past_abilities 중 4세대 이상인 가장 이른 기록으로 슬롯을 되돌리고, 숨겨진 특성은 뺀다
+function gen4AbilityCandidates(pokemon) {
+  let list = pokemon.abilities.filter((a) => !a.is_hidden);
+  const past = (pokemon.past_abilities ?? []).filter((p) => genNum(p.generation.name) >= GENERATION).sort((a, b) => genNum(a.generation.name) - genNum(b.generation.name));
+  if (past.length) for (const pa of past[0].abilities) {
+    if (pa.is_hidden) continue;
+    list = list.filter((a) => a.slot !== pa.slot);
+    if (pa.ability) list.push(pa);
+  }
+  return list.sort((a, b) => a.slot - b.slot).map((a) => a.ability.name);
+}
+
 const EXTRA_KEYS = ['held_item', 'known_move', 'known_move_type', 'location', 'min_affection', 'min_beauty', 'party_species', 'party_type', 'relative_physical_stats', 'trade_species', 'gender'];
 const toDetail = (x) => ({
   trigger: x.trigger.name,
@@ -126,6 +138,7 @@ async function main() {
       baseExp: pk.base_experience ?? 50, growth: sp.growth_rate.name, learnset,
       stage: evo.stage, bst: Object.values(base).reduce((a, b) => a + b, 0),
       legendary: !!(sp.is_legendary || sp.is_mythical), evolutions: evo.evolutions,
+      abilities: gen4AbilityCandidates(pk), // 아래에서 4세대 이하 특성만 남긴다
     };
   }));
 
@@ -160,9 +173,26 @@ async function main() {
     };
   }));
 
+  // 특성: 4세대까지 나온 것만 (나중 세대 특성은 버림, 다 버려지면 첫 후보 유지)
+  const abilities = {};
+  const abilityNames = new Set(Object.values(species).flatMap((s) => s.abilities));
+  const abilityGen = {};
+  await Promise.all([...abilityNames].map(async (name) => {
+    const ab = await get(`ability/${name}`);
+    abilityGen[name] = genNum(ab.generation.name);
+    const flavor = ab.flavor_text_entries.filter((f) => f.language.name === 'ko').at(-1)?.flavor_text;
+    const en = ab.effect_entries.find((e) => e.language.name === 'en')?.short_effect ?? '';
+    abilities[name] = { id: name, name: ko(ab.names) ?? name, desc: (flavor ?? en).replace(/\s+/g, ' ').trim() };
+  }));
+  for (const s of Object.values(species)) {
+    const ok = s.abilities.filter((a) => abilityGen[a] <= GENERATION);
+    s.abilities = ok.length ? ok : s.abilities.slice(0, 1);
+  }
+  for (const name of Object.keys(abilities)) if (abilityGen[name] > GENERATION && !Object.values(species).some((s) => s.abilities.includes(name))) delete abilities[name];
+
   // 결정적 출력 (키 정렬)
   const sorted = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
-  const body = `// 자동 생성 — node tools/fetch-pokeapi.js (PokeAPI, 1~${MAX_DEX}, 습득표 ${VERSION_GROUPS.join(' → ')}). 직접 고치지 말 것\nexport default ${JSON.stringify({ species: sorted(species), moves: sorted(moves) })};\n`;
+  const body = `// 자동 생성 — node tools/fetch-pokeapi.js (PokeAPI, 1~${MAX_DEX}, 습득표 ${VERSION_GROUPS.join(' → ')}). 직접 고치지 말 것\nexport default ${JSON.stringify({ species: sorted(species), moves: sorted(moves), abilities: sorted(abilities) })};\n`;
   await writeFile(OUT, body);
   console.log(`${Object.keys(species).length} species, ${Object.keys(moves).length} moves → ${OUT}`);
 }

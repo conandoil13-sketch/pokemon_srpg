@@ -3,6 +3,7 @@
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { weatherBlocksAilment } from './weather.js';
+import { blocksAilment, has, moveBonus, ignoresParalysisSlow } from './abilities.js';
 
 export const STATUS_KO = { paralysis: '마비', burn: '화상', poison: '독', toxic: '맹독', sleep: '잠듦', freeze: '얼음', confusion: '혼란' };
 const PRIMARY = ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze'];
@@ -18,20 +19,22 @@ export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0 });
 const types = (unit) => SPECIES[unit.species].types;
 
 // move: 거는 기술 (전기자석파처럼 기술 타입 상성으로 무효가 되는 경우)
-export function canInflict(unit, ailment, move, weather = null) {
+export function canInflict(unit, ailment, move, weather = null, { breaker = false } = {}) {
   if (weatherBlocksAilment(weather, ailment)) return { ok: false, reason: 'weather' }; // 쾌청엔 얼지 않는다
+  if (!breaker && blocksAilment(unit, ailment, weather)) return { ok: false, reason: 'ability' }; // 면역·불면·리프가드 …
   if (IMMUNE[ailment]?.some((t) => types(unit).includes(t))) return { ok: false, reason: 'immune' };
   if (move?.id === 'thunder-wave' && typeMultiplier(move.type, types(unit)) === 0) return { ok: false, reason: 'immune' };
   if (ailment === 'confusion') return unit.confusion > 0 ? { ok: false, reason: 'already' } : { ok: true };
   return unit.status ? { ok: false, reason: 'already' } : { ok: true };
 }
 
-export function inflict(unit, ailment, rng, move, weather = null) {
-  const r = canInflict(unit, ailment, move, weather);
+export function inflict(unit, ailment, rng, move, weather = null, opts = {}) {
+  const r = canInflict(unit, ailment, move, weather, opts);
   if (!r.ok) return r;
   if (ailment === 'confusion') { unit.confusion = 1 + Math.floor(rng() * 4); return r; }
   unit.status = ailment;
   unit.statusTurns = ailment === 'sleep' ? 1 + Math.floor(rng() * 3) : ailment === 'freeze' ? FREEZE_MAX : ailment === 'toxic' ? 1 : 0;
+  if (ailment === 'sleep' && has(unit, 'early-bird')) unit.statusTurns = Math.ceil(unit.statusTurns / 2); // 일찍기상
   return r;
 }
 
@@ -39,7 +42,9 @@ export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 
 export const moveBudget = (unit) => {
   const m = SPECIES[unit.species].move;
-  return unit.status === 'paralysis' ? Math.max(1, Math.floor(m / 2)) : m;
+  const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
+  if (unit.trapped) return 1; // 개미지옥·그림자밟기·자력
+  return Math.max(1, base + moveBonus(unit)); // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1
 };
 
 export const speedMultiplier = (unit) => (unit.status === 'paralysis' ? 0.5 : 1);
@@ -60,7 +65,7 @@ export function phaseStart(unit, rng) {
 // 그 편 페이즈 끝: 지속 데미지(HP 적용은 호출 측), 맹독 증가, 혼란 감소
 export function phaseEnd(unit) {
   let damage = 0, kind;
-  if (unit.status === 'poison' || unit.status === 'burn') { damage = Math.max(1, Math.floor(unit.maxHp / 8)); kind = unit.status; }
+  if (unit.status === 'poison' || unit.status === 'burn') { damage = Math.max(1, Math.floor(unit.maxHp / (unit.status === 'burn' && has(unit, 'heatproof') ? 16 : 8))); kind = unit.status; } // 내열: 화상 피해 절반
   if (unit.status === 'toxic') {
     damage = Math.max(1, Math.floor(unit.maxHp * unit.statusTurns / 16)); kind = 'toxic';
     unit.statusTurns = Math.min(TOXIC_MAX, unit.statusTurns + 1);

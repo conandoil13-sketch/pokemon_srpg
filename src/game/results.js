@@ -1,6 +1,7 @@
 // 결산 장면: 경험치 바 → 레벨업·기술 습득 메시지(잊을 기술 선택) → onDone(진화 목록)
 import { SPECIES } from '../data/species.js';
-import { applyExp } from '../core/progress.js';
+import { applyExp, abilityOf } from '../core/progress.js';
+import { ABILITIES } from '../data/abilities.js';
 import { expForLevel, levelForExp, MAX_LEVEL } from '../core/stats.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -48,6 +49,7 @@ export function createResults({ game, result, log, firstClear, onDone, members =
       ctx.fillRect(0, 0, W, H);
       const TITLE = { win: '승리!', stairs: '층 돌파!', loot: '탐험 보상', lose: '패배...' };
       ui.bigText(ctx, TITLE[result] ?? '결과', W / 2, 4, result === 'lose' ? '#f08080' : '#f8d050', '#202838');
+      if (log.pickup?.length) drawText(ctx, `픽업 +${log.pickup.length}`, 8, 4, '#90d890', null, 'small'); // 픽업·꿀모으기
       if (coins) { const c = `코인 +${coins}`; drawText(ctx, c, W - 8 - textWidth(c, 'small'), 4, '#f8d050', null, 'small'); }
       party.forEach((m, k) => {
         const y = 32 + k * 27;
@@ -56,7 +58,9 @@ export function createResults({ game, result, log, firstClear, onDone, members =
         const exp = shownExp(k);
         const lv = Math.min(levelForExp(growth, exp), MAX_LEVEL);
         drawText(ctx, nameOf(before[k].species), 12, y + 5);
-        drawText(ctx, `Lv.${lv}`, 112, y + 5);
+        drawText(ctx, `Lv.${lv}`, 112, y + 1);
+        const ab = ABILITIES[abilityOf(m)];
+        if (ab) drawText(ctx, ab.name, 112, y + 13, '#507050', null, 'small');
         const gained = (log.exp ?? {})[before[k].species];
         if (gained) drawText(ctx, `+${gained}`, W - 14 - textWidth(`+${gained}`, 'small'), y + 3, '#c08000', null, 'small');
         const lo = expForLevel(growth, lv), hi = lv >= MAX_LEVEL ? lo + 1 : expForLevel(growth, lv + 1);

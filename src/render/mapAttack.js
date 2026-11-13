@@ -131,6 +131,8 @@ function createBlockedAnim({ attacker, result, fx }) {
   const hpBefore = attacker.hp + (result.selfHit?.damage ?? 0);
   const steps = result.blocked === 'paralysis'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 몸이 저려서 움직일 수 없다!`), emo: 'Pain' }]
+    : result.blocked === 'damp'
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage('습기 때문에 폭발할 수 없다!'), emo: 'Normal' }]
     : [
       { k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 혼란스러워 한다!`), emo: 'Normal' },
       { k: 'impact', d: 0.6, text: wrapMessage('영문도 모르고 자신을 공격했다!'), emo: 'Pain' },

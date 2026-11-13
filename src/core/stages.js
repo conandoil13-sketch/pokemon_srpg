@@ -1,4 +1,5 @@
 // 능력치 랭크 (순수). −6~+6, 3턴 지속 (그 유닛 편 페이즈 종료마다 −1)
+import { stageGuard, speedMult, ignoresParalysisSlow } from './abilities.js';
 export const STAT_KEYS = ['atk', 'def', 'spa', 'spd', 'spe', 'acc', 'eva'];
 export const API_STAT = { attack: 'atk', defense: 'def', 'special-attack': 'spa', 'special-defense': 'spd', speed: 'spe', accuracy: 'acc', evasion: 'eva' };
 export const STAT_KO = { atk: '공격', def: '방어', spa: '특공', spd: '특방', spe: '스피드', acc: '명중률', eva: '회피율' };
@@ -13,7 +14,8 @@ export const newStages = () => ({ stages: zeros(), turns: zeros(), layers: [] })
 export const stageMultiplier = (n) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
 
 // 마비면 스피드 ×0.5 (status.js 와 같은 규칙, 순환 import 를 피해 여기서 직접 본다)
-export const effectiveStat = (unit, key) => unit.stats[key] * stageMultiplier(unit.stages?.[key] ?? 0) * (key === 'spe' && unit.status === 'paralysis' ? 0.5 : 1);
+export const effectiveStat = (unit, key) => unit.stats[key] * stageMultiplier(unit.stages?.[key] ?? 0)
+  * (key === 'spe' ? (unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? 0.5 : 1) * speedMult(unit) : 1);
 
 export const accuracyShift = (attacker, defender) => ACC_PER_STAGE * ((attacker.stages?.acc ?? 0) - (defender.stages?.eva ?? 0));
 
@@ -27,7 +29,8 @@ function refresh(unit, key) {
 }
 
 // 반환: { key, before, after, applied } — applied 0 이면 이미 한계 (새 층 없음)
-export function applyStageChange(unit, key, change, turns = STAGE_TURNS) {
+export function applyStageChange(unit, key, change, turns = STAGE_TURNS, { fromOther = false, breaker = false } = {}) {
+  if (!breaker) change = stageGuard(unit, key, change, fromOther); // 클리어바디·괴력집게·날카로운눈·단순 (틀깨기면 무시)
   unit.stages ??= zeros();
   unit.turns ??= zeros();
   unit.layers ??= [];

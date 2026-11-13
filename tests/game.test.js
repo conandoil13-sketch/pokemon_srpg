@@ -475,3 +475,33 @@ test('expiry text: back to normal vs only part of the change', () => {
   assert.equal(text(full), '불꽃숭이의 공격이 원래대로 돌아왔다!');
   assert.equal(text(part), '불꽃숭이의 공격 변화 일부가 풀렸다!');
 });
+
+import { abilityNotices, dangerWarning } from '../src/game/states.js';
+
+test('ability events become lines: intimidate, sturdy, trace; speed boost stays quiet', () => {
+  const units = {
+    a: { id: 'a', side: 'ally', species: 'shinx', x: 1, y: 1 },
+    e: { id: 'e', side: 'enemy', species: 'geodude', x: 2, y: 1 },
+  };
+  const get = (id) => units[id];
+  const join = (n) => n.lines.join(' ');
+  const out = abilityNotices([
+    { unitId: 'a', ability: 'intimidate', target: 'e', applied: true },
+    { unitId: 'e', ability: 'sturdy' },
+    { unitId: 'a', ability: 'speed-boost' },
+    { unitId: 'a', ability: 'trace', copied: 'static' },
+  ], get);
+  assert.equal(out.length, 3);
+  assert.match(join(out[0]), /위협.*상대 꼬마돌의 공격이 떨어졌다/);
+  assert.match(join(out[1]), /옹골참으로 버텼다/);
+  assert.match(join(out[2]), /트레이스로 정전기를 복사했다/);
+  assert.deepEqual(out[1].at, { x: 2, y: 1 });
+});
+
+test('anticipation warns when an enemy has a super-effective move against the holder', () => {
+  const ally = { id: 'a', side: 'ally', species: 'croagunk', ability: 'anticipation' };
+  const foe = { id: 'e', side: 'enemy', species: 'abra', moves: ['confusion'], ability: 'synchronize' };
+  assert.match(dangerWarning(foe, [ally, foe]), /삐딱구리에게 효과 굉장/);
+  assert.equal(dangerWarning({ ...foe, moves: ['tackle'] }, [ally, foe]), null);
+  assert.equal(dangerWarning(foe, [{ ...ally, ability: 'dry-skin' }, foe]), null);
+});

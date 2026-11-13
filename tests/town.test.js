@@ -225,3 +225,28 @@ test('easter egg: talking to Turtwig 5 times gives 200 coins once', () => {
   for (let i = 0; i < 6; i++) { town.handle({ type: 'confirm' }); tick(town, 0.1); town.handle({ type: 'confirm' }); tick(town, 0.1); }
   assert.equal(gifts, 1);
 });
+
+test('party office: swap ability costs 3 line shards, refuses when short', async () => {
+  const { createParty } = await import('../src/game/party.js');
+  const { newMember, abilityOf } = await import('../src/core/progress.js');
+  const game = newGame();
+  const geo = newMember('geodude', 8);
+  game.party.push(geo);
+  let saved = 0;
+  const p = createParty({ game, onBack() {}, onEvolve() {}, onSave() { saved++; } });
+  for (let i = 0; i < 2; i++) p.handle({ type: 'dir', dx: 0, dy: 1 });
+  p.handle({ type: 'confirm' });               // 특성 바꾸기
+  assert.equal(p.mode, 'ability');
+  p.handle({ type: 'dir', dx: 0, dy: -1 });     // 그만둔다
+  p.handle({ type: 'dir', dx: 0, dy: -1 });     // geodude (마지막 동료)
+  p.handle({ type: 'confirm' });
+  assert.equal(p.mode, 'msg');                 // 결정 부족
+  assert.equal(saved, 0);
+  p.handle({ type: 'confirm' });
+  game.shards.geodude = 3;
+  const before = abilityOf(geo);
+  p.handle({ type: 'confirm' });
+  assert.notEqual(abilityOf(geo), before);
+  assert.equal(game.shards.geodude, 0);
+  assert.equal(saved, 1);
+});

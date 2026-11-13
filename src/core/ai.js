@@ -1,11 +1,13 @@
 // 적 AI (순수 함수, spec §5)
 import { SPECIES } from '../data/species.js';
+import { effectiveWeather } from './weather.js';
 import { MOVES } from '../data/moves.js';
 import { reachable, tilesInRange, manhattan, canEnter, TILE_COST } from './pathfind.js';
 import { expectedDamage, hitChance } from './damage.js';
 import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { canInflict } from './status.js';
+import { immunity, has } from './abilities.js';
 import { aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
 
@@ -91,7 +93,7 @@ function threatAt(threats, unit, x, y, tile) {
 // unseen: 안개 속이라 이번 적 차례에 보이지 않는 상대 id (공격·위협 계산에서 뺀다, 다가가는 목표로는 씀)
 export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
   if (unit.acted) return { moveTo: { x: unit.x, y: unit.y }, attack: null }; // 잠듦·얼음으로 쉬는 중
-  W = state.weather ?? null;
+  W = effectiveWeather(state); // 에어록·날씨부정 반영
   const reach = reachable(state.grid, state.units, unit);
   const allFoes = state.units.filter((u) => u.side !== unit.side);
   const foes = allFoes.filter((u) => !unseen.has(u.id));
@@ -150,7 +152,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
 const SLEEP_LOCK = 2;
 function ailmentValue(state, user, r, move) {
   const a = move.ailment;
-  if (!a || !canInflict(r, a, move).ok) return 0;
+  if (!a || !canInflict(r, a, move, W, { breaker: has(user, 'mold-breaker') }).ok) return 0;
   if (a === 'sleep') {
     // 상대 편이 이미 2마리 이상 쉬고 있거나, 깨어 있는 마지막 하나라면 재우지 않는다 (소수 편성 보호)
     const side = state.units.filter((u) => u.side === r.side);
@@ -207,6 +209,7 @@ function positionalStatus(state, unit, ghost, move, foes) {
   const acc = { ...move, accuracy: move.accuracy ?? 100 };
   const valueOn = (r) => {
     const same = r.side === unit.side;
+    if (!same && immunity(ghost, r, move)) return 0; // 축전에 전기자석파·방음에 노래 등은 쓰지 않는다
     const v = ch.reduce((s, c) => s + changeValue(ghost, foes, same, r, c), 0) + (same ? 0 : ailmentValue(state, ghost, r, move));
     return same ? v : v * hitChance(ghost, r, acc, tile(r), W) / 100;
   };

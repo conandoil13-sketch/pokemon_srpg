@@ -15,6 +15,7 @@ import { createGachaScene } from './game/gacha.js';
 import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun, addBattleCoins, addFloorCoins } from './core/run.js';
 import { dungeonById } from './data/dungeons.js';
 import { josa } from './data/text.js';
+import { pickupLoot } from './core/abilities.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
 import { createEvolutionChoice } from './game/evolutionChoice.js';
@@ -76,6 +77,10 @@ function startFloor() {
 
 function afterBattle(result, log) {
   const run = game.run;
+  if (result !== 'lose') { // 픽업·꿀모으기: 층 돌파 때 가끔 주워 옴
+    log.pickup = pickupLoot(deployed(game), Math.random);
+    log.loot.push(...log.pickup);
+  }
   for (const item of log.loot) addLoot(run, item, run.floor);
   const before = run.loot.coins;
   addBattleCoins(run, log.coins);
@@ -176,6 +181,7 @@ const go = {
     scene = createParty({
       game,
       onBack: () => go.town(null, TOWN.partySpot),
+      onSave: () => save(),
       onEvolve: (member, options) => evolveChain([{ species: member.species, options, stone: true }], () => { save(); go.party(); }),
     });
   },

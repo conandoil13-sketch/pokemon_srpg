@@ -61,7 +61,7 @@ export function pull(game, rng) {
     game.shards[species] = (game.shards[species] ?? 0) + 1;
     return { ok: true, species, rarity, duplicate: true };
   }
-  const member = newMember(species, joinLevel(game));
+  const member = newMember(species, joinLevel(game), rng); // 특성 슬롯도 무작위
   game.party.push(member);
   return { ok: true, species, rarity, duplicate: false, member };
 }
