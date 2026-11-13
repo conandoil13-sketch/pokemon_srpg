@@ -120,7 +120,8 @@ export function generateFloor(dungeon, floor, seed) {
   const chests = [];
   for (let i = 0; i < nChests && floorCells.length; i++) {
     const p = take(floorCells.pop());
-    chests.push({ x: p.x, y: p.y, item: rng() < 0.2 ? 'evoStone' : 'candy' });
+    const roll = rng(); // 진화의돌 15% · 경험 사탕 55% · 코인 주머니 30%
+    chests.push({ x: p.x, y: p.y, item: roll < 0.15 ? 'evoStone' : roll < 0.7 ? 'candy' : 'coins' });
   }
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests };

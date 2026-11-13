@@ -46,7 +46,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     phase: 'player',
     turn: 1,
     result: null,
-    log: { exp: {}, fainted: [], loot: [] }, // 획득 경험치(종족별), 기절한 아군, 연 보물
+    log: { exp: {}, fainted: [], loot: [], coins: 0 }, // 획득 경험치(종족별), 기절한 아군, 연 보물, 격파 코인
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
@@ -85,6 +85,7 @@ export function applyAttack(state, attackerId, targetId, moveId, rng) {
   if (fainted) {
     state.units = state.units.filter((u) => u !== d);
     expGained = awardExp(state, a, d);
+    if (a.side === 'ally' && d.side === 'enemy') state.log.coins += 3 + Math.floor(d.level / 3);
     if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
   }
   checkResult(state);

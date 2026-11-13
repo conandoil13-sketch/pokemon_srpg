@@ -24,6 +24,7 @@ test('deterministic per seed, varied across seeds', () => {
 });
 
 test('property check: 300 seeds × first/boss floors of both dungeons', () => {
+  const seenItems = new Set();
   for (const [d, f] of [[field, 1], [field, 5], [cave, 1], [cave, 7]]) {
     const isBoss = f === d.floors;
     for (let seed = 1; seed <= 300; seed++) {
@@ -38,7 +39,7 @@ test('property check: 300 seeds × first/boss floors of both dungeons', () => {
       assert.equal(m.allySlots.length, 5, tag);
       for (const s of m.allySlots) assert.ok(s.x <= 2 && reach.has(key(s)), tag);
       for (const e of m.enemies) assert.ok(e.x >= 8 && reach.has(key(e)), tag);
-      for (const c of m.chests) assert.ok(reach.has(key(c)) && ['evoStone', 'candy'].includes(c.item), tag);
+      for (const c of m.chests) { assert.ok(reach.has(key(c)) && ['evoStone', 'candy', 'coins'].includes(c.item), tag); seenItems.add(c.item); }
       assert.ok(m.chests.length <= 2, tag);
       const spots = [...m.allySlots, ...m.enemies, ...m.chests, ...(m.stairs ? [m.stairs] : [])].map(key);
       assert.equal(new Set(spots).size, spots.length, `${tag}: overlapping positions`);
@@ -61,4 +62,5 @@ test('property check: 300 seeds × first/boss floors of both dungeons', () => {
       }
     }
   }
+  assert.deepEqual([...seenItems].sort(), ['candy', 'coins', 'evoStone']);
 });

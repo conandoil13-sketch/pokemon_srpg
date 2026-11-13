@@ -23,7 +23,7 @@ test('createBattle builds level-based units from the party and the map', () => {
   }
   assert.equal(find(s, 'enemy-gible').level, 9);
   assert.equal(s.phase, 'player');
-  assert.deepEqual(s.log, { exp: {}, fainted: [], loot: [] });
+  assert.deepEqual(s.log, { exp: {}, fainted: [], loot: [], coins: 0 });
 });
 
 test('party levels and moves carry into battle', () => {
@@ -160,4 +160,14 @@ test('fainted allies are logged once', () => {
 test('stairs tile is walkable at cost 1', () => {
   assert.equal(canEnter('>', 'chimchar'), true);
   assert.equal(TILE_COST['>'], 1);
+});
+
+test('enemy KO by an ally gives coins 3 + floor(lv/3); ally fainting gives none', () => {
+  const s = createBattle();
+  find(s, 'enemy-gible').hp = 1; // Lv9
+  applyAttack(s, 'ally-chimchar', 'enemy-gible', 'ember', zero);
+  assert.equal(s.log.coins, 6);
+  find(s, 'ally-shinx').hp = 1;
+  applyAttack(s, 'enemy-riolu', 'ally-shinx', 'tackle', zero);
+  assert.equal(s.log.coins, 6);
 });

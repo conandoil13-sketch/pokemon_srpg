@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun } from '../src/core/run.js';
+import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun, addBattleCoins, addFloorCoins } from '../src/core/run.js';
 import { hashSeed } from '../src/core/floorgen.js';
 
 const game = () => ({ version: 2, party: [{ species: 'chimchar' }, { species: 'piplup' }], items: { evoStone: 0 }, unlocked: ['sinnoh-field'], best: {}, cleared: [], run: null });
 
 test('startRun / floorSeed', () => {
   const r = startRun('sinnoh-field', 42);
-  assert.deepEqual(r, { dungeonId: 'sinnoh-field', floor: 1, seed: 42, faintedLast: [], loot: { evoStone: 0, candy: [] } });
+  assert.deepEqual(r, { dungeonId: 'sinnoh-field', floor: 1, seed: 42, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 0 } });
   assert.equal(floorSeed(r), hashSeed(42, 1));
 });
 
@@ -61,4 +61,18 @@ test('finishRun: cleared unlocks next dungeon; wiped/retreat only record best', 
   finishRun(h, { ...startRun('sinnoh-field', 1), floor: 2 }, 'retreat');
   assert.equal(h.best['sinnoh-field'], 3, 'keeps the max');
   assert.equal(h.items.evoStone, 0);
+});
+
+test('coins: battle + floor + chest coins settle; wipe keeps old coins only', () => {
+  const g = { ...game(), coins: 50 };
+  const r = startRun('sinnoh-field', 1);
+  addBattleCoins(r, 20); addFloorCoins(r, 3); addLoot(r, 'coins', 1);
+  assert.equal(r.loot.coins, 20 + 30 + 20);
+  const s = settleLoot(g, r);
+  assert.equal(s.coins, 70);
+  assert.equal(g.coins, 120);
+  const h = { ...game(), coins: 50 };
+  const r2 = startRun('sinnoh-field', 1); addBattleCoins(r2, 80);
+  finishRun(h, r2, 'wiped');
+  assert.equal(h.coins, 50);
 });

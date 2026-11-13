@@ -5,7 +5,8 @@ import { hashSeed } from './floorgen.js';
 export const CANDY_EXP_PER_FLOOR = 30;
 export const FAINTED_HP_RATIO = 0.5;
 
-export const startRun = (dungeonId, seed) => ({ dungeonId, floor: 1, seed, faintedLast: [], loot: { evoStone: 0, candy: [] } });
+export const startRun = (dungeonId, seed) => ({ dungeonId, floor: 1, seed, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 0 } });
+export const FLOOR_COINS = 10, CHEST_COINS = 20;
 
 export const floorSeed = (run) => hashSeed(run.seed, run.floor);
 
@@ -23,14 +24,20 @@ export function afterFloor(run, result, fainted) {
 export function addLoot(run, item, floor) {
   if (item === 'evoStone') run.loot.evoStone += 1;
   else if (item === 'candy') run.loot.candy.push(floor);
+  else if (item === 'coins') run.loot.coins = (run.loot.coins ?? 0) + CHEST_COINS * floor;
 }
 
-// 보물 지급: 진화의돌은 바로, 사탕 경험치는 반환 (결산 장면이 적용)
+export const addBattleCoins = (run, n) => { run.loot.coins = (run.loot.coins ?? 0) + n; };
+export const addFloorCoins = (run, floor) => { run.loot.coins = (run.loot.coins ?? 0) + FLOOR_COINS * floor; };
+
+// 보물 지급: 진화의돌·코인은 바로, 사탕 경험치는 반환 (결산 장면이 적용)
 export function settleLoot(game, run) {
   game.items.evoStone += run.loot.evoStone;
+  const coins = run.loot.coins ?? 0;
+  game.coins = (game.coins ?? 0) + coins;
   const each = run.loot.candy.reduce((s, f) => s + f * CANDY_EXP_PER_FLOOR, 0);
   const exp = each ? Object.fromEntries(game.party.map((m) => [m.species, each])) : {};
-  return { evoStone: run.loot.evoStone, exp };
+  return { evoStone: run.loot.evoStone, coins, exp };
 }
 
 // outcome: 'cleared' | 'retreat' | 'wiped'. 보물 지급은 호출 측(settleLoot)
