@@ -22,7 +22,7 @@ export function applyStageChange(unit, key, change) {
   const before = unit.stages[key];
   const after = Math.max(-MAX, Math.min(MAX, before + change));
   unit.stages[key] = after;
-  if (after !== before) unit.turns[key] = STAGE_TURNS;
+  if (after !== before) unit.turns[key] = after === 0 ? 0 : STAGE_TURNS; // 0 으로 돌아오면 지속도 끝
   return { key, before, after, applied: after - before };
 }
 

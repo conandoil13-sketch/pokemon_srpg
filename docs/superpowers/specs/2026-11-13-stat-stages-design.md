@@ -1,7 +1,7 @@
 # 능력치 랭크 + 변화기 — 설계 스펙
 
 - 작성일: 2026-11-13
-- 상태: 사용자 리뷰 대기
+- 상태: 구현 완료
 - 선행: HP 배율 ×(1.6 + Lv/100) (미커밋, 이 작업 브랜치에 함께 들어감), 뽑기·출전 편성(main `14b1ba8`)
 
 ## 1. 목표
@@ -26,9 +26,9 @@
 - `target`: PokeAPI target 이름
 - `statChanges`: `[{ stat, change }]` (stat: attack/defense/special-attack/special-defense/speed/accuracy/evasion)
 - `statChance`: `meta.stat_chance` (0 이면 100%)
-- `effectKind`: `meta.category.name` (`net-good-stats`, `damage+raise`, `damage+lower`, …)
+- `effectKind`: `meta.category.name` (`net-good-stats`, `damage-raise`, `damage-lower`, …)
 
-**배울 수 있는 기술(`learnable`)** = 공격기(위력 있음) **또는** 변화기 중 `statChanges` 가 있고 대상이 §3 표에 있는 것. 그 외 변화기(상태이상·회복 등)는 계속 건너뛴다.
+**배울 수 있는 기술(`learnable`)** = 공격기(위력 있음) **또는** 변화기 중 `statChanges` 가 있고 대상이 §3 표에 있으며 순수 능력치 변화(`net-good-stats`)인 것. 뻐기기·부추기기·추억의선물·비축하기는 제외. 그 외 변화기(상태이상·회복 등)는 계속 건너뛴다.
 
 ## 3. 대상 · 범위 (SRPG 규칙)
 
@@ -47,7 +47,7 @@
 
 ## 4. 랭크 규칙
 
-- 유닛 상태: `stages = { atk, def, spa, spd, spe, acc, eva }` (−6~+6), `stageTurns = { … }` 남은 턴.
+- 유닛 상태: `stages = { atk, def, spa, spd, spe, acc, eva }` (−6~+6), `turns = { … }` 남은 턴.
 - 배율 (공·방·특공·특방·스피드): `n ≥ 0 → (2 + n) / 2`, `n < 0 → 2 / (2 − n)`.
 - 명중·회피: 명중률 += `8 × (명중 랭크 − 대상 회피 랭크)` %p, 최종 0~100.
 - 적용 위치: `damage.js` 의 A/D 계산, `hitChance` 의 스피드 비교(유효 스피드)와 명중 보정, AI 의 순서(유효 스피드).
@@ -58,7 +58,7 @@
 
 ## 5. 공격기 부가효과
 
-- `effectKind` 가 `damage+raise` → **사용자**에게, `damage+lower` → **맞은 대상**에게 `statChanges` 적용.
+- `effectKind` 가 `damage-raise` → **사용자**에게, `damage-lower` → **맞은 대상**에게 `statChanges` 적용.
 - 확률 `statChance` (0 = 100%). 공격이 빗나가거나 면역이면 발동 안 함. 대상이 기절하면 대상 쪽 효과는 생략.
 - 예: 인파이트(자신 방어·특방 −1, 100%), 깨물어부수기(대상 방어 −1, 20%), 바위깨기(대상 방어 −1, 50%).
 

@@ -94,7 +94,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function attackTilesFrom(unit, tiles) {
-    const maxR = Math.max(...unit.moves.map((m) => MOVES[m].range[1]));
+    const maxR = Math.max(1, ...unit.moves.filter((m) => MOVES[m].category !== 'status').map((m) => MOVES[m].range[1])); // 공격 범위만
     const set = new Map();
     for (const k of tiles.keys()) {
       const [x, y] = k.split(',').map(Number);
@@ -216,7 +216,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       ...(MOVES[m].category === 'status' ? { tag: '변화' } : {}),
     }));
     menu.push({ label: '대기', enabled: true });
-    menuSel = Math.max(0, menu.findIndex((i) => i.enabled));
+    const firstAttack = menu.findIndex((i) => i.enabled && i.moveId && !i.tag);
+    menuSel = firstAttack >= 0 ? firstAttack : Math.max(0, menu.findIndex((i) => i.enabled));
     menuBox = cornerFor(sel, ui.menuRect(menu, 0, 0).w);
     mode = 'action';
   }
@@ -536,5 +537,5 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   playerPhase();
 
-  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get camera() { return { ...cam }; } };
+  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get camera() { return { ...cam }; } };
 }

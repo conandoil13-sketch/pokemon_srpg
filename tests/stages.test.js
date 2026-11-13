@@ -47,3 +47,10 @@ test('expires after 3 ticks', () => {
   assert.equal(u.stages.spe, 0);
   assert.deepEqual(tickStages(u), []);
 });
+
+test('a change that returns a stat to 0 clears its turns', () => {
+  const u = unit();
+  applyStageChange(u, 'atk', -1);
+  applyStageChange(u, 'atk', 1);
+  assert.deepEqual([u.stages.atk, u.turns.atk], [0, 0]);
+});

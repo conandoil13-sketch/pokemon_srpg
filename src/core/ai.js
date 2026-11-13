@@ -85,8 +85,10 @@ export function planEnemyAction(state, unit) {
   // 자신 버프: 때릴 적이 없으면 고정 점수, 있으면 다음 턴 데미지 증가분 × 1.5 가 최선 공격보다 클 때
   const buff = bestSelfBuff(unit, foes, !!best);
   if (best && buff && buff.score > best.score && (!bestStatus || buff.score > bestStatus.score)) return { moveTo: best.moveTo, attack: buff.attack };
-  if (bestStatus && (!best || bestStatus.score > best.score)) return { moveTo: bestStatus.moveTo, attack: bestStatus.attack };
-  if (best) return { moveTo: best.moveTo, attack: best.attack };
+  if (best) {
+    if (bestStatus && bestStatus.score > best.score) return { moveTo: bestStatus.moveTo, attack: bestStatus.attack };
+    return { moveTo: best.moveTo, attack: best.attack };
+  }
 
   // 공격 불가: 가장 가까운 아군 쪽으로 (실제 걸어가는 거리 기준, spec §5-4)
   const walk = walkDistanceFromFoes(state, unit, foes);
@@ -95,6 +97,12 @@ export function planEnemyAction(state, unit) {
     const p = parse(k);
     const dist = walk.get(k) ?? 1000 + Math.min(...foes.map((f) => manhattan(p, f)));
     if (dist < bestDist) { bestDist = dist; approach = p; }
+  }
+  // 변화기 위치의 위험은 그냥 다가갈 때의 위험과 비교 → 그래도 이득이고 자신 버프보다 나을 때만
+  if (bestStatus) {
+    const approachRisk = THREAT_WEIGHT * threatAt(threats, { ...unit, ...approach }, approach.x, approach.y, state.grid[approach.y][approach.x]);
+    const net = bestStatus.score + approachRisk;
+    if (net > 0 && (!buff || net > buff.score)) return { moveTo: bestStatus.moveTo, attack: bestStatus.attack };
   }
   return { moveTo: approach, attack: buff ? buff.attack : null };
 }

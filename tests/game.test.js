@@ -141,3 +141,15 @@ test('stage messages', () => {
   assert.deepEqual(stageMessages([{ unitId: 'a', key: 'atk', change: 2, applied: 0 }], by), ['불꽃숭이의 공격은 더 이상 오르지 않는다!']);
   assert.deepEqual(stageMessages([{ unitId: 'e', key: 'atk', change: -1, applied: 0 }], by), ['상대 리오르의 공격은 더 이상 떨어지지 않는다!']);
 });
+
+test('action menu cursor starts on the first attack, not a status move', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state;
+  st.units.find((u) => u.id === 'ally-chimchar').moves = ['swords-dance', 'scratch'];
+  const r = st.units.find((u) => u.id === 'enemy-riolu'); r.x = 3; r.y = 5;
+  const sel = [{ type: 'cursor', px: 2 * 24 + 12, py: 5 * 24 + 12 }, { type: 'confirm' }];
+  for (const e of [...sel, ...sel]) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  assert.equal(game.menu[game.menuSel].moveId, 'scratch');
+});

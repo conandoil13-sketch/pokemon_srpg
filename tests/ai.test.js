@@ -102,3 +102,11 @@ test('attacks instead of buffing when it can hit hard now', () => {
   const plan = planEnemyAction(state(9, 5, [foe, ally]), foe);
   assert.equal(plan.attack.moveId, 'slash');
 });
+
+test('idle self buff beats a weak debuff when nothing is attackable', () => {
+  // 공격(사거리 1)은 닿지 않지만 째려보기(거리 2) 범위엔 들어갈 수 있다
+  const foe = mkm('machop', 'enemy', 6, 2, ['bulk-up', 'leer', 'karate-chop']);
+  const ally = mkm('luxray', 'ally', 1, 2, ['tackle']);
+  const plan = planEnemyAction(state(16, 5, [foe, ally]), foe);
+  assert.equal(plan.attack?.moveId, 'bulk-up');
+});

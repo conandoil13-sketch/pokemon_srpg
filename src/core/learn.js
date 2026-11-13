@@ -13,7 +13,12 @@ export function startingMoves(learnset, level, movesData) {
     if (i >= 0) out.splice(i, 1);
     out.push(api);
   }
-  return out.length ? out.slice(-MAX_MOVES) : [FALLBACK_MOVE];
+  const picked = out.slice(-MAX_MOVES);
+  // 공격기가 하나도 없으면 가장 최근 공격기(없으면 몸통박치기)로 가장 오래된 칸을 바꾼다
+  const attacks = (ms) => ms.filter((m) => movesData[m]?.category !== 'status');
+  if (attacks(picked).length) return picked;
+  const attack = attacks(out).at(-1) ?? FALLBACK_MOVE;
+  return [...picked.slice(picked.length >= MAX_MOVES ? 1 : 0), attack];
 }
 
 // (fromExclusive, toInclusive] 구간에서 배우는 공격기, 레벨 순

@@ -119,3 +119,16 @@ test('status moves: stat changes, targets, learnable rules', () => {
   assert.equal(MOVES['close-combat'].effectKind, 'damage-raise');
   for (const m of Object.values(MOVES)) if (m.category === 'status' && m.learnable) assert.ok(m.kind, m.id);
 });
+
+test('every species starts with at least one damaging move', () => {
+  for (const s of Object.values(SPECIES)) {
+    for (const lv of [5, 8, 10, 15, 20, 30]) {
+      const ms = startingMoves(s.learnset, lv, MOVES);
+      assert.ok(ms.length <= 4 && ms.some((m) => MOVES[m].category !== 'status'), `${s.key}@${lv}: ${ms}`);
+    }
+  }
+});
+
+test('status moves with side effects out of scope are not learnable', () => {
+  for (const k of ['swagger', 'flatter', 'memento', 'stockpile']) assert.equal(MOVES[k].learnable, false, k);
+});
