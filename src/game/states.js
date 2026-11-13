@@ -29,6 +29,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0;
   let notice = null; // { lines, then } 대사 후 다음 단계
+  let moveLocked = false; // 보물상자를 연 이동은 취소할 수 없다
   const cam = { x: 0, y: 0 };
   const facing = {};
 
@@ -145,6 +146,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function select(u) {
     sel = u;
+    moveLocked = false;
     origin = { x: u.x, y: u.y, facing: facing[u.id] };
     reach = reachable(st.grid, st.units, u);
     atkTiles = attackTilesFrom(u, reach);
@@ -164,6 +166,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       sel.acted = true;
       showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; });
     } else if (a.item) {
+      moveLocked = true;
       showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item], '을/를')} 얻었다!`], openAction);
     } else openAction();
   }
@@ -263,6 +266,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         if (ev.type === 'confirm') chooseMenu();
         if (ev.type === 'cancel') {
           if (mode === 'endMenu') { mode = 'idle'; return; }
+          if (moveLocked) return;
           sel.x = origin.x; sel.y = origin.y; sel.moved = false;
           facing[sel.id] = origin.facing;
           cursor = { x: origin.x, y: origin.y };

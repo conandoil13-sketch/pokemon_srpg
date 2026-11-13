@@ -99,6 +99,7 @@ function endRun(outcome, reached = game.run.floor) {
   if (!Object.keys(reward.exp).length) { toTown(); return; }
   // 경험 사탕: 탐험 보상 결산
   scene = createResults({ game, result: 'loot', log: { exp: reward.exp }, firstClear: false, onDone: (evos) => evolveChain(evos, () => { save(); toTown(); }) });
+  save(); // 사탕 경험치는 createResults 생성 시 이미 적용됨 → 바로 저장 (결산 중 새로고침해도 유지)
 }
 
 const go = {

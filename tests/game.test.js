@@ -83,3 +83,17 @@ test('stepping on a chest opens it, then the action menu opens', () => {
   game.handle({ type: 'confirm' });
   assert.equal(game.mode, 'action');
 });
+
+test('after opening a chest the move is committed (cancel cannot undo it)', () => {
+  const game = createGame({ rng: createRng(5), map: stairsMap(), onExit() {} });
+  assert.ok(run(game, (m) => m === 'idle'));
+  game.handle(at(2, 5)); game.handle({ type: 'confirm' });
+  game.handle(at(2, 4)); game.handle({ type: 'confirm' });
+  assert.ok(run(game, (m) => m === 'notice'));
+  game.handle({ type: 'confirm' });
+  assert.equal(game.mode, 'action');
+  game.handle({ type: 'cancel' });
+  assert.equal(game.mode, 'action', 'cancel ignored');
+  const u = game.state.units.find((x) => x.id === 'ally-chimchar');
+  assert.deepEqual([u.x, u.y], [2, 4]);
+});
