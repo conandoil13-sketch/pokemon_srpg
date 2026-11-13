@@ -130,8 +130,8 @@ const go = {
     });
   },
   town: (message = null, spawn = TOWN.start) => {
-    requestSprites([...game.party.map((m) => m.species), ...TOWN.objects.filter((o) => o.species).map((o) => o.species)]);
-    scene = createTown({ onSortie: go.select, onParty: go.party, message, spawn, leader: game.party[0].species });
+    requestSprites(game.party.map((m) => m.species));
+    scene = createTown({ onSortie: go.select, onParty: go.party, message, spawn, leader: game.party[0].species, companions: game.party.slice(1).map((m) => m.species) });
   },
   select: () => {
     scene = createDungeonSelect({

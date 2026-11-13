@@ -163,3 +163,13 @@ test('floor menu sits at the bottom right and clicks on its rows count', async (
   m.handle({ type: 'click', px: W - 60, py: H - 54 - menuH + 4 + 16 + 8 }); // 두 번째 줄
   assert.deepEqual(picks, [1]);
 });
+
+test('town NPCs are the party companions (everyone but the leader)', () => {
+  const town = createTown({ onSortie() {}, leader: 'ditto', companions: ['chimchar', 'piplup', 'turtwig', 'shinx'] });
+  const npcs = town.objects.filter((o) => o.kind === 'npc');
+  assert.deepEqual(npcs.map((o) => o.species), ['chimchar', 'piplup', 'turtwig', 'shinx']);
+  for (const o of npcs) assert.ok(!'#^~'.includes(TOWN.tiles[o.y][o.x]), `${o.species} on blocked tile`);
+  assert.ok(TOWN.npcSpots.length >= 6, 'room for more companions');
+  // 동료가 없으면 NPC 도 없음
+  assert.equal(createTown({ onSortie() {}, companions: [] }).objects.filter((o) => o.kind === 'npc').length, 0);
+});

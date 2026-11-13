@@ -22,9 +22,15 @@ export const TOWN = {
     { id: 'board', kind: 'sign', x: 9, y: 6, action: 'sortie', lines: ['출격 게시판이다.', '전투에 나갈까?'] },
     { id: 'team', kind: 'sign', x: 4, y: 3, action: 'party', lines: ['편성소다.', '파티를 확인할까?'] },
     { id: 'dex', kind: 'sign', x: 13, y: 3, action: 'soon', lines: ['도감 연구소 (준비 중)', '아직 문이 닫혀 있다.'] },
-    { id: 'npc-piplup', kind: 'npc', species: 'piplup', x: 16, y: 6, lines: ['강 건너에 적들이 모여 있대.', '게시판에서 출격하자!'] },
-    { id: 'npc-turtwig', kind: 'npc', species: 'turtwig', x: 3, y: 10, lines: ['바위산 위에서는 단단해져.', '지형을 잘 써 보자.'] },
-    { id: 'npc-shinx', kind: 'npc', species: 'shinx', x: 7, y: 8, lines: ['수풀에 숨으면 잘 안 맞아!', '강해지면 진화할 수 있대!'] },
+  ],
+  // 동료(파티에서 리더를 뺀 멤버)가 서 있는 자리와 대사. 파티 순서대로 채운다
+  npcSpots: [
+    { x: 7, y: 8, lines: ['오늘도 던전에 가는 거지?', '게시판에서 출격하자!'] },
+    { x: 16, y: 6, lines: ['강 건너에 적들이 모여 있대.', '계단을 찾으면 다음 층이야.'] },
+    { x: 3, y: 10, lines: ['바위산 위에서는 단단해져.', '지형을 잘 써 보자.'] },
+    { x: 14, y: 9, lines: ['수풀에 숨으면 잘 안 맞아!', '강해지면 진화할 수 있대!'] },
+    { x: 11, y: 12, lines: ['보물상자를 열면 진화의돌이', '나올 때도 있대!'] },
+    { x: 5, y: 6, lines: ['기절해도 다음 층엔', '절반 체력으로 따라갈게.'] },
   ],
   leader: 'chimchar', // 기본 리더 (실제로는 파티 첫 멤버)
   start: { x: 9, y: 9, facing: 'up' },

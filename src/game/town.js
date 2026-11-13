@@ -12,11 +12,16 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, onParty, spawn = TOWN.start, message = null, leader = TOWN.leader }) {
+export function createTown({ onSortie, onParty, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
   const map = TOWN;
   const width = map.tiles[0].length, height = map.tiles.length;
   const player = { x: spawn.x, y: spawn.y, facing: spawn.facing ?? 'down' };
-  const npcFacing = Object.fromEntries(map.objects.filter((o) => o.kind === 'npc').map((o) => [o.id, 'down']));
+  // 동료 = NPC (자리 수만큼)
+  const objects = [
+    ...map.objects,
+    ...companions.slice(0, map.npcSpots.length).map((species, i) => ({ id: `npc-${i}`, kind: 'npc', species, ...map.npcSpots[i] })),
+  ];
+  const npcFacing = Object.fromEntries(objects.filter((o) => o.kind === 'npc').map((o) => [o.id, 'down']));
   let walk = null; // { from, to, t }
   let held = null; // 누르고 있는 방향 [dx, dy]
   let route = [];  // 클릭 이동 경로
@@ -24,7 +29,7 @@ export function createTown({ onSortie, onParty, spawn = TOWN.start, message = nu
   let msg = message ? { lines: [].concat(message), who: null, then: null } : null;
   let clock = 0;
 
-  const objectAt = (x, y) => map.objects.find((o) => o.x === x && o.y === y);
+  const objectAt = (x, y) => objects.find((o) => o.x === x && o.y === y);
   const walkable = (x, y) => x >= 0 && y >= 0 && x < width && y < height && !'#^~'.includes(map.tiles[y][x]) && !objectAt(x, y);
 
   function tryStep(dx, dy) {
@@ -92,6 +97,7 @@ export function createTown({ onSortie, onParty, spawn = TOWN.start, message = nu
   return {
     get player() { return player; },
     get leader() { return leader; },
+    get objects() { return objects; },
     get message() { return msg; },
 
     handle(ev) {
@@ -151,7 +157,7 @@ export function createTown({ onSortie, onParty, spawn = TOWN.start, message = nu
       // 그릴 것: 표지판, NPC, 플레이어 — y 순서
       const p = this.playerWorld();
       const items = [
-        ...map.objects.map((o) => ({ y: o.y * TILE, draw: () => (o.kind === 'sign' ? drawSign(ctx, o) : drawPokemon(ctx, o.species, 'Idle', TO_DIR[npcFacing[o.id]], clock, o.x * TILE, o.y * TILE)) })),
+        ...objects.map((o) => ({ y: o.y * TILE, draw: () => (o.kind === 'sign' ? drawSign(ctx, o) : drawPokemon(ctx, o.species, 'Idle', TO_DIR[npcFacing[o.id]], clock, o.x * TILE, o.y * TILE)) })),
         { y: p.y, draw: () => drawPokemon(ctx, leader, walk ? 'Walk' : 'Idle', TO_DIR[player.facing], clock, p.x, p.y) },
       ].sort((a, b) => a.y - b.y);
       for (const it of items) it.draw();
