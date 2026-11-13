@@ -192,7 +192,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         cursor = { ...plan.moveTo };
         if (plan.attack) {
           const target = st.units.find((o) => o.id === plan.attack.targetId);
-          pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, nextEnemy) };
+          pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, nextEnemy, plan.attack.aim) };
         } else {
           u.acted = true;
           pause = { t: 0.2, fn: nextEnemy };
@@ -207,12 +207,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 공격기·변화기 공통. 자신·범위형 변화기는 target 을 무시한다
-  function doAttack(attacker, target, moveId, then) {
+  function doAttack(attacker, target, moveId, then, aim) {
     const mv = MOVES[moveId];
     const one = pickOne(mv) && target && target !== attacker ? target : null;
     const hpBefore = one?.hp;
     const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, one].find((u) => u?.id === id);
-    const result = applyMove(st, attacker.id, moveId, one?.id ?? null, rng);
+    const result = applyMove(st, attacker.id, moveId, aim ?? one?.id ?? null, rng);
     // 마비 실패·혼란 자해: 기술이 나가지 않으므로 대상은 돌아보지 않고 카메라는 사용자에게
     if (one && !result.blocked) {
       facing[attacker.id] = dirFromDelta(one.x - attacker.x, one.y - attacker.y);
