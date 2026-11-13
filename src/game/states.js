@@ -24,7 +24,7 @@ import { josa } from '../data/text.js';
 
 const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕' };
 
-export function createGame({ rng, map, party, hpRatio, theme = 'field', onExit }) {
+export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0;
@@ -87,7 +87,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', onExit }
     mode = 'banner';
   }
 
-  const playerPhase = () => showBanner('아군 턴', `${st.turn}턴째`, '#4080f8', () => { mode = 'idle'; focus = null; });
+  const playerPhase = () => showBanner('아군 턴', floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`, '#4080f8', () => { mode = 'idle'; focus = null; });
 
   function enemyPhase() {
     sel = null;

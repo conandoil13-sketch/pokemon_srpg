@@ -45,7 +45,8 @@ export function createResults({ game, result, log, firstClear, onDone }) {
       g.addColorStop(0, '#2c4070'); g.addColorStop(1, '#141c30');
       ctx.fillStyle = g;
       ctx.fillRect(0, 0, W, H);
-      ui.bigText(ctx, result === 'win' ? '승리!' : '패배...', W / 2, 4, result === 'win' ? '#f8d050' : '#f08080', '#202838');
+      const TITLE = { win: '승리!', stairs: '층 돌파!', loot: '탐험 보상', lose: '패배...' };
+      ui.bigText(ctx, TITLE[result] ?? '결과', W / 2, 4, result === 'lose' ? '#f08080' : '#f8d050', '#202838');
       party.forEach((m, k) => {
         const y = 32 + k * 27;
         ui.drawWindow(ctx, 6, y, W - 12, 25);

@@ -1,5 +1,5 @@
 // 부트스트랩 + 장면 관리 + 게임 루프
-// 흐름: 타이틀 → 마을 → 출격 준비 → 전투 → 결산 → (진화…) → 마을 · 마을 편성소 → (진화) → 편성소
+// 흐름: 타이틀 → 마을 → 던전 선택 → [층 시작(저장) → 전투 → 결산 → 진화… → 다음 층/귀환]… → 마을 · 편성소
 import { createScreen } from './render/screen.js';
 import { loadSprites } from './render/sprites.js';
 import { loadFonts } from './render/font.js';
@@ -7,7 +7,12 @@ import { bindInput } from './game/input.js';
 import { createGame } from './game/states.js';
 import { createTitle } from './game/title.js';
 import { createTown } from './game/town.js';
-import { createStageSelect } from './game/stageSelect.js';
+import { createDungeonSelect } from './game/dungeonSelect.js';
+import { createFloorMenu } from './game/floorMenu.js';
+import { generateFloor } from './core/floorgen.js';
+import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun } from './core/run.js';
+import { dungeonById } from './data/dungeons.js';
+import { josa } from './data/text.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
 import { createParty } from './game/party.js';
@@ -40,32 +45,91 @@ function evolveChain(list, done) {
   scene = createEvolution({ member, to: first.to, onDone: () => evolveChain(rest, done) });
 }
 
+const newSeed = () => ((Date.now() ^ Math.floor(rng() * 0x7fffffff)) >>> 0);
+
+// ---------- 탐험 ----------
+function startFloor() {
+  const run = game.run;
+  const d = dungeonById(run.dungeonId);
+  const map = generateFloor(d, run.floor, floorSeed(run));
+  save(); // 층 시작 시점 저장 (같은 시드 → 같은 맵으로 재개)
+  scene = createGame({
+    rng, map, party: game.party, hpRatio: floorStartHp(run), theme: d.theme,
+    floorLabel: `${d.name} B${run.floor}F`,
+    onExit: (result, log) => afterBattle(result, log),
+  });
+}
+
+function afterBattle(result, log) {
+  for (const item of log.loot) addLoot(game.run, item, game.run.floor);
+  scene = createResults({
+    game, result, log, firstClear: false,
+    onDone: (evos) => evolveChain(evos, () => afterResults(result, log)),
+  });
+}
+
+function afterResults(result, log) {
+  const prevFloor = game.run.floor;
+  const { run, outcome } = afterFloor(game.run, result, log.fainted);
+  if (outcome !== 'next') { endRun(outcome); return; }
+  game.run = run;
+  save();
+  scene = createFloorMenu({
+    lines: [`B${prevFloor}F 돌파!`, '어떻게 할까?'],
+    options: ['다음 층으로', '마을로 돌아가기'],
+    onPick: (i) => (i === 0 ? startFloor() : endRun('retreat', prevFloor)), // 다음 층엔 아직 안 들어감
+  });
+}
+
+// reached: 실제로 들어갔던 가장 깊은 층 (층 사이 메뉴에서 귀환하면 run.floor 는 이미 다음 층)
+function endRun(outcome, reached = game.run.floor) {
+  const run = { ...game.run, floor: reached };
+  const d = dungeonById(run.dungeonId);
+  const loot = `진화의돌 ${run.loot.evoStone}개 · 경험 사탕 ${run.loot.candy.length}개`;
+  const before = [...game.unlocked];
+  const reward = outcome === 'wiped' ? { exp: {} } : settleLoot(game, run);
+  finishRun(game, run, outcome);
+  save();
+  const opened = game.unlocked.filter((id) => !before.includes(id)).map((id) => dungeonById(id).name);
+  const lines = outcome === 'cleared'
+    ? [`${josa(d.name, '을/를')} 돌파했다!`, opened.length ? `${josa(opened[0], '이/가')} 열렸다!` : loot]
+    : outcome === 'retreat' ? ['마을로 돌아왔다.', loot]
+    : ['눈앞이 캄캄해졌다...', '모은 보물을 잃고 마을로 돌아왔다.'];
+  const toTown = () => go.town(lines, TOWN.returnSpot);
+  if (!Object.keys(reward.exp).length) { toTown(); return; }
+  // 경험 사탕: 탐험 보상 결산
+  scene = createResults({ game, result: 'loot', log: { exp: reward.exp }, firstClear: false, onDone: (evos) => evolveChain(evos, () => { save(); toTown(); }) });
+}
+
 const go = {
   title: () => {
     scene = createTitle({
       hasSave: !!game,
-      onContinue: () => go.town(),
+      onContinue: () => (game.run ? go.resume() : go.town()),
       onNew: () => { game = newGame(); save(); go.town(); },
+    });
+  },
+  resume: () => {
+    const d = dungeonById(game.run.dungeonId);
+    scene = createFloorMenu({
+      lines: ['탐험을 이어서 할까?', `${d.name} B${game.run.floor}F`],
+      options: ['예', '아니요'],
+      onPick: (i) => (i === 0 ? startFloor() : go.town()),
     });
   },
   town: (message = null, spawn = TOWN.start) => {
     scene = createTown({ onSortie: go.select, onParty: go.party, message, spawn, leader: game.party[0].species });
   },
   select: () => {
-    scene = createStageSelect({ cleared: new Set(game.cleared), onPick: go.battle, onBack: () => go.town(null, TOWN.returnSpot) });
-  },
-  battle: (stage) => {
-    scene = createGame({ rng, map: stage.map, party: game.party, onExit: (result, log) => go.results(stage, result, log) });
-  },
-  results: (stage, result, log) => {
-    const firstClear = result === 'win' && !game.cleared.includes(stage.id);
-    if (firstClear) game.cleared.push(stage.id);
-    scene = createResults({
-      game, result, log, firstClear,
-      onDone: (evolutions) => evolveChain(evolutions, () => {
-        save();
-        go.town(result === 'win' ? [`${stage.name} 클리어!`, '마을로 돌아왔다.'] : ['후퇴했다...', '마을에서 재정비하자.'], TOWN.returnSpot);
-      }),
+    scene = createDungeonSelect({
+      game,
+      onStart: (id) => {
+        if (game.run) finishRun(game, game.run, 'wiped'); // 포기 = 보물 잃음
+        game.run = startRun(id, newSeed());
+        startFloor();
+      },
+      onResume: startFloor,
+      onBack: () => go.town(null, TOWN.returnSpot),
     });
   },
   party: () => {
