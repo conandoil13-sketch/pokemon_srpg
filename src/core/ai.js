@@ -6,6 +6,8 @@ import { expectedDamage, hitChance } from './damage.js';
 import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { canInflict } from './status.js';
+import { aimsOf, unitsHit } from './shapes.js';
+import { SIGNATURE_MOVES } from './learn.js';
 
 const KO_BONUS = 100;
 const THREAT_WEIGHT = 0.5;
@@ -13,6 +15,33 @@ const IDLE_BUFF_SCORE = 20;   // 때릴 적이 없을 때 자신 버프 점수
 const BUFF_WEIGHT = 1.5;      // 다음 턴 데미지 증가분 가중치
 const MINOR_STAT_SCORE = 3;   // 스피드·명중·회피 변화 1건 점수
 const isStatus = (m) => m.category === 'status';
+const FRIENDLY_WEIGHT = 1.5;  // 같은 편이 휘말린 데미지 감점 배율
+const SELF_KO = ['self-destruct', 'explosion'];
+const SELF_TURNS = 3;         // 자폭 감점: 자기 최선 기대 데미지 × 3턴
+const SIG_SELF_KO = 0.3, OTHER_SELF_KO = 2;
+
+// 조준 하나의 점수 (위험도 제외). 적이 하나도 안 맞으면 null
+function aimScore(state, unit, ghost, move, aim, foes) {
+  const sim = { ...state, units: state.units.map((u) => (u === unit ? ghost : u)) };
+  const hit = unitsHit(sim, ghost, move, aim);
+  const spread = hit.length >= 2 ? 0.75 : 1;
+  let score = 0, enemies = 0, kos = 0, mates = 0;
+  for (const t of hit) {
+    const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread);
+    const ko = e >= t.hp;
+    if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0); }
+    else { mates++; score -= e * FRIENDLY_WEIGHT + (ko ? KO_BONUS : 0); }
+  }
+  if (!enemies) return null;
+  if (mates && score <= 0) return null; // 같은 편을 휘말려 손해면 쓰지 않는다
+  if (SELF_KO.includes(move.id)) {
+    const sig = SIGNATURE_MOVES[unit.species] === move.id;
+    if (!sig && !kos) return null; // 신중: 하나라도 쓰러뜨릴 때만
+    score -= bestDamage(unit, foes) * SELF_TURNS * (sig ? SIG_SELF_KO : OTHER_SELF_KO);
+    if (sig && enemies >= 2) score += KO_BONUS / 2; // 찌리리공·붐볼: 여럿 휘말리면 보너스
+  }
+  return score;
+}
 
 export function enemyTurnOrder(state) {
   return state.units
@@ -77,13 +106,12 @@ export function planEnemyAction(state, unit) {
         }
         continue;
       }
-      for (const foe of foes) {
-        const d = manhattan(p, foe);
-        if (d < move.range[0] || d > move.range[1]) continue;
-        const exp = expectedDamage(ghost, foe, move, state.grid[foe.y][foe.x]);
-        if (exp === 0) continue;
-        const score = exp + (exp >= foe.hp ? KO_BONUS : 0) - risk;
-        if (!best || score > best.score) best = { score, moveTo: p, attack: { moveId: mid, targetId: foe.id } };
+      const sim = { ...state, units: state.units.map((u) => (u === unit ? ghost : u)) };
+      for (const aim of aimsOf(sim, ghost, move)) {
+        const s = aimScore(state, unit, ghost, move, aim, foes);
+        if (s === null) continue;
+        const score = s - (SELF_KO.includes(mid) ? 0 : risk); // 자폭은 어차피 쓰러지므로 위험 무시
+        if (!best || score > best.score) best = { score, moveTo: p, attack: { moveId: mid, aim, ...(aim.unitId ? { targetId: aim.unitId } : {}) } };
       }
     }
   }

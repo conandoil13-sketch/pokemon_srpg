@@ -4,6 +4,8 @@ import { enemyTurnOrder, planEnemyAction } from '../src/core/ai.js';
 import { createBattle } from '../src/core/battle.js';
 import { makeUnit } from '../src/core/battle.js';
 import { manhattan } from '../src/core/pathfind.js';
+import { unitsHit } from '../src/core/shapes.js';
+import { MOVES as MV } from '../src/data/moves.js';
 
 const MOVESET = { garchomp: ['earthquake', 'dragon-claw', 'crunch'], bronzong: ['tackle'], torterra: ['razor-leaf'] };
 const mk = (species, side, x, y, hp) => {
@@ -21,7 +23,9 @@ test('prefers the target it can KO', () => {
   const full = mk('empoleon', 'ally', 6, 2);
   const s = state(9, 5, [foe, weak, full]);
   const plan = planEnemyAction(s, foe);
-  assert.equal(plan.attack.targetId, 'ally-luxray');
+  const at = { ...s, units: s.units.map((u) => (u === foe ? { ...foe, ...plan.moveTo } : u)) };
+  const hit = unitsHit(at, at.units[0], MV[plan.attack.moveId], plan.attack.aim).map((u) => u.id);
+  assert.ok(hit.includes('ally-luxray'), JSON.stringify(plan)); // 범위기면 둘 다 맞을 수도
 });
 
 test('never picks a zero-damage (immune) move', () => {
@@ -155,4 +159,61 @@ test('sleeping (with turns left) or frozen units are not threats next phase', ()
   assert.equal(isThreat({ status: 'sleep', statusTurns: 0 }), true); // 다음 페이즈 시작에 깨어남
   assert.equal(isThreat({ status: 'freeze', statusTurns: 2 }), false);
   assert.equal(isThreat({ status: 'paralysis' }), true);
+});
+
+// ---- 범위기 조준 ----
+test('aims a beam down the line that hits two foes', () => {
+  const foe = mkm('starmie', 'enemy', 4, 2, ['hydro-pump']);
+  const a = mkm('rhydon', 'ally', 7, 3, ['tackle']), b = mkm('golem', 'ally', 7, 4, ['tackle']);
+  foe.stats.spe = 1;
+  const plan = planEnemyAction(state(12, 7, [foe, a, b]), foe);
+  assert.equal(plan.attack?.moveId, 'hydro-pump');
+  const hit = ['ally-rhydon', 'ally-golem'];
+  const s = state(12, 7, [{ ...foe, x: plan.moveTo.x, y: plan.moveTo.y }, a, b]);
+  assert.deepEqual(unitsHit(s, s.units[0], MV['hydro-pump'], plan.attack.aim).map((u) => u.id).sort(), hit.sort());
+});
+
+test('does not hit its own teammate when it can avoid it', () => {
+  const foe = mkm('rhydon', 'enemy', 4, 2, ['earthquake', 'horn-attack']);
+  const mate = mkm('golem', 'enemy', 4, 1, ['tackle']);
+  const ally = mkm('pikachu', 'ally', 5, 2, ['tackle']);
+  foe.stats.spe = 1;
+  const s = state(9, 5, [foe, mate, ally]);
+  const plan = planEnemyAction(s, foe);
+  const at = { ...s, units: s.units.map((u) => (u === foe ? { ...foe, ...plan.moveTo } : u)) };
+  const hit = unitsHit(at, at.units[0], MV[plan.attack.moveId], plan.attack.aim);
+  assert.ok(!hit.some((u) => u.side === 'enemy'), JSON.stringify(plan));
+});
+
+test('no earthquake when it would only hit teammates', () => {
+  const foe = mkm('rhydon', 'enemy', 4, 2, ['earthquake']);
+  const mate = mkm('golem', 'enemy', 4, 1, ['tackle']);
+  const ally = mkm('pikachu', 'ally', 15, 4, ['tackle']);
+  assert.equal(planEnemyAction(state(16, 5, [foe, mate, ally]), foe).attack, null);
+});
+
+test('voltorb blows itself up next to two foes; others stay careful', () => {
+  const v = mkm('voltorb', 'enemy', 4, 2, ['self-destruct', 'tackle']); v.stats.spe = 1;
+  const a = mkm('pikachu', 'ally', 3, 2, ['tackle']), b = mkm('piplup', 'ally', 5, 2, ['tackle']);
+  assert.equal(planEnemyAction(state(9, 5, [v, a, b]), v).attack?.moveId, 'self-destruct');
+  const g = mkm('geodude', 'enemy', 4, 2, ['self-destruct', 'tackle']); g.stats.spe = 1;
+  const a2 = mkm('pikachu', 'ally', 3, 2, ['tackle']), b2 = mkm('piplup', 'ally', 5, 2, ['tackle']);
+  a2.hp = a2.maxHp = 999; b2.hp = b2.maxHp = 999;
+  assert.equal(planEnemyAction(state(9, 5, [g, a2, b2]), g).attack?.moveId, 'tackle');
+});
+
+test('planning one enemy stays fast', () => {
+  const foe = mkm('rhydon', 'enemy', 8, 4, ['earthquake', 'horn-attack', 'rock-slide', 'stomp']);
+  const allies = [[1, 1], [2, 6], [5, 3], [6, 7]].map(([x, y], i) => mkm(['pikachu', 'piplup', 'chimchar', 'turtwig'][i], 'ally', x, y, ['tackle', 'ember', 'water-gun', 'hydro-pump']));
+  const t0 = performance.now();
+  planEnemyAction(state(16, 12, [foe, ...allies]), foe);
+  assert.ok(performance.now() - t0 < 50, `${performance.now() - t0}ms`);
+});
+
+test('no area move whose net effect hurts its own side', () => {
+  const foe = mkm('rhydon', 'enemy', 2, 0, ['earthquake']);
+  const mate = mkm('pikachu', 'enemy', 1, 0, ['tackle']);
+  const ally = mkm('golem', 'ally', 3, 0, ['tackle']); ally.hp = ally.maxHp = 999;
+  const s = { grid: ['#...#'], width: 5, height: 1, units: [foe, mate, ally], phase: 'enemy', turn: 1, result: null };
+  assert.equal(planEnemyAction(s, foe).attack, null);
 });

@@ -27,8 +27,10 @@ function baseDamage(attacker, defender, move, defTile) {
   return { raw: base * stab * typeMult * burn, typeMult };
 }
 
-export function calcDamage(attacker, defender, move, { rng, defTile }) {
-  const { raw, typeMult } = baseDamage(attacker, defender, move, defTile);
+// spread: 여러 마리를 맞히면 0.75 (본가 4세대)
+export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1 }) {
+  const { raw: base, typeMult } = baseDamage(attacker, defender, move, defTile);
+  const raw = base * spread;
   // 면역은 명중 판정 없이 "효과가 없다" (빗나감 메시지가 나오지 않도록)
   if (typeMult === 0) return { hit: true, crit: false, typeMult, damage: 0 };
   const hit = rng() * 100 < hitChance(attacker, defender, move, defTile);
@@ -39,9 +41,9 @@ export function calcDamage(attacker, defender, move, { rng, defTile }) {
   return { hit, crit, typeMult, damage };
 }
 
-export function expectedDamage(attacker, defender, move, defTile) {
+export function expectedDamage(attacker, defender, move, defTile, spread = 1) {
   const { raw } = baseDamage(attacker, defender, move, defTile);
-  return raw * 0.925 * hitChance(attacker, defender, move, defTile) / 100;
+  return raw * spread * 0.925 * hitChance(attacker, defender, move, defTile) / 100;
 }
 
 // 혼란 자해: 위력 40 · 타입 없음 · 물리, 자기 공격/방어 랭크와 화상 반영, 난수·급소 없음

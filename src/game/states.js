@@ -4,6 +4,7 @@ import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict } from '../core/status.js';
 import { wrapMessage } from '../render/mapAttack.js';
 import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
+import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
@@ -27,6 +28,8 @@ import { josa } from '../data/text.js';
 
 const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕' };
 const TARGET_LABEL = { self: '자신', enemy: '적 하나', enemies: '주변 적 전체', ally: '아군 하나', allies: '주변 아군' };
+const isAttack = (mv) => mv.category !== 'status';
+const DIR_OF = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
 const pickOne = (mv) => !mv.kind || mv.kind === 'enemy' || mv.kind === 'ally'; // 대상을 직접 고르는 기술
 const helpful = (mv) => mv.kind === 'self' || mv.kind === 'ally' || mv.kind === 'allies';
 export const effectSummary = (mv) => [...(mv.statChanges ?? []).map((c) => `${STAT_KO[API_STAT[c.stat]]} ${c.change > 0 ? '+' : ''}${c.change}`), ...(mv.ailment ? [STATUS_KO[mv.ailment]] : [])].join(' ');
@@ -71,6 +74,7 @@ const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
 export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
+  let aims = null, aIdx = 0; // 공격기 조준 후보와 현재 선택
   let move, targets, tIdx, walk, anim, animThen, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0, everyone;
   let notice = null; // { lines, then } 대사 후 다음 단계
@@ -117,6 +121,23 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const [min, max] = mv.range;
     const want = mv.kind === 'ally' ? (o) => o.side === unit.side && o !== unit : (o) => o.side !== unit.side;
     return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max);
+  }
+
+  // 공격기: 적이 하나 이상 맞는 조준만
+  const attackAims = (unit, mv) => aimsOf(st, unit, mv).filter((a) => unitsHit(st, unit, mv, a).some((u) => u.side !== unit.side));
+  const curAim = () => (aims ? aims[aIdx] : null);
+  // 조준의 대표 칸 (커서 위치)
+  function aimPoint(aim) {
+    if (aim.unitId) { const u = st.units.find((o) => o.id === aim.unitId); return { x: u.x, y: u.y }; }
+    if (aim.dir) return tilesOf(st, sel, MOVES[move], aim)[0] ?? { x: sel.x, y: sel.y };
+    if (aim.self) return { x: sel.x, y: sel.y };
+    return { x: aim.x, y: aim.y };
+  }
+  const sameAim = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  function fireAim() {
+    const aim = curAim();
+    const one = aim.unitId ? st.units.find((o) => o.id === aim.unitId) : null;
+    doAttack(sel, one, move, finishAllyAction, aim);
   }
 
   // 페이즈 종료 때 풀린 랭크 → 대사 (한 건씩)
@@ -192,7 +213,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         cursor = { ...plan.moveTo };
         if (plan.attack) {
           const target = st.units.find((o) => o.id === plan.attack.targetId);
-          pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, nextEnemy) };
+          pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, nextEnemy, plan.attack.aim) };
         } else {
           u.acted = true;
           pause = { t: 0.2, fn: nextEnemy };
@@ -207,12 +228,13 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 공격기·변화기 공통. 자신·범위형 변화기는 target 을 무시한다
-  function doAttack(attacker, target, moveId, then) {
+  function doAttack(attacker, target, moveId, then, aim) {
     const mv = MOVES[moveId];
+    if (isAttack(mv)) { attackWith(attacker, target, mv, then, aim); return; }
     const one = pickOne(mv) && target && target !== attacker ? target : null;
     const hpBefore = one?.hp;
     const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, one].find((u) => u?.id === id);
-    const result = applyMove(st, attacker.id, moveId, one?.id ?? null, rng);
+    const result = applyMove(st, attacker.id, moveId, aim ?? one?.id ?? null, rng);
     // 마비 실패·혼란 자해: 기술이 나가지 않으므로 대상은 돌아보지 않고 카메라는 사용자에게
     if (one && !result.blocked) {
       facing[attacker.id] = dirFromDelta(one.x - attacker.x, one.y - attacker.y);
@@ -222,6 +244,25 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     target = result.blocked ? attacker : one ?? attacker;
     animThen = then;
     focus = target;
+    mode = 'anim';
+  }
+
+  // 공격기: 맞기 전 대상 목록을 잡아 두고(기절해도 연출), 결과를 다중 대상 연출로
+  function attackWith(attacker, target, mv, then, aim) {
+    const a = aim ?? (target ? { unitId: target.id } : { self: true });
+    const defenders = unitsHit(st, attacker, mv, a);
+    const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, ...defenders].find((u) => u.id === id);
+    const result = applyMove(st, attacker.id, mv.id, a, rng);
+    if (!result.blocked) {
+      const pt = a.dir ? tilesOf(st, attacker, mv, a)[0] : defenders[0] ?? (a.x !== undefined ? a : null);
+      if (pt) facing[attacker.id] = dirFromDelta(pt.x - attacker.x, pt.y - attacker.y);
+      for (const d of defenders) facing[d.id] = dirFromDelta(attacker.x - d.x, attacker.y - d.y);
+    }
+    const lineEnd = mv.shape?.type === 'line' ? tilesOf(st, attacker, mv, a).at(-1) ?? { x: attacker.x, y: attacker.y } : null; // 벽·가장자리에서 멈춘 끝 칸
+    anim = createAttackAnim({ attacker, defenders: result.blocked ? [] : defenders, move: mv, result, lookup, aim: a, endPt: lineEnd });
+    aims = null;
+    animThen = then;
+    focus = result.blocked || defenders.length !== 1 ? attacker : defenders[0];
     mode = 'anim';
   }
 
@@ -260,7 +301,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function openAction() {
     menu = sel.moves.map((m) => ({
       label: MOVES[m].name, moveId: m,
-      enabled: MOVES[m].kind === 'self' || targetsFor(sel, m).length > 0,
+      enabled: isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MOVES[m].kind === 'self' || targetsFor(sel, m).length > 0,
       ...(MOVES[m].category === 'status' ? { tag: '변화' } : {}),
     }));
     menu.push({ label: '대기', enabled: true });
@@ -297,6 +338,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       return;
     }
     move = it.moveId;
+    if (isAttack(MOVES[move])) { // 공격기: 가장 많이 맞는 조준부터
+      aims = attackAims(sel, MOVES[move]);
+      const b = bestAim(st, sel, MOVES[move]);
+      aIdx = Math.max(0, aims.findIndex((a) => sameAim(a, b)));
+      cursor = aimPoint(curAim());
+      mode = 'target';
+      return;
+    }
+    aims = null;
     targets = targetsFor(sel, move);
     tIdx = 0;
     const t0 = pickOne(MOVES[move]) ? targets[0] : sel; // 자신·범위형: 커서는 사용자, 확인 한 번
@@ -362,6 +412,28 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         return;
       }
       case 'target': {
+        if (aims) { // 공격기 조준
+          if (ev.type === 'cancel') { aims = null; cursor = { x: sel.x, y: sel.y }; mode = 'action'; return; }
+          if (ev.type === 'confirm') { fireAim(); return; }
+          if (ev.type === 'dir') {
+            const byDir = aims.findIndex((a) => a.dir === DIR_OF(ev.dx, ev.dy));
+            if (aims[0]?.dir) { if (byDir >= 0) aIdx = byDir; }
+            else aIdx = (aIdx + (ev.dx + ev.dy > 0 ? 1 : -1) + aims.length) % aims.length;
+            cursor = aimPoint(curAim());
+            return;
+          }
+          if (tile && (ev.type === 'cursor' || ev.type === 'click')) {
+            // 그 칸이 중심인 조준 → 지금 조준이 그 칸을 덮으면 유지 → 그 칸을 덮는 첫 조준
+            const covers = (a) => tilesOf(st, sel, MOVES[move], a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y);
+            const centred = aims.findIndex((a) => { const p = aimPoint(a); return p.x === tile.x && p.y === tile.y; });
+            const i = centred >= 0 ? centred : covers(curAim()) ? aIdx : aims.findIndex(covers);
+            if (i < 0) return;
+            const same = i === aIdx;
+            aIdx = i; cursor = aimPoint(curAim());
+            if (ev.type === 'click' && same) fireAim(); // 다른 조준을 누르면 먼저 고르기만
+          }
+          return;
+        }
         if (!pickOne(MOVES[move])) {
           const inArea = tile && manhattan(tile, sel) <= MOVES[move].range[1];
           if (ev.type === 'confirm' || (ev.type === 'click' && inArea)) doAttack(sel, sel, move, finishAllyAction);
@@ -456,7 +528,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function drawUnits(ctx) {
     const list = [...st.units];
-    if (anim && !st.units.includes(anim.defender)) list.push(anim.defender); // 기절 연출 중
+    for (const u of anim?.extraUnits ?? (anim?.defender ? [anim.defender] : [])) if (u && !list.includes(u)) list.push(u); // 기절 연출 중
     list.sort((a, b) => unitWorld(a).y - unitWorld(b).y);
     for (const u of list) {
       const p = unitWorld(u);
@@ -481,6 +553,30 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (grey) ctx.restore();
       if (!pose?.hidden) ui.drawStatusDot(ctx, u, cx, cy);
     }
+  }
+
+  // 공격 예상 창: 맞는 대상 최대 3줄 (명중·데미지·기절), 넘으면 "외 N마리", 아군은 (아군)
+  function drawAttackForecast(ctx, a, mv, aim) {
+    const list = unitsHit(st, a, mv, aim);
+    if (list.length === 1 && list[0].side !== a.side && !mv.id.match(/self-destruct|explosion/)) { drawForecast(ctx, a, list[0], mv.id); return; }
+    const spread = list.length >= 2 ? 0.75 : 1;
+    const rows = Math.min(3, list.length);
+    const h = 24 + rows * 13 + (list.length > 3 ? 12 : 0);
+    const y = H - h - 2;
+    ui.drawWindow(ctx, 2, y, W - 4, h);
+    drawText(ctx, `${mv.name}  ${ui.shapeLabel(mv)}`, 10, y + 5);
+    ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
+    list.slice(0, 3).forEach((d, i) => {
+      const tile = st.grid[d.y][d.x], ry = y + 20 + i * 13;
+      const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread });
+      const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread });
+      const mine = d.side === a.side;
+      drawText(ctx, `${spec(d).name}${mine ? ' (아군)' : ''}`, 10, ry, mine ? '#d03020' : '#383838', null, 'small');
+      drawText(ctx, min.typeMult === 0 ? '효과 없음' : `${hitChance(a, d, mv, tile)}%  ${min.damage}~${max.damage}`, 110, ry, '#383838', null, 'small');
+      if (min.typeMult && max.damage >= d.hp) drawText(ctx, '기절?', 206, ry, '#e03030', null, 'small');
+    });
+    if (list.length > 3) drawText(ctx, `외 ${list.length - 3}마리`, 10, y + 20 + 3 * 13, '#707070', null, 'small');
+    if (/self-destruct|explosion/.test(mv.id)) drawText(ctx, '사용자 기절', W - 12 - textWidth('사용자 기절', 'small'), y + 20 + rows * 13 - 13, '#e03030', null, 'small');
   }
 
   function drawForecast(ctx, a, d, moveId) {
@@ -536,7 +632,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, mv.category === 'physical' ? '물리' : '특수', x + 44, y + 4);
     drawText(ctx, `위력 ${mv.power}`, x + 6, y + 19);
     drawText(ctx, `명중 ${mv.accuracy}`, x + 60, y + 19);
-    drawText(ctx, `사거리 ${mv.range[0]}~${mv.range[1]}`, x + 6, y + 33);
+    drawText(ctx, ui.shapeLabel(mv), x + 6, y + 33);
     if (mv.ailment) { // 부가효과 상태이상: "화상 10%"
       const t = `${STATUS_KO[mv.ailment]} ${mv.ailmentChance || 100}%`;
       drawText(ctx, t, x + w - 8 - textWidth(t, 'small'), y + 35, '#5848a0', null, 'small');
@@ -568,9 +664,21 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       ui.drawHighlights(ctx, toPts(reach), BLUE);
       ui.drawHighlights(ctx, atkTiles, RED);
     }
-    const area = (mv) => ui.drawHighlights(ctx, tilesInRange(sel.x, sel.y, mv.range, st.width, st.height), helpful(mv) ? BLUE : RED);
+    const area = (mv) => {
+      if (isAttack(mv)) { // 공격기: 가능한 조준들의 맞는 칸 합집합
+        const seen = new Map();
+        for (const a of attackAims(sel, mv)) for (const t of tilesOf(st, sel, mv, a)) seen.set(`${t.x},${t.y}`, t);
+        ui.drawHighlights(ctx, [...seen.values()], RED);
+        return;
+      }
+      ui.drawHighlights(ctx, tilesInRange(sel.x, sel.y, mv.range, st.width, st.height), helpful(mv) ? BLUE : RED);
+    };
     if (mode === 'action' && menu[menuSel]?.moveId) area(MOVES[menu[menuSel].moveId]);
-    if (mode === 'target') area(MOVES[move]);
+    if (mode === 'target' && aims) {
+      const mv = MOVES[move], tiles = tilesOf(st, sel, mv, curAim());
+      ui.drawHighlights(ctx, tiles, RED);
+      for (const u of unitsHit(st, sel, mv, curAim())) if (u.side === sel.side) ui.drawOutline(ctx, u.x, u.y, '#f89020');
+    } else if (mode === 'target') area(MOVES[move]);
     drawUnits(ctx);
     if (['idle', 'selected', 'target'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
@@ -588,7 +696,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     if (mode === 'target') {
       if (MOVES[move].category === 'status') drawStatusForecast(ctx, sel, MOVES[move], targets);
-      else drawForecast(ctx, sel, targets[tIdx], move);
+      else drawAttackForecast(ctx, sel, MOVES[move], curAim());
     }
     if (banner) ui.drawBanner(ctx, banner.text, banner.sub, banner.color, Math.min(1, banner.t));
     if (anim) anim.drawScreen(ctx);
@@ -612,5 +720,5 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   playerPhase();
 
-  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get camera() { return { ...cam }; } };
+  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get camera() { return { ...cam }; } };
 }

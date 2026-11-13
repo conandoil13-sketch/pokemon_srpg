@@ -14,21 +14,6 @@ const AUTO = 1.1;
 
 const label = (u) => (u.side === 'enemy' ? '상대 ' : '') + SPECIES[u.species].name;
 
-export function attackMessages(attacker, defender, move, result) {
-  const used = `${label(attacker)}의 ${move.name}!`;
-  const d = label(defender);
-  const mid = [];
-  if (result.typeMult === 0) mid.push(`${d}에게는 효과가 없는 것 같다...`);
-  else if (!result.hit) mid.push(`${d}에게는 맞지 않았다!`);
-  else {
-    if (result.crit) mid.push('급소에 맞았다!');
-    if (result.typeMult > 1) mid.push('효과가 굉장했다!');
-    else if (result.typeMult < 1) mid.push('효과가 별로인 듯하다...');
-  }
-  const faint = result.fainted ? `${josa(d, '은/는')} 쓰러졌다!` : null;
-  return { used, mid, faint };
-}
-
 // 랭크 변화 대사 (changes: applyMove 의 stageChanges, byId: 유닛 찾기 객체/함수)
 export function stageMessages(changes, byId) {
   const get = typeof byId === 'function' ? byId : (id) => byId[id];
@@ -213,119 +198,141 @@ function createStatusAnim({ attacker, defender, move, result, lookup }) {
   };
 }
 
-function createAttack({ attacker, defender, move, result, hpBefore, lookup }) {
-  const get = lookup ?? ((id) => [attacker, defender].find((u) => u.id === id));
-  const landed = result.hit && result.typeMult > 0;
+// 공격기 (단일·범위 공통). defenders: 맞기 전 대상들, aim: 조준 (탄 끝점 계산용)
+const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+function createAttack({ attacker, defender, defenders: ds, move, result, hpBefore, lookup, aim, endPt: givenEnd }) {
+  const defenders = ds ?? (defender ? [defender] : []);
+  const hits = result.hits ?? (defender ? [{ unitId: defender.id, ...result, hpBefore }] : []);
+  const hitOf = (u) => hits.find((h) => h.unitId === u.id);
+  const get = lookup ?? ((id) => [attacker, ...defenders].find((u) => u.id === id));
   const special = move.category === 'special';
   const animName = special ? 'Shoot' : 'Attack';
-  const timing = animTiming(attacker.species, animName);
-  const actLen = Math.max(0.4, timing.length);
-  const atkDir = dirFromDelta(defender.x - attacker.x, defender.y - attacker.y);
-  const defDir = dirFromDelta(attacker.x - defender.x, attacker.y - defender.y);
-  const msgs = attackMessages(attacker, defender, move, result);
-  const lunge = !special && !hasPmd(attacker.species); // PMD 공격 동작에는 이동이 들어 있다
+  const actLen = Math.max(0.4, animTiming(attacker.species, animName).length);
+  // 사용자가 바라볼 곳: 방향 조준이면 그 방향, 아니면 첫 대상(없으면 착탄 칸)
+  const focusPt = aim?.dir ? { x: attacker.x + VEC[aim.dir][0], y: attacker.y + VEC[aim.dir][1] }
+    : defenders[0] ? { x: defenders[0].x, y: defenders[0].y } : aim?.x !== undefined ? aim : { x: attacker.x + 1, y: attacker.y };
+  const atkDir = dirFromDelta(focusPt.x - attacker.x, focusPt.y - attacker.y);
+  const defDir = (d) => dirFromDelta(attacker.x - d.x, attacker.y - d.y);
+  // 탄 끝점: 단일·착탄은 대상/착탄 칸, 직선은 끝 칸, 부채꼴·주변은 탄 없음
+  const shapeType = move.shape?.type ?? 'single';
+  const endPt = givenEnd ?? (shapeType === 'line' ? { x: attacker.x + VEC[aim.dir][0] * (move.shape.length ?? 3), y: attacker.y + VEC[aim.dir][1] * (move.shape.length ?? 3) }
+    : shapeType === 'blast' ? aim : shapeType === 'single' ? defenders[0] : null);
+  const travel = special && endPt && (shapeType !== 'single' || defenders[0]);
+  const lunge = !special && !hasPmd(attacker.species);
+  const many = defenders.length >= 2;
 
+  const mid = [], faints = [];
+  for (const d of defenders) {
+    const h = hitOf(d); if (!h) continue;
+    const name = label(d);
+    if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
+    else if (!h.hit) mid.push({ text: `${name}에게는 맞지 않았다!`, who: d });
+    else {
+      if (h.crit) mid.push({ text: many ? `${name}의 급소에 맞았다!` : '급소에 맞았다!', who: d });
+      if (h.typeMult > 1) mid.push({ text: many ? `${name}에게 효과가 굉장했다!` : '효과가 굉장했다!', who: d });
+      else if (h.typeMult < 1) mid.push({ text: many ? `${name}에게는 효과가 별로인 듯하다...` : '효과가 별로인 듯하다...', who: d });
+    }
+    if (h.fainted) faints.push({ text: `${josa(name, '은/는')} 쓰러졌다!`, who: d });
+  }
   const steps = [
     { k: 'act', d: actLen },
-    ...(special ? [{ k: 'travel', d: 0.25 }] : []),
+    ...(travel ? [{ k: 'travel', d: 0.25 }] : []),
     { k: 'impact', d: 0.6 },
-    ...msgs.mid.map((text) => ({ k: 'msg', d: AUTO, text, who: defender, emo: 'Pain' })),
-    ...(msgs.faint ? [{ k: 'faint', d: 0.6 }, { k: 'msg', d: AUTO, text: msgs.faint, who: defender, emo: 'Pain' }] : []),
+    ...mid.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: 'Pain' })),
+    ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
+    ...(result.selfKO ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []),
   ];
   let i = 0, t = 0, total = 0;
-  let text = msgs.used, who = attacker, emo = 'Determined';
-
+  let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
-  const passed = (k) => steps.slice(0, i).some((s) => s.k === k);
+  const passed = (k) => steps.slice(0, i).some((x) => x.k === k);
 
-  function shownHp() {
-    if (passed('impact')) return defender.hp;
-    if (step()?.k === 'impact') return hpBefore + (defender.hp - hpBefore) * Math.min(1, t / 0.45);
-    return hpBefore;
+  function shownHp(d) {
+    const h = hitOf(d), before = h?.hpBefore ?? d.hp;
+    if (passed('impact')) return d.hp;
+    if (step()?.k === 'impact') return before + (d.hp - before) * Math.min(1, t / 0.45);
+    return before;
   }
 
   return {
-    defender,
+    defender: defenders[0] ?? null,
+    extraUnits: [attacker, ...defenders], // 기절해 목록에서 빠져도 연출 동안 그린다
     get done() { return i >= steps.length; },
     update(dt) {
       if (i >= steps.length) return;
       t += dt; total += dt;
-      if (t >= step().d) {
-        t = 0; i++;
-        const s = step();
-        if (s?.text) { text = s.text; who = s.who; emo = s.emo; }
-      }
+      if (t >= step().d) { t = 0; i++; const s = step(); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
     },
-    advance() { if (step()?.k === 'msg') { t = step().d; } },
+    advance() { if (step()?.k === 'msg') t = step().d; },
 
-    // 유닛 포즈 덮어쓰기 (없으면 null)
     unitPose(u) {
       const s = step();
       if (!s) return null;
       if (u === attacker) {
+        if (passed('selffaint')) return { hidden: true };
+        if (s.k === 'selffaint') return { anim: 'Hurt', t: 0.1, loop: false, dir: atkDir, hidden: Math.floor(t / 0.08) % 2 === 0 };
         if (s.k === 'act') {
-          // 임시 도트용 돌진 오프셋 (PMD 시트는 공격 동작 자체에 움직임이 있다)
           const k = Math.sin(Math.PI * Math.min(1, t / actLen));
-          const v = { x: Math.sign(defender.x - attacker.x), y: Math.sign(defender.y - attacker.y) };
+          const v = { x: Math.sign(focusPt.x - attacker.x), y: Math.sign(focusPt.y - attacker.y) };
           return { anim: animName, t, loop: false, dir: atkDir, dx: lunge ? v.x * 5 * k : 0, dy: lunge ? v.y * 5 * k : 0 };
         }
         return { anim: 'Idle', t: total, loop: true, dir: atkDir };
       }
-      if (u === defender) {
-        if (passed('faint')) return { hidden: true };
-        if (s.k === 'faint') return { anim: 'Hurt', t: 0.1, loop: false, dir: defDir, hidden: Math.floor(t / 0.08) % 2 === 0 };
-        if (s.k === 'impact' && landed) return { anim: 'Hurt', t, loop: false, dir: defDir, flash: Math.floor(t / 0.06) % 2 === 0 && t < 0.3 };
-        return { anim: 'Idle', t: total, loop: true, dir: defDir };
-      }
-      return null;
+      const h = defenders.includes(u) ? hitOf(u) : null;
+      if (!h) return null;
+      const landed = h.hit && h.typeMult > 0;
+      if (h.fainted && passed('faint')) return { hidden: true };
+      if (h.fainted && s.k === 'faint') return { anim: 'Hurt', t: 0.1, loop: false, dir: defDir(u), hidden: Math.floor(t / 0.08) % 2 === 0 };
+      if (s.k === 'impact' && landed) return { anim: 'Hurt', t, loop: false, dir: defDir(u), flash: Math.floor(t / 0.06) % 2 === 0 && t < 0.3 };
+      return { anim: 'Idle', t: total, loop: true, dir: defDir(u) };
     },
 
-    // 월드 좌표 효과 (카메라 translate 된 상태)
     drawWorld(ctx) {
       const s = step();
       if (!s) return;
-      const a = center(attacker), d = center(defender);
+      const a = center(attacker);
       const color = TYPE_COLORS[move.type];
       if (s.k === 'travel') {
-        const k = t / s.d;
-        const x = Math.round(a.x + (d.x - a.x) * k), y = Math.round(a.y - 6 + (d.y - a.y) * k);
+        const e = center(endPt), k = t / s.d;
+        const x = Math.round(a.x + (e.x - a.x) * k), y = Math.round(a.y - 6 + (e.y - a.y) * k);
         ctx.fillStyle = shade(color, 0.55); ctx.fillRect(x - 4, y - 4, 8, 8);
         ctx.fillStyle = color; ctx.fillRect(x - 3, y - 3, 6, 6);
         ctx.fillStyle = '#ffffff'; ctx.fillRect(x - 2, y - 2, 2, 2);
       }
-      if (s.k === 'impact' && landed && t < 0.35) {
-        const r = 4 + (t / 0.35) * 12;
-        for (let n = 0; n < 8; n++) {
-          const ang = (n / 8) * Math.PI * 2;
-          ctx.fillStyle = n % 2 ? color : '#ffffff';
-          ctx.fillRect(Math.round(d.x + Math.cos(ang) * r) - 1, Math.round(d.y - 4 + Math.sin(ang) * r) - 1, 3, 3);
+      for (const d of defenders) {
+        const h = hitOf(d); if (!h) continue;
+        const p = center(d), landed = h.hit && h.typeMult > 0;
+        if (s.k === 'impact' && landed && t < 0.35) {
+          const r = 4 + (t / 0.35) * 12;
+          for (let n = 0; n < 8; n++) {
+            const ang = (n / 8) * Math.PI * 2;
+            ctx.fillStyle = n % 2 ? color : '#ffffff';
+            ctx.fillRect(Math.round(p.x + Math.cos(ang) * r) - 1, Math.round(p.y - 4 + Math.sin(ang) * r) - 1, 3, 3);
+          }
         }
-      }
-      // 데미지 숫자 / MISS
-      if (s.k === 'stage' || (s.stage && !s.pop)) drawStagePops(ctx, result.stageChanges, get, s.k === 'stage' ? t : 0.6);
-      if (s.pop) drawStatusPop(ctx, s.pop, get);
-      if (s.k === 'impact' || (passed('impact') && !passed('faint') && s.k === 'msg' && !s.stage)) {
-        const age = s.k === 'impact' ? t : 0.6;
-        const rise = Math.min(8, age * 20);
-        const pop = result.typeMult === 0 ? '효과 없음' : !result.hit ? 'MISS' : `${result.damage}`;
-        const col = !landed ? '#d8d8d8' : result.typeMult > 1 ? '#f8d030' : '#ffffff';
-        drawText(ctx, pop, Math.round(d.x - textWidth(pop) / 2), Math.round(d.y - 30 - rise), col, '#202020');
+        const showing = s.k === 'impact' || (passed('impact') && !(h.fainted && passed('faint')) && s.k === 'msg' && !s.stage);
+        if (!showing) continue;
+        const rise = Math.min(8, (s.k === 'impact' ? t : 0.6) * 20);
+        const pop = h.typeMult === 0 ? '효과 없음' : !h.hit ? 'MISS' : `${h.damage}`;
+        const col = !landed ? '#d8d8d8' : h.typeMult > 1 ? '#f8d030' : '#ffffff';
+        drawText(ctx, pop, Math.round(p.x - textWidth(pop) / 2), Math.round(p.y - 30 - rise), col, '#202020');
         const bw = 22;
         ctx.fillStyle = '#202020';
-        ctx.fillRect(Math.round(d.x - bw / 2) - 1, Math.round(d.y + 10), bw + 2, 7);
-        drawHpBar(ctx, Math.round(d.x - bw / 2), Math.round(d.y + 11), bw, shownHp(), defender.maxHp);
+        ctx.fillRect(Math.round(p.x - bw / 2) - 1, Math.round(p.y + 10), bw + 2, 7);
+        drawHpBar(ctx, Math.round(p.x - bw / 2), Math.round(p.y + 11), bw, shownHp(d), d.maxHp);
       }
-      // 경험치 (적을 쓰러뜨린 아군 위)
+      if (s.k === 'stage' || (s.stage && !s.pop)) drawStagePops(ctx, result.stageChanges, get, s.k === 'stage' ? t : 0.6);
+      if (s.pop) drawStatusPop(ctx, s.pop, get);
       const exp = result.expGained?.[attacker.species];
-      if (exp && (passed('impact') || s.k === 'impact')) {
-        const label = `+${exp} EXP`;
-        drawText(ctx, label, Math.round(a.x - textWidth(label, 'small') / 2), Math.round(a.y - 32), '#f8d030', '#202020', 'small');
+      if (exp && (passed('impact') || s.k === 'impact') && !passed('selffaint')) {
+        const lbl = `+${exp} EXP`;
+        drawText(ctx, lbl, Math.round(a.x - textWidth(lbl, 'small') / 2), Math.round(a.y - 32), '#f8d030', '#202020', 'small');
       }
     },
 
-    // 화면 좌표 대사 창
     drawScreen(ctx) {
       const s = step();
       if (!s) return;

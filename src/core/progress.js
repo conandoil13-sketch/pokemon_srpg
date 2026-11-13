@@ -11,7 +11,7 @@ export const STARTERS = ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']; // 
 // Member = { species, level, exp, moves }
 export function newMember(species, level = BALANCE.startLevel) {
   const s = SPECIES[species];
-  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES) };
+  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species) };
 }
 
 export const newParty = () => STARTERS.map((sp) => newMember(sp));

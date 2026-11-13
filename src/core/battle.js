@@ -5,6 +5,7 @@ import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage } from './damage.js';
+import { unitsHit } from './shapes.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT } from './stages.js';
 import { statsAt, expYield } from './stats.js';
@@ -19,7 +20,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss }) {
   return {
     id: id ?? `${side}-${species}`, species, side, x, y, level, stats,
     hp: stats.hp, maxHp: stats.hp,
-    moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES),
+    moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES, species),
     moved: false, acted: false,
     ...newStages(),
     ...newStatus(),
@@ -88,13 +89,14 @@ function awardShare(state, defender) {
   }
 }
 
-// 기절 처리 공통. by: 쓰러뜨린 유닛(없으면 상태 데미지·자해)
-function knockOut(state, d, by) {
+// 기절 처리 공통. by: 쓰러뜨린 유닛(없으면 상태 데미지·자해). reward false: 보상 없음(자폭)
+// 같은 편끼리 쓰러뜨리면 경험치·코인 없음 (awardExp 는 아군→적만 지급)
+function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   state.units = state.units.filter((u) => u !== d);
   let expGained = {};
-  if (by) expGained = awardExp(state, by, d);
-  else awardShare(state, d);
-  if (d.side === 'enemy' && (!by || by.side === 'ally')) state.log.coins += 3 + Math.floor(d.level / 3);
+  if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
+  else if (reward) awardShare(state, d);
+  if (reward && d.side === 'enemy' && (!by || by.side === 'ally')) state.log.coins += 3 + Math.floor(d.level / 3);
   if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
   return expGained;
 }
@@ -126,7 +128,11 @@ function changeStats(unit, list, out) {
 }
 
 // 공격기·변화기 공통. 공격기는 데미지 + 능력치 부가효과, 변화기는 대상별 랭크 변화
-export function applyMove(state, userId, moveId, focusId, rng) {
+const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
+
+// aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
+export function applyMove(state, userId, moveId, aim, rng) {
+  const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = MOVES[moveId];
   a.acted = true;
   a.moved = true;
@@ -158,23 +164,36 @@ export function applyMove(state, userId, moveId, focusId, rng) {
     }
     return { kind, stageChanges, statusChanges, thawed, missed };
   }
-  const d = byId(state, focusId);
-  const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x] });
-  d.hp = Math.max(0, d.hp - r.damage);
-  const fainted = d.hp === 0;
-  let expGained = {};
-  if (fainted) expGained = knockOut(state, d, a);
-  else if (move.type === 'fire' && r.damage > 0 && d.status === 'freeze') { cure(d); thawed.push(d.id); } // 불꽃 공격에 맞으면 녹는다
-  // 부가효과: 맞았고 면역이 아닐 때만, 확률 0 = 100%
-  const landed = r.hit && r.typeMult > 0;
-  const toUser = move.effectKind === 'damage-raise', toTarget = move.effectKind === 'damage-lower' && !fainted;
-  if (landed && move.statChanges?.length && (toUser || toTarget) && (!move.statChance || rng() * 100 < move.statChance)) {
-    changeStats(toUser ? a : d, move.statChanges, stageChanges);
+  const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
+  const spread = targets.length >= 2 ? 0.75 : 1;
+  const roll = (chance) => !chance || rng() * 100 < chance; // 확률 0 = 100%
+  const hits = [], expGained = {}, knocked = [];
+  let anyLanded = false;
+  for (const d of targets) {
+    const hpBefore = d.hp;
+    const r = calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread });
+    d.hp = Math.max(0, d.hp - r.damage);
+    const fainted = d.hp === 0;
+    if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
+    else if (move.type === 'fire' && r.damage > 0 && d.status === 'freeze') { cure(d); thawed.push(d.id); } // 불꽃 공격에 맞으면 녹는다
+    // 대상 부가효과: 맞았고 면역이 아니고 버텼을 때
+    const landed = r.hit && r.typeMult > 0;
+    anyLanded ||= landed;
+    if (landed && !fainted && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges);
+    if (landed && !fainted && move.ailment && roll(move.ailmentChance)) ail(d);
+    hits.push({ unitId: d.id, ...r, fainted, hpBefore });
   }
-  // 상태이상 부가효과: 맞았고 면역이 아니고 대상이 버텼을 때, 확률 0 = 100%
-  if (landed && !fainted && move.ailment && (!move.ailmentChance || rng() * 100 < move.ailmentChance)) ail(d);
+  // 경험치는 공격이 끝난 뒤 살아 있는 아군 기준 (목록 순서에 따라 달라지지 않게)
+  for (const d of knocked) for (const [sp, n] of Object.entries(awardExp(state, a, d))) expGained[sp] = (expGained[sp] ?? 0) + n;
+  // 사용자 부가효과(인파이트류): 한 명이라도 맞으면 한 번
+  if (anyLanded && move.effectKind === 'damage-raise' && move.statChanges?.length && roll(move.statChance)) changeStats(a, move.statChanges, stageChanges);
+  // 자폭: 빗나가도 쓴 쪽은 기절, 보상 없음
+  const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
+  if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  return { kind, ...r, fainted, expGained, stageChanges, statusChanges, thawed };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO };
+  if (hits.length === 1) { const { hit, crit, typeMult, damage, fainted } = hits[0]; Object.assign(out, { hit, crit, typeMult, damage, fainted }); }
+  return out;
 }
 
 // 기존 호출 호환
