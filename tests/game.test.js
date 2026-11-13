@@ -245,3 +245,67 @@ test('phase notices: end damage → stage expiry → phase start, damage carries
   assert.deepEqual(out[0].at, { x: 1, y: 2 });
   assert.deepEqual(out[2].at, { x: 5, y: 5 });
 });
+
+// ---- 범위 모양 화면 ----
+import { shapeLabel } from '../src/render/ui.js';
+import { MOVES as MV2 } from '../src/data/moves.js';
+function setupWith(moves, place = {}) {
+  const game = createGame({ rng: () => 0.5 });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  const st = game.state;
+  st.units = st.units.filter((u) => u.side === 'ally' || ['enemy-riolu', 'enemy-gible'].includes(u.id));
+  const c = st.units.find((u) => u.id === 'ally-chimchar'); c.moves = moves;
+  for (const [id, [x, y]] of Object.entries(place)) { const u = st.units.find((o) => o.id === id); u.x = x; u.y = y; u.hp = u.maxHp = 500; }
+  const sel = [{ type: 'cursor', px: c.x * 24 + 12, py: c.y * 24 + 12 }, { type: 'confirm' }];
+  for (const e of [...sel, ...sel]) game.handle(e);
+  assert.ok(advance(game, (g) => g.mode === 'action'));
+  return { game, st, c };
+}
+
+test('line aiming: best direction first, can turn, hits everyone on the line', () => {
+  const { game, st } = setupWith(['hydro-pump'], { 'enemy-riolu': [3, 5], 'enemy-gible': [4, 5] });
+  game.handle({ type: 'confirm' });
+  assert.equal(game.mode, 'target');
+  assert.deepEqual(game.aim, { dir: 'right' });
+  game.handle({ type: 'dir', dx: 0, dy: -1 }); // 위쪽엔 적이 없음 → 그대로
+  assert.deepEqual(game.aim, { dir: 'right' });
+  game.handle({ type: 'confirm' });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  for (const id of ['enemy-riolu', 'enemy-gible']) { const u = st.units.find((o) => o.id === id); assert.ok(u.hp < 500, id); }
+});
+
+test('line aiming turns toward another foe', () => {
+  const { game } = setupWith(['hydro-pump'], { 'enemy-riolu': [3, 5], 'enemy-gible': [2, 4] });
+  game.handle({ type: 'confirm' });
+  game.handle({ type: 'dir', dx: 0, dy: -1 });
+  assert.deepEqual(game.aim, { dir: 'up' });
+  game.handle({ type: 'dir', dx: 1, dy: 0 });
+  assert.deepEqual(game.aim, { dir: 'right' });
+});
+
+test('around: one confirm', () => {
+  const { game, st } = setupWith(['earthquake'], { 'enemy-riolu': [3, 5] });
+  game.handle({ type: 'confirm' });
+  game.handle({ type: 'confirm' });
+  assert.ok(advance(game, (g) => g.mode === 'idle'));
+  assert.ok(st.units.find((o) => o.id === 'enemy-riolu').hp < 500);
+});
+
+test('menu greys out shapes that hit no foe (corner line, quake on allies only)', () => {
+  const a = setupWith(['hydro-pump', 'scratch'], { 'enemy-riolu': [10, 10], 'enemy-gible': [11, 10] });
+  assert.equal(a.game.menu[0].enabled, false);
+  const b = setupWith(['earthquake', 'scratch'], { 'enemy-riolu': [10, 10], 'enemy-gible': [11, 10], 'ally-piplup': [2, 4] });
+  assert.equal(b.game.menu[0].enabled, false);
+});
+
+test('self-destruct removes the user after the animation', () => {
+  const { game, st } = setupWith(['self-destruct'], { 'enemy-riolu': [3, 5] });
+  game.handle({ type: 'confirm' }); game.handle({ type: 'confirm' });
+  assert.ok(advance(game, (g) => g.mode === 'idle' || g.mode === 'result'));
+  assert.equal(st.units.find((o) => o.id === 'ally-chimchar'), undefined);
+});
+
+test('shape labels', () => {
+  assert.deepEqual(['tackle', 'shadow-ball', 'hydro-pump', 'heat-wave', 'earthquake', 'fire-blast'].map((k) => shapeLabel(MV2[k])),
+    ['단일 1', '단일 2~3', '직선 3', '앞 부채꼴', '주변 (아군도)', '착탄 2~3 십자']);
+});
