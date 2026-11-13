@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { generateFloor, hashSeed, reachableFrom } from '../src/core/floorgen.js';
 import { DUNGEONS, dungeonById } from '../src/data/dungeons.js';
+import { encounterPool } from '../src/core/encounters.js';
 
 const field = dungeonById('sinnoh-field');
 const cave = dungeonById('sinnoh-cave');
@@ -34,7 +35,7 @@ test('property check: 300 seeds × first/boss floors of both dungeons', () => {
       for (let y = 0; y < 12; y++) for (let x = 0; x < 16; x++) {
         if ('."^>'.includes(m.tiles[y][x])) assert.ok(reach.has(`${x},${y}`), `${tag}: (${x},${y}) unreachable`);
       }
-      assert.equal(m.allySlots.length, 4, tag);
+      assert.equal(m.allySlots.length, 5, tag);
       for (const s of m.allySlots) assert.ok(s.x <= 2 && reach.has(key(s)), tag);
       for (const e of m.enemies) assert.ok(e.x >= 8 && reach.has(key(e)), tag);
       for (const c of m.chests) assert.ok(reach.has(key(c)) && ['evoStone', 'candy'].includes(c.item), tag);
@@ -46,12 +47,12 @@ test('property check: 300 seeds × first/boss floors of both dungeons', () => {
       assert.equal(normal.length, d.count(f), tag);
       for (const e of normal) {
         assert.equal(e.level, d.level(f), tag);
-        assert.ok(d.pool.some((p) => p.species === e.species && p.minFloor <= f), `${tag}: ${e.species}`);
+        assert.ok(encounterPool(d, f).includes(e.species), `${tag}: ${e.species}`);
       }
       if (isBoss) {
         assert.equal(m.stairs, null, tag);
         assert.equal(bosses.length, 1, tag);
-        assert.equal(bosses[0].species, d.boss.species);
+        assert.ok(encounterPool(d, f, { boss: true }).includes(bosses[0].species), tag);
         assert.equal(bosses[0].level, d.level(f) + d.boss.levelBonus);
       } else {
         assert.ok(m.stairs, tag);

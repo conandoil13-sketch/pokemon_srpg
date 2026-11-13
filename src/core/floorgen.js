@@ -1,10 +1,12 @@
 // 층 맵 생성 (순수, 시드 고정이면 같은 결과). 탁 트인 필드에 지형 덩어리를 뿌리고 연결성을 보장한다.
 import { createRng } from './rng.js';
+import { encounterPool } from './encounters.js';
 
 const W = 16, H = 12;
 const WALK = '."^>'; // 땅 타입이 지나갈 수 있는 칸
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const SAFE_COLS = 3; // 아군 출발 구역 (x < 3) 에는 지형을 칠하지 않는다
+export const ALLY_SLOTS = 5; // 메타몽 + 동료 4
 
 export const hashSeed = (runSeed, floor) => (runSeed ^ Math.imul(floor + 1, 0x9e3779b1)) >>> 0;
 const key = (x, y) => `${x},${y}`;
@@ -76,7 +78,7 @@ export function generateFloor(dungeon, floor, seed) {
   // 4. 아군 출발 4칸 (왼쪽 3열)
   const left = [];
   for (let y = 0; y < H; y++) for (let x = 0; x < SAFE_COLS; x++) left.push({ x, y });
-  const allySlots = shuffle(left).slice(0, 4).map(take);
+  const allySlots = shuffle(left).slice(0, ALLY_SLOTS).map(take);
 
   // 5. 계단 (보스 층 제외): 출발점에서 가장 먼 바닥 칸 상위 25%
   const isBoss = floor === dungeon.floors;
@@ -97,15 +99,15 @@ export function generateFloor(dungeon, floor, seed) {
     .filter((p) => p.x >= 8 && '."^'.includes(g[p.y][p.x]) && !used.has(key(p.x, p.y)))
     .sort((a, b) => a.y - b.y || a.x - b.x);
   shuffle(right);
-  const pool = dungeon.pool.filter((p) => p.minFloor <= floor);
+  const pool = encounterPool(dungeon, floor);
   const enemies = [];
   for (let i = 0; i < dungeon.count(floor); i++) {
     const p = take(right.pop());
-    enemies.push({ species: pick(pool).species, level: dungeon.level(floor), x: p.x, y: p.y });
+    enemies.push({ species: pick(pool), level: dungeon.level(floor), x: p.x, y: p.y });
   }
   if (isBoss) {
     const p = take(right.pop());
-    enemies.push({ species: dungeon.boss.species, level: dungeon.level(floor) + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
+    enemies.push({ species: pick(encounterPool(dungeon, floor, { boss: true })), level: dungeon.level(floor) + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
   }
 
   // 7. 보물상자 0~2개 (0: 30%, 1: 50%, 2: 20%)
