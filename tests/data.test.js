@@ -159,3 +159,17 @@ test('starting moves: at most 2 status moves, at least 1 attack', () => {
   const learnedAttacks = SPECIES.oddish.learnset.filter(([lv, k]) => lv <= 15 && MOVES[k]?.learnable && MOVES[k].category !== 'status').map(([, k]) => k);
   if (new Set(learnedAttacks).size >= 2) assert.ok(odd.filter((x) => MOVES[x].category !== 'status').length >= 2, String(odd));
 });
+
+test('move shapes from rules and overrides', () => {
+  const s = (k) => [MOVES[k].shape.type, MOVES[k].friendlyFire];
+  assert.deepEqual(s('earthquake'), ['around', true]);
+  assert.deepEqual(s('magnitude'), ['around', true]);
+  assert.deepEqual(s('heat-wave'), ['cone', false]);
+  assert.deepEqual([...s('hydro-pump'), MOVES['hydro-pump'].shape.length], ['line', false, 3]);
+  assert.deepEqual([MOVES['fire-blast'].shape.type, MOVES['fire-blast'].aimRange], ['blast', [2, 3]]);
+  assert.deepEqual([MOVES['shadow-ball'].shape.type, MOVES['shadow-ball'].aimRange], ['single', [2, 3]]);
+  assert.deepEqual([MOVES.tackle.shape.type, MOVES.tackle.range], ['single', [1, 1]]);
+  assert.deepEqual([MOVES['razor-leaf'].shape.type, MOVES['razor-leaf'].range], ['single', [1, 2]]);
+  assert.deepEqual(MOVES.ember.range, [1, 2]);
+  assert.equal(MOVES.growl.shape, null);
+});

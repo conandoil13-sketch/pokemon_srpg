@@ -1,0 +1,5 @@
+{
+  "aura-sphere": { "type": "single", "range": [2, 3] },
+  "razor-leaf": { "type": "single", "range": [1, 2] },
+  "shadow-ball": { "type": "single", "range": [2, 3] }
+}
