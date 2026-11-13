@@ -402,3 +402,35 @@ test('every chest item opens without freezing (coin pouch too)', () => {
     assert.equal(game.mode, 'action', item);
   }
 });
+
+// ---- 날씨 화면 ----
+import { drawWeather } from '../src/render/weatherFx.js';
+test('weather shows in the phase banner', () => {
+  const game = createGame({ rng: createRng(1), map: { ...MAP, weather: 'rain' } });
+  assert.match(game.bannerSub ?? '', /비/);
+  const plain = createGame({ rng: createRng(1) });
+  assert.doesNotMatch(plain.bannerSub ?? '', /비|쾌청|안개/);
+});
+
+test('fog hides far enemies until an ally comes within 4 tiles', () => {
+  const game = createGame({ rng: createRng(1), map: { ...MAP, weather: 'fog' } });
+  const st = game.state;
+  const e = st.units.find((u) => u.id === 'enemy-riolu');
+  for (const a of st.units.filter((u) => u.side === 'ally')) { a.x = 0; a.y = 0; }
+  e.x = 10; e.y = 5;
+  assert.ok(game.hiddenIds.has('enemy-riolu'));
+  const c = st.units.find((u) => u.id === 'ally-chimchar'); c.x = 7; c.y = 5;
+  assert.ok(!game.hiddenIds.has('enemy-riolu'));
+});
+
+test('weather damage notice text', () => {
+  const u = { id: 'a', species: 'chimchar', side: 'ally', x: 1, y: 1 };
+  const out = phaseNotices([{ unitId: 'a', kind: 'sand', damage: 3, hpBefore: 20, maxHp: 40, x: 1, y: 1 }], [], () => u);
+  assert.deepEqual(out[0].lines, ['불꽃숭이는 모래바람에 휘말렸다!']);
+  const out2 = phaseNotices([{ unitId: 'a', kind: 'hail', damage: 3, hpBefore: 20, maxHp: 40, x: 1, y: 1 }], [], () => u);
+  assert.deepEqual(out2[0].lines, ['불꽃숭이는 싸라기눈을 맞았다!']);
+});
+
+test('no weather draws nothing', () => {
+  assert.equal(drawWeather(null, null, 0), false);
+});

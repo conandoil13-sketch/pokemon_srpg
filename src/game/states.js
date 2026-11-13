@@ -19,6 +19,7 @@ import { drawText, textWidth } from '../render/font.js';
 import { W, H } from '../render/screen.js';
 import { createAttackAnim } from './attackAnim.js';
 import { createFxManager } from '../render/fx.js';
+import { drawWeather } from '../render/weatherFx.js';
 
 const STEP = 0.11; // 타일당 이동 시간(초)
 const BANNER = 1.4;
@@ -46,6 +47,7 @@ export function ailmentNote(target, mv) {
 const STATUS_LINE = {
   poison: '독의 데미지를 입었다!', toxic: '독의 데미지를 입었다!', burn: '화상 데미지를 입었다!', fainted: '쓰러졌다!',
   asleep: '쿨쿨 잠들어 있다', woke: '눈을 떴다!', frozen: '얼어 버려서 움직일 수 없다!',
+  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!',
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 
@@ -130,6 +132,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max);
   }
 
+  // 안개: 지금 아군 누구에게서도 FOG_SIGHT 이상 떨어진 적 (실시간)
+  const hiddenIds = () => new Set(st.weather === 'fog' ? st.units.filter((u) => u.side === 'enemy' && isHidden(u, allyUnits())).map((u) => u.id) : []);
+
   // 공격기: 적이 하나 이상 맞는 조준만
   const attackAims = (unit, mv) => aimsOf(st, unit, mv).filter((a) => unitsHit(st, unit, mv, a).some((u) => u.side !== unit.side));
   const curAim = () => (aims ? aims[aIdx] : null);
@@ -179,7 +184,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 대사 뒤: 결과가 났으면 결과 화면, 아군이 전원 쉬면(잠듦·얼음) 바로 상대 턴
-  const playerPhase = (lines = []) => showBanner('아군 턴', floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`, '#4080f8',
+  const weatherTag = () => (st.weather ? ` · ${WEATHER_KO[st.weather]}` : '');
+  const playerPhase = (lines = []) => showBanner('아군 턴', (floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`) + weatherTag(), '#4080f8',
     () => noticeChain(lines, () => {
       focus = null;
       if (st.result) { mode = 'result'; return; }
@@ -557,6 +563,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function drawUnits(ctx) {
+    const hidden = hiddenIds();
     const list = [...st.units];
     for (const u of anim?.extraUnits ?? (anim?.defender ? [anim.defender] : [])) if (u && !list.includes(u)) list.push(u); // 기절 연출 중
     list.sort((a, b) => unitWorld(a).y - unitWorld(b).y);
@@ -574,6 +581,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const a = pose?.anim ?? (walking ? 'Walk' : resting && sleepAnim ? 'Sleep' : 'Idle');
       const t = pose ? pose.t : walking ? walk.t : resting && !sleepAnim ? 0 : clock;
       const restFilter = resting && !grey && !sleepAnim ? (u.status === 'freeze' ? 'grayscale(0.6) brightness(1.25)' : 'grayscale(1) brightness(0.85)') : null;
+      if (hidden.has(u.id)) { // 안개 속 적: 어두운 실루엣만
+        ctx.save(); ctx.globalAlpha = 0.55; ctx.filter = 'brightness(0)';
+        drawUnitSprite(ctx, u.species, 'Idle', facing[u.id], clock, cx, cy, true);
+        ctx.restore();
+        continue;
+      }
       if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.85)'; }
       if (restFilter) { ctx.save(); ctx.filter = restFilter; }
       if (pose?.flash) { ctx.save(); ctx.filter = 'brightness(3)'; }
@@ -717,11 +730,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (anim) anim.drawWorld(ctx);
     if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);
     ctx.restore();
+    drawWeather(ctx, st.weather, time); // 날씨 덮개: 유닛 위, UI 아래
 
     const onLeft = cursor.x * TILE - cx < W / 2;
     if (mode === 'idle' || mode === 'selected' || mode === 'enemy') {
       const u = unitAt(st, cursor.x, cursor.y);
-      if (u) ui.drawUnitInfo(ctx, u, onLeft);
+      if (u) ui.drawUnitInfo(ctx, u, onLeft, { hidden: hiddenIds().has(u.id) });
     }
     if (mode === 'action' || mode === 'endMenu') {
       ui.drawMenu(ctx, menu, menuSel, menuBox.x, menuBox.y);
@@ -753,5 +767,5 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   playerPhase();
 
-  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get fx() { return fxm; }, get shake() { return anim?.shake ?? 0; }, get camera() { return { ...cam }; } };
+  return { handle, update, draw, get state() { return st; }, get mode() { return mode; }, get menu() { return menu; }, get menuSel() { return menuSel; }, get aim() { return mode === 'target' ? curAim() : null; }, get fx() { return fxm; }, get bannerSub() { return banner?.sub ?? null; }, get hiddenIds() { return hiddenIds(); }, get shake() { return anim?.shake ?? 0; }, get camera() { return { ...cam }; } };
 }

@@ -106,8 +106,17 @@ export function drawMenu(ctx, items, selected, x, y) {
 export const menuIndexAt = (items, x, y, py) => Math.floor((py - y - 4) / ROW);
 
 // 커서 위 유닛 정보: 초상화 + 이름 + 타입 + HP
-export function drawUnitInfo(ctx, unit, onLeftHalf) {
+export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false } = {}) {
   const s = SPECIES[unit.species];
+  if (hidden) { // 안개 속: 정체 숨김
+    const w = 140, h = 52, x = onLeftHalf ? W - w - 2 : 2, y = 2;
+    drawWindow(ctx, x, y, w, h);
+    ctx.fillStyle = '#585858'; ctx.fillRect(x + 4, y + 4, 44, 44);
+    drawText(ctx, '???', x + 52, y + 4);
+    drawText(ctx, '안개 속이라 잘 보이지 않는다', x + 52, y + 22, '#707070', null, 'small');
+    drawText(ctx, 'HP ???', x + 52, y + 35, '#f8a000', '#d8d8d0', 'small');
+    return;
+  }
   const stages = stageLine(unit);
   const w = 140, h = stages ? 64 : 52;
   const x = onLeftHalf ? W - w - 2 : 2, y = 2;
