@@ -136,7 +136,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       return;
     }
     const u = st.units.find((o) => o.id === id);
-    if (!u) { nextEnemy(); return; }
+    if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
     const plan = planEnemyAction(st, u);
     focus = u;
     cursor = { x: u.x, y: u.y };

@@ -110,3 +110,31 @@ test('idle self buff beats a weak debuff when nothing is attackable', () => {
   const plan = planEnemyAction(state(16, 5, [foe, ally]), foe);
   assert.equal(plan.attack?.moveId, 'bulk-up');
 });
+
+// ---- 상태이상 ----
+test('a sleeping/frozen enemy (acted) stays put and does nothing', () => {
+  const foe = mkm('garchomp', 'enemy', 4, 2, ['dragon-claw']); foe.acted = true; foe.status = 'sleep';
+  const ally = mkm('luxray', 'ally', 3, 2, ['tackle']);
+  assert.deepEqual(planEnemyAction(state(9, 5, [foe, ally]), foe), { moveTo: { x: 4, y: 2 }, attack: null });
+});
+
+test('no status move on an already-statused target', () => {
+  const foe = mkm('pikachu', 'enemy', 6, 2, ['thunder-wave']);
+  const ally = mkm('luxray', 'ally', 1, 2, ['tackle']); ally.status = 'paralysis';
+  assert.equal(planEnemyAction(state(16, 5, [foe, ally]), foe).attack, null);
+});
+
+test('prefers putting a strong foe to sleep over a weak hit', () => {
+  const foe = mkm('oddish', 'enemy', 6, 2, ['sleep-powder', 'absorb']);
+  const ally = mkm('luxray', 'ally', 1, 2, ['bite']);
+  const plan = planEnemyAction(state(16, 5, [foe, ally]), foe);
+  assert.equal(plan.attack?.moveId, 'sleep-powder');
+});
+
+test('no sleep move once two foes are asleep or frozen', () => {
+  const foe = mkm('oddish', 'enemy', 6, 2, ['sleep-powder', 'absorb']);
+  const a = mkm('luxray', 'ally', 1, 2, ['bite']);
+  const b = mkm('pikachu', 'ally', 0, 0, ['tackle']); b.status = 'sleep';
+  const c = mkm('piplup', 'ally', 0, 4, ['tackle']); c.status = 'freeze';
+  assert.notEqual(planEnemyAction(state(16, 5, [foe, a, b, c]), foe).attack?.moveId, 'sleep-powder');
+});
