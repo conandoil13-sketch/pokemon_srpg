@@ -205,8 +205,9 @@ export function endPhase(state, rng = Math.random) {
   for (const u of state.units.filter((o) => o.side === ending)) {
     const r = phaseEnd(u);
     if (r.damage) {
+      const hpBefore = u.hp;
       u.hp = Math.max(0, u.hp - r.damage);
-      events.push({ unitId: u.id, kind: r.kind, damage: r.damage });
+      events.push({ unitId: u.id, kind: r.kind, damage: r.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
     if (r.confusionEnded) events.push({ unitId: u.id, kind: 'confusionEnd' });
