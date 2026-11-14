@@ -523,3 +523,9 @@ test('chest powder names and run loot reaching the bag', () => {
   assert.equal(r.capsules, 1);
   assert.equal(r.dropped, 0);
 });
+
+test('infatuation notices: wearing off', () => {
+  const u = { id: 'a', side: 'ally', species: 'pikachu', x: 1, y: 1 };
+  const out = phaseNotices([{ unitId: 'a', kind: 'infatuationEnd' }], [], () => u);
+  assert.match(out[0].lines.join(' '), /헤롱헤롱이 풀렸다/);
+});

@@ -68,6 +68,7 @@ export function phaseNotices(events, expired, get) {
   const one = (e) => {
     const u = get(e.unitId);
     const text = e.kind === 'confusionEnd' ? `${who(e.unitId)}의 혼란이 풀렸다!`
+      : e.kind === 'infatuationEnd' ? `${who(e.unitId)}의 헤롱헤롱이 풀렸다!`
       : e.kind === 'thawed' ? `${who(e.unitId)}의 얼음이 녹았다!`
       : `${josa(who(e.unitId), '은/는')} ${STATUS_LINE[e.kind]}`;
     const w = wrapMessage(text);
@@ -583,7 +584,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const wanted = new Map(), hidden = hiddenIds();
     for (const u of st.units) {
       if (hidden.has(u.id)) continue; // 안개 속 유닛에는 상태 표시를 그리지 않는다
-      const kinds = [u.status, u.confusion > 0 ? 'confusion' : null].filter(Boolean);
+      const kinds = [u.status, u.confusion > 0 ? 'confusion' : null, u.infatuation > 0 ? 'infatuation' : null].filter(Boolean);
       for (const k of kinds) {
         const loop = fxForAilment(k).loop;
         if (!loop) continue;

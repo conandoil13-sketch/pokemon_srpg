@@ -7,6 +7,7 @@ import { statsAt, expForLevel, MAX_LEVEL } from '../core/stats.js';
 import { typesOfMember, abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
 import { effectiveBase } from '../core/dittoBuild.js';
+import { genderFixed, setGender, ivGrade } from '../core/individual.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
 import { drawPortrait } from '../render/sprites.js';
@@ -38,10 +39,22 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
     say([`${name}의 특성이`, `${josa(ABILITIES[abilityOf(m)].name, '으로/로')} 바뀌었다!`]);
   }
 
+  // 정보 페이지 확인: 성별 전환 (뽑기에서 얻은 적 있는 성별로만, 비용 없음)
+  function genderAction() {
+    const m = member(), name = SPECIES[m.species].name;
+    if (genderFixed(m.species)) { say([`${name}의 성별은 바꿀 수 없다.`]); return; }
+    const other = m.gender === 'male' ? 'female' : 'male';
+    if (!(m.genders ?? []).includes(other)) { say(['다른 성별을 얻은 적이 없다.', '뽑기에서 다른 성별이 나오면 고를 수 있다.']); return; }
+    setGender(game, m.species, other);
+    onSave();
+    say([`${name}의 성별을 ${other === 'male' ? '♂' : '♀'}로 바꿨다.`]);
+  }
+
   return {
     get page() { return pg; },
     get member() { return member(); },
     get mode() { return msg ? 'msg' : 'page'; },
+    get message() { return msg; },
     handle(ev) {
       const pick = ev.type === 'confirm' || ev.type === 'click';
       if (msg) { if ((pick || ev.type === 'cancel') && t >= CHOICE_LOCK) msg = null; return; }
@@ -50,6 +63,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       if (ev.type === 'dir' && ev.dy && list.length) i = (i + ev.dy + list.length) % list.length;
       if (ev.type === 'click' && ev.py !== undefined && ev.py < 16) { pg = Math.max(0, Math.min(PAGES.length - 1, Math.floor((ev.px - 2) / TAB_W))); return; } // 탭
       if (pick && pg === 3) abilityAction();
+      if (pick && pg === 0) genderAction();
     },
     update(dt) { t += dt; },
     draw(ctx, time) {
@@ -63,8 +77,8 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       const m = member(), s = SPECIES[m.species];
       ui.drawWindow(ctx, 2, 18, W - 4, H - 20);
       drawPortrait(ctx, m.species, 'Normal', 8, 23);
-      drawText(ctx, s.name, 54, 23);
-      drawText(ctx, `Lv.${m.level}`, 54 + textWidth(s.name) + 8, 23);
+      const nameEnd = ui.drawNameWithGender(ctx, m.species, m.gender, 54, 23);
+      drawText(ctx, `Lv.${m.level}`, nameEnd + 8, 23);
       typesOfMember(m).forEach((ty, k) => ui.drawTypeBadge(ctx, ty, 54 + k * 34, 39)); // 메타몽은 빌드 타입
       const sub = `${i + 1}/${list.length}  ▲▼ 다른 동료`;
       drawText(ctx, sub, W - 10 - textWidth(sub, 'small'), 52, '#909090', null, 'small');
@@ -79,15 +93,18 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
         small(`${SPECIES[lineRoot(m.species)].name} 계열 결정: ${shards(m)}개`, 10, y0 + 38);
         const out = m.species === 'ditto' || game.sortie.includes(m.species);
         small(out ? '출전 중' : '대기 중', 10, y0 + 52, out ? '#2860c8' : '#808080');
-        small(`특성: ${ABILITIES[abilityOf(m)]?.name ?? '-'}`, 10, y0 + 66);
+        small(`특성: ${ABILITIES[abilityOf(m)]?.name ?? '-'} · 몸무게 ${m.build?.weight ?? s.weight}kg`, 10, y0 + 66);
+        if (!genderFixed(m.species)) small(`확인: 성별 바꾸기 (${(m.genders ?? []).length > 1 ? '♂/♀' : '다른 성별 없음'})`, 10, y0 + 80, (m.genders ?? []).length > 1 ? '#c06010' : '#a0a0a0');
       } else if (pg === 1) {
-        const st = statsAt(m.build ? effectiveBase(m.build) : s.base, m.level), top = Math.max(...Object.values(st)) * 1.1; // 가장 큰 값 기준
+        const st = statsAt(m.build ? effectiveBase(m.build) : s.base, m.level, m.ivs), top = Math.max(...Object.values(st)) * 1.1; // 가장 큰 값 기준
         STAT_ROWS.forEach(([k, label], r) => {
           const y = y0 + r * 14;
           small(label, 10, y);
           small(String(st[k]), 50, y);
-          ctx.fillStyle = '#d8d8d0'; ctx.fillRect(80, y + 4, 160, 5);
-          ctx.fillStyle = k === 'hp' ? '#58c060' : '#e0a040'; ctx.fillRect(80, y + 4, Math.round(160 * st[k] / top), 5);
+          ctx.fillStyle = '#d8d8d0'; ctx.fillRect(80, y + 4, 90, 5);
+          ctx.fillStyle = k === 'hp' ? '#58c060' : '#e0a040'; ctx.fillRect(80, y + 4, Math.round(90 * st[k] / top), 5);
+          const iv = m.ivs?.[k] ?? 31;
+          small(`IV ${iv} ${ivGrade(iv)}`, 174, y, iv >= 31 ? '#c06010' : '#707070'); // 본가식 판정
         });
         small(`이동력 ${s.move}`, 10, y0 + 86);
       } else if (pg === 2) {

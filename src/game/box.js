@@ -236,7 +236,7 @@ function drawPanel(ctx, m, isOut) {
   drawPortrait(ctx, m.species, 'Normal', 10, 10);
   drawText(ctx, `Lv.${m.level}`, 56, 10, '#383838', null, 'small');
   drawText(ctx, isOut(m) ? '출전 중' : '대기', 56, 24, isOut(m) ? '#2860c8' : '#808080', null, 'small');
-  drawText(ctx, s.name, 8, 56);
+  ui.drawNameWithGender(ctx, m.species, m.gender, 8, 56);
   typesOfMember(m).forEach((t, k) => ui.drawTypeBadge(ctx, t, 8 + k * 34, 72)); // 메타몽은 빌드 타입
   const ab = ABILITIES[abilityOf(m)];
   fitLines(`특성 ${ab?.name ?? '-'}`, PANEL_W - 14).slice(0, 2).forEach((l, k) => drawText(ctx, l, 8, 90 + k * 11, ab?.inactive ? '#909090' : '#305830', null, 'small'));

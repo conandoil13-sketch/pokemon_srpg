@@ -10,10 +10,21 @@ import { drawPortrait } from './sprites.js';
 import { STAT_KEYS } from '../core/stages.js';
 import { STATUS_KO } from '../core/status.js';
 import { ABILITIES } from '../data/abilities.js';
+import { genderSymbol, GENDER_COLOR } from '../core/individual.js';
 
 export const STATUS_COLOR = { paralysis: '#e0b818', burn: '#e07030', poison: '#a050c0', toxic: '#702890', sleep: '#909090', freeze: '#60b8e8', confusion: '#d060a0', infatuation: '#f070b0' };
 
 // 상태 배지 (작은 글씨, 색 바탕)
+// 이름 + 성별 기호(♂ 파랑 · ♀ 빨강, 니드런처럼 이름에 기호가 있으면 생략). 끝 x 를 돌려준다
+export function drawNameWithGender(ctx, species, gender, x, y, color = '#383838', shadow = '#d8d8d0', font) {
+  const name = SPECIES[species].name;
+  drawText(ctx, name, x, y, color, shadow, font);
+  let end = x + textWidth(name, font);
+  const sym = genderSymbol(species, gender);
+  if (sym) { drawText(ctx, sym, end + 1, y, GENDER_COLOR[gender], null, font); end += 1 + textWidth(sym, font); }
+  return end;
+}
+
 export function drawStatusBadge(ctx, ailment, x, y) {
   const label = STATUS_KO[ailment], w = textWidth(label, 'small') + 6, c = STATUS_COLOR[ailment];
   ctx.fillStyle = shade(c, 0.55); ctx.fillRect(x, y, w, 11);
@@ -24,7 +35,7 @@ export function drawStatusBadge(ctx, ailment, x, y) {
 
 // 맵 유닛 발밑 상태 점 (월드 좌표)
 export function drawStatusDot(ctx, unit, cx, cy) {
-  const list = [unit.status, unit.confusion > 0 ? 'confusion' : null].filter(Boolean);
+  const list = [unit.status, unit.confusion > 0 ? 'confusion' : null, unit.infatuation > 0 ? 'infatuation' : null].filter(Boolean);
   list.forEach((a, i) => {
     ctx.fillStyle = '#202020'; ctx.fillRect(Math.round(cx + 6 + i * 5), Math.round(cy + 6), 6, 6);
     ctx.fillStyle = STATUS_COLOR[a]; ctx.fillRect(Math.round(cx + 7 + i * 5), Math.round(cy + 7), 4, 4);
@@ -129,8 +140,8 @@ export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false, warn = nul
   ctx.fillStyle = unit.side === 'ally' ? '#3870f8' : '#f83838';
   ctx.fillRect(x + 4, y + 4, 44, 44);
   drawPortrait(ctx, unit.species, 'Normal', x + 6, y + 6);
-  drawText(ctx, s.name, x + 52, y + 4);
-  if (unit.boss) drawText(ctx, '보스', x + 56 + textWidth(s.name), y + 6, '#e03030', '#f8d0d0', 'small');
+  const nameEnd = drawNameWithGender(ctx, unit.species, unit.gender, x + 52, y + 4);
+  if (unit.boss) drawText(ctx, '보스', nameEnd + 4, y + 6, '#e03030', '#f8d0d0', 'small');
   if (unit.status) drawStatusBadge(ctx, unit.status, x + w - 6 - textWidth(STATUS_KO[unit.status], 'small') - 6, y + 5);
   (unit.types ?? s.types).forEach((t, i) => drawTypeBadge(ctx, t, x + 52 + i * 34, y + 20)); // 유닛 타입 (메타몽 빌드)
   drawText(ctx, 'HP', x + 52, y + 35, '#f8a000', '#d8d8d0', 'small');

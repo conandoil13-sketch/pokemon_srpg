@@ -58,7 +58,7 @@ export function createResults({ game, result, log, firstClear, onDone, members =
         const growth = SPECIES[m.species].growth;
         const exp = shownExp(k);
         const lv = Math.min(levelForExp(growth, exp), MAX_LEVEL);
-        drawText(ctx, nameOf(before[k].species), 12, y + 5);
+        ui.drawNameWithGender(ctx, m.species, m.gender, 12, y + 5); // 진화했으면 새 이름
         drawText(ctx, `Lv.${lv}`, 112, y + 1);
         const ab = ABILITIES[abilityOf(m)];
         if (ab) drawText(ctx, ab.name, 112, y + 13, '#507050', null, 'small');

@@ -20,6 +20,14 @@ const RETURN_LOCK = 1.0; // 뽑기를 마치고 메뉴로 돌아온 뒤 연타�
 const THREE_X = [W / 2 - 72, W / 2, W / 2 + 72];
 const TEN_POS = Array.from({ length: 10 }, (_, i) => ({ x: 28 + (i % 5) * 50, y: i < 5 ? 40 : 94 })); // 둘째 줄 이름이 대사 창에 안 가리게
 
+// 중복 대사: 결정 + 오른 개체값 + 새로 고를 수 있게 된 성별
+const IV_KO = { hp: 'HP', atk: '공격', def: '방어', spa: '특공', spd: '특방', spe: '스피드' };
+export function duplicateLines(r) {
+  const name = SPECIES[r.species].name;
+  const extra = [r.ivUp?.length ? `${r.ivUp.map((k) => IV_KO[k]).join('·')} 개체값이 올랐다!` : '', r.newGender ? `${r.newGender === 'male' ? '♂' : '♀'} 해금!` : ''].filter(Boolean).join(' ');
+  return extra ? [`이미 ${name} 계열! 결정 +1`, extra] : [`이미 ${name} 계열이 있다!`, `${name}의 결정을 얻었다.`];
+}
+
 export function createGachaScene({ game, rng, onBack, onPulled }) {
   let mode = 'menu', cursor = 0, menuCursor = 0, t = 0, clock = 0, msg = null;
   let balls = [], chosen = -1, result = null, results = null, auto = 0, autoOn = false;
@@ -177,8 +185,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
           drawBall(ctx, b.kind, W / 2, 98, { r: 10, open: 1 });
           sprite(b.species, W / 2, 70, 2);
           drawText(ctx, rr.name, Math.floor((W - textWidth(rr.name)) / 2), 112, rr.color, '#202838');
-          ui.drawMessage(ctx, result.duplicate
-            ? [`이미 ${name} 계열이 있다!`, `${name}의 결정을 얻었다.`]
+          ui.drawMessage(ctx, result.duplicate ? duplicateLines(result)
             : [`${josa(name, '이/가')} 동료가 되었다!`, `Lv.${result.member.level}로 합류`], null, blink);
         }
       } else if (mode === 'others') {
@@ -207,7 +214,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
         results.forEach((r, i) => {
           const x = i < 5 ? 10 : W / 2 + 4, y = 28 + (i % 5) * 30, name = SPECIES[r.species].name;
           drawText(ctx, name, x, y, RARITY[r.rarity].color === '#f8f8f8' ? '#383838' : RARITY[r.rarity].color, null);
-          drawText(ctx, r.duplicate ? '결정 +1' : `새 동료 Lv.${r.member.level}`, x, y + 13, r.duplicate ? '#808080' : '#2f8a3a', null, 'small');
+          drawText(ctx, r.duplicate ? ['결정 +1', r.ivUp?.length ? '개체값↑' : '', r.newGender ? `${r.newGender === 'male' ? '♂' : '♀'} 해금` : ''].filter(Boolean).join(' ') : `새 동료 Lv.${r.member.level}`, x, y + 13, r.duplicate ? '#808080' : '#2f8a3a', null, 'small');
         });
       } else if (mode === 'msg') {
         ui.drawMessage(ctx, msg, null, blink);
