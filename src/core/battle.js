@@ -1,4 +1,5 @@
 // 전투 상태 (순수 로직, 상태 객체를 직접 갱신)
+import { effectiveBase } from './dittoBuild.js';
 import { MAP } from '../data/map.js';
 import { hash } from '../render/pixels.js';
 import { SPECIES } from '../data/species.js';
@@ -18,10 +19,11 @@ import { newParty, abilityOf } from './progress.js';
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id, boss, ability }) {
-  const stats = statsAt(SPECIES[species].base, level);
+export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base }) {
+  const stats = statsAt(base ?? SPECIES[species].base, level); // base: 메타몽 빌드 종족값
   return {
     id: id ?? `${side}-${species}`, species, side, x, y, level, stats,
+    types: [...(types ?? SPECIES[species].types)], // 타입은 유닛 기준 (메타몽 빌드)
     hp: stats.hp, maxHp: stats.hp,
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES, species),
     moved: false, acted: false,
@@ -44,7 +46,8 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
   const units = [];
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
     const { x, y } = mapDef.allySlots[i];
-    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m) });
+    const build = m.species === 'ditto' && m.build ? { types: m.build.types, base: effectiveBase(m.build) } : {}; // 메타몽 빌드
+    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ...build });
     if (hpRatio[m.species]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[m.species]));
     units.push(u);
   });
@@ -57,7 +60,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     phase: 'player',
     turn: 1,
     result: null,
-    log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [] }, // 획득 경험치(종족별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
+    log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] }, // defeated: 캡슐 굴림용 쓰러뜨린 적 // 획득 경험치(종족별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
@@ -140,7 +143,10 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   let expGained = {};
   if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
   else if (reward) awardShare(state, d);
-  if (reward && d.side === 'enemy' && (!by || by.side === 'ally')) state.log.coins += 3 + Math.floor(d.level / 3);
+  if (reward && d.side === 'enemy' && (!by || by.side === 'ally')) {
+    state.log.coins += 3 + Math.floor(d.level / 3);
+    (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.ability, boss: !!d.boss }); // 메타몽 캡슐
+  }
   if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
   return expGained;
 }

@@ -23,7 +23,7 @@ test('createBattle builds level-based units from the party and the map', () => {
   }
   assert.equal(find(s, 'enemy-gible').level, 9);
   assert.equal(s.phase, 'player');
-  assert.deepEqual(s.log, { exp: {}, fainted: [], loot: [], coins: 0, expired: [] });
+  assert.deepEqual(s.log, { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] });
 });
 
 test('party levels and moves carry into battle', () => {
@@ -247,7 +247,7 @@ test('no secondary on miss or immunity', () => {
   assert.equal(res.hit, false);
   assert.equal(find(s, 'ally-chimchar').stages.def, 0);
   const s2 = stageBattle();
-  const g = find(s2, 'enemy-riolu'); g.species = 'gastly'; // 고스트 → 격투 면역
+  const g = find(s2, 'enemy-riolu'); g.species = 'gastly'; g.types = ['ghost', 'poison']; // 고스트 → 격투 면역 (타입은 유닛 기준)
   const res2 = applyMove(s2, 'ally-chimchar', 'close-combat', 'enemy-riolu', () => 0.5);
   assert.equal(res2.typeMult, 0);
   assert.equal(find(s2, 'ally-chimchar').stages.def, 0);

@@ -87,3 +87,48 @@ test('addCapsules keeps at most 200 and reports what was dropped', () => {
   assert.equal(g.items.capsules.length, CAPSULE_BAG_MAX);
   assert.equal(g.items.capsules.at(-1).value, 'grass');
 });
+
+// ---- 전투 반영 ----
+import { createBattle, makeUnit, applyMove } from '../src/core/battle.js';
+import { expectedDamage } from '../src/core/damage.js';
+import { canInflict } from '../src/core/status.js';
+import { phaseEndWeather } from '../src/core/weather.js';
+import { canEnter } from '../src/core/pathfind.js';
+import { newMember } from '../src/core/progress.js';
+
+const dittoUnit = (build, level = 20) => {
+  const m = newMember('ditto', level);
+  m.build = { ...DEFAULT_BUILD(), ...build };
+  const map = { tiles: Array.from({ length: 8 }, () => '.'.repeat(8)), allySlots: [{ x: 1, y: 1 }], enemies: [{ species: 'squirtle', x: 2, y: 1, level: 20 }] };
+  const s = createBattle(map, [m]);
+  return { s, u: s.units.find((x) => x.species === 'ditto'), foe: s.units.find((x) => x.side === 'enemy') };
+};
+
+test('a built ditto fights with its build types, stats and ability', () => {
+  const plain = dittoUnit({});
+  const fs = dittoUnit({ types: ['fire', 'steel'], ability: 'blaze', bonus: { hp: 0, atk: 100, def: 0, spa: 0, spd: 0, spe: 0 } });
+  assert.deepEqual(fs.u.types, ['fire', 'steel']);
+  assert.equal(fs.u.ability, 'blaze');
+  assert.ok(fs.u.stats.atk > plain.u.stats.atk);
+  const water = { ...MOVES['water-gun'] };
+  const r = expectedDamage(fs.foe, fs.u, water, '.') / expectedDamage(plain.foe, plain.u, water, '.');
+  assert.ok(r > 1.5, String(r)); // 불꽃/강철: 물 ×2
+  assert.equal(canInflict(fs.u, 'poison').reason, 'immune'); // 강철
+  assert.equal(phaseEndWeather(fs.u, 'sand'), null); // 강철은 모래바람 피해 없음
+  const w = dittoUnit({ types: ['water'] });
+  assert.ok(canEnter('~', w.u));
+  assert.ok(!canEnter('~', plain.u));
+});
+
+test('an enemy ditto keeps plain normal stats; enemy KOs are logged for capsules', () => {
+  const e = makeUnit({ species: 'ditto', side: 'enemy', x: 0, y: 0, level: 20 });
+  assert.deepEqual(e.types, ['normal']);
+  const ally = makeUnit({ species: 'ditto', side: 'ally', x: 0, y: 0, level: 20 });
+  assert.deepEqual(e.stats, ally.stats);
+  const { s, foe } = dittoUnit({ bonus: { hp: 0, atk: 200, def: 0, spa: 0, spd: 0, spe: 0 } }, 99);
+  foe.hp = 1;
+  applyMove(s, s.units[0].id, 'tackle', foe.id, () => 0.01);
+  assert.equal(s.log.defeated.length, 1);
+  assert.deepEqual(Object.keys(s.log.defeated[0]).sort(), ['ability', 'boss', 'moves', 'species', 'types']);
+  assert.equal(s.log.defeated[0].species, 'squirtle');
+});

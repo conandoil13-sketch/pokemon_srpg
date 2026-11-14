@@ -4,10 +4,11 @@ import { moveBudget } from './status.js';
 
 export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1 };
 
-export function canEnter(tile, speciesKey) {
+// who: 유닛(타입은 유닛 기준 — 메타몽 빌드) 또는 종 키
+export function canEnter(tile, who) {
   if (tile === '#' || tile === undefined) return false;
   if (tile === '~') {
-    const t = SPECIES[speciesKey].types;
+    const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;
     return t.includes('water') || t.includes('flying');
   }
   return true;
@@ -33,7 +34,7 @@ function search(grid, units, unit) {
       const x = cur.x + dx, y = cur.y + dy;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
       const tile = grid[y][x];
-      if (!canEnter(tile, unit.species)) continue;
+      if (!canEnter(tile, unit)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side) continue;
       const c = cur.c + TILE_COST[tile];

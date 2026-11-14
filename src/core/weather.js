@@ -5,7 +5,7 @@ import { createRng } from './rng.js';
 export const WEATHER_KO = { rain: '비', sun: '쾌청', sand: '모래바람', hail: '싸라기눈', fog: '안개' };
 export const FOG_SIGHT = 5;     // 아군 누구에게서든 이 거리 이상이면 안개 속 (정체 숨김)
 const FOG_ACC = 10;             // 안개 명중 −10%p
-const types = (u) => SPECIES[u.species]?.types ?? [];
+const types = (u) => u.types ?? SPECIES[u.species]?.types ?? []; // 메타몽 빌드 타입
 
 // 던전 날씨표에서 굴린다. 지형 생성과 다른 별도 난수라 같은 시드의 맵은 그대로.
 export function rollWeather(dungeon, seed) {
