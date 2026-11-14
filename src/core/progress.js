@@ -71,15 +71,19 @@ function learnEvents(member, moves) {
 }
 
 // expBySpecies: 전투 로그 { [species]: exp }. 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
-export function applyExp(party, expBySpecies, rng = Math.random) {
+// cap: 레벨 상한 (던전 돌파로 열림). 상한을 넘는 경험치는 버린다, 이미 넘은 멤버는 그대로
+export function applyExp(party, expBySpecies, rng = Math.random, cap = MAX_LEVEL) {
   const events = [];
   for (const m of party) {
     const gain = expBySpecies[m.species];
     if (!gain) continue;
     const s = SPECIES[m.species];
-    m.exp = Math.min(m.exp + gain, expForLevel(s.growth, MAX_LEVEL));
+    const ceiling = Math.max(m.exp, expForLevel(s.growth, Math.min(cap, MAX_LEVEL)));
+    const capped = cap < MAX_LEVEL && m.exp + gain > ceiling;
+    m.exp = Math.min(m.exp + gain, ceiling);
+    const cappedEvent = capped ? { type: 'capped', species: m.species, capped: true, cap } : null; // 레벨 상한: 넘친 경험치 버림
     const to = levelForExp(s.growth, m.exp);
-    if (to <= m.level) continue;
+    if (to <= m.level) { if (cappedEvent) events.push(cappedEvent); continue; }
     const from = m.level;
     const base = m.build ? effectiveBase(m.build) : s.base; // 메타몽은 빌드 종족값
     events.push({ type: 'level', species: m.species, from, to, before: statsAt(base, from, m.ivs), after: statsAt(base, to, m.ivs) });
@@ -88,6 +92,7 @@ export function applyExp(party, expBySpecies, rng = Math.random) {
     // 진화: 갈래 1개면 그대로, 원작이 무작위면 rng, 그 외는 플레이어가 고름 (UI 가 options 로 선택 창)
     const pick = pickEvolution(levelEvolutionOptions(s, to, m.gender ?? null), s, rng); // 성별 진화
     if (pick) events.push({ type: 'evolve', species: m.species, options: pick.auto ? [pick.auto] : pick.choose, random: !!pick.auto && levelEvolutionOptions(s, to, m.gender ?? null).length > 1 });
+    if (cappedEvent) events.push(cappedEvent);
   }
   return events;
 }

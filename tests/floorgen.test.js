@@ -10,10 +10,8 @@ const key = (p) => `${p.x},${p.y}`;
 
 test('dungeon table', () => {
   assert.deepEqual(DUNGEONS.map((d) => [d.id, d.floors, d.unlock]), [['sinnoh-field', 5, null], ['sinnoh-cave', 7, 'sinnoh-field']]);
-  assert.equal(field.level(1), 8);
-  assert.equal(field.count(1), 4);
-  assert.equal(field.count(5), 6);
-  assert.equal(cave.level(7), 19);
+  assert.deepEqual(field.baseLevel, [6, 7, 9, 10, 12]);
+  assert.deepEqual(cave.baseLevel, [13, 14, 15, 16, 17, 18, 19]);
 });
 
 test('deterministic per seed, varied across seeds', () => {
@@ -45,16 +43,16 @@ test('property check: 300 seeds × first/boss floors of both dungeons', () => {
       assert.equal(new Set(spots).size, spots.length, `${tag}: overlapping positions`);
       const bosses = m.enemies.filter((e) => e.boss);
       const normal = m.enemies.filter((e) => !e.boss);
-      assert.equal(normal.length, d.count(f), tag);
+      assert.ok(normal.length >= 1, tag); // 마릿수는 위협도 예산 (difficulty.test.js)
       for (const e of normal) {
-        assert.equal(e.level, d.level(f), tag);
+        assert.ok(Math.abs(e.level - d.baseLevel[f - 1]) <= 2, tag);
         assert.ok(encounterPool(d, f).includes(e.species), `${tag}: ${e.species}`);
       }
       if (isBoss) {
         assert.equal(m.stairs, null, tag);
         assert.equal(bosses.length, 1, tag);
         assert.ok(encounterPool(d, f, { boss: true }).includes(bosses[0].species), tag);
-        assert.equal(bosses[0].level, d.level(f) + d.boss.levelBonus);
+        assert.equal(bosses[0].level, d.baseLevel[f - 1] + d.boss.levelBonus);
       } else {
         assert.ok(m.stairs, tag);
         assert.equal(m.tiles[m.stairs.y][m.stairs.x], '>', tag);

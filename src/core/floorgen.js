@@ -1,6 +1,7 @@
 // 층 맵 생성 (순수, 시드 고정이면 같은 결과). 탁 트인 필드에 지형 덩어리를 뿌리고 연결성을 보장한다.
 import { createRng } from './rng.js';
 import { STATS } from './dittoBuild.js';
+import { rollEnemies } from './difficulty.js';
 import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
 
@@ -30,6 +31,28 @@ function distances(tiles, start) {
 }
 
 export const reachableFrom = (tiles, start) => new Set(distances(tiles, start).keys());
+
+// 예전 층별 적 수 (공용 난수 소비를 그대로 지켜 지형·상자를 같게 하는 데 쓴다)
+const LEGACY_COUNT = (d, f) => (d.id === 'sinnoh-cave' ? Math.min(4 + Math.ceil(f / 2), 6) : Math.min(3 + Math.ceil(f / 2), 6));
+
+// 왼쪽 지역(안전 열 밖, x < 8)의 빈 칸 — 오른쪽 자리가 모자랄 때만. 아군에서 먼 쪽(큰 x)부터
+function leftCells(dist, g, used) {
+  return [...dist.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; })
+    .filter((p) => p.x >= SAFE_COLS && p.x < 8 && '."^'.includes(g[p.y][p.x]) && !used.has(`${p.x},${p.y}`))
+    .sort((a, b) => b.x - a.x || a.y - b.y);
+}
+
+// 굴린 적을 자리에 놓는다 (순수): 예약 자리 → 남은 오른쪽 칸 → 왼쪽 칸(안전 열 밖), 그래도 없으면 생략
+export function placeEnemies(rolled, reserved, spareRight, spareLeft) {
+  const r = [...reserved], s = [...spareRight], l = [...spareLeft];
+  const out = [];
+  for (const e of rolled) {
+    const p = r.shift() ?? s.pop() ?? l.shift();
+    if (!p) break;
+    out.push({ ...e, x: p.x, y: p.y });
+  }
+  return out;
+}
 
 export function generateFloor(dungeon, floor, seed) {
   const rng = createRng(seed);
@@ -101,17 +124,15 @@ export function generateFloor(dungeon, floor, seed) {
     .filter((p) => p.x >= 8 && '."^'.includes(g[p.y][p.x]) && !used.has(key(p.x, p.y)))
     .sort((a, b) => a.y - b.y || a.x - b.x);
   shuffle(right);
+  // 예전과 같은 공용 난수 소비(자리 예약 + 종 고르기) — 지형·상자가 같은 시드에서 그대로이게
   const pool = encounterPool(dungeon, floor);
+  const reserved = [];
+  for (let i = 0; i < LEGACY_COUNT(dungeon, floor) && right.length; i++) { reserved.push(take(right.pop())); pick(pool); }
   const enemies = [];
-  for (let i = 0; i < dungeon.count(floor); i++) {
+  if (isBoss && right.length) {
     const p = take(right.pop());
-    enemies.push({ species: pick(pool), level: dungeon.level(floor), x: p.x, y: p.y });
+    enemies.push({ species: pick(encounterPool(dungeon, floor, { boss: true })), level: dungeon.baseLevel[floor - 1] + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
   }
-  if (isBoss) {
-    const p = take(right.pop());
-    enemies.push({ species: pick(encounterPool(dungeon, floor, { boss: true })), level: dungeon.level(floor) + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
-  }
-
   // 7. 보물상자 0~2개 (0: 30%, 1: 50%, 2: 20%)
   const r = rng();
   const nChests = r < 0.3 ? 0 : r < 0.8 ? 1 : 2;
@@ -126,6 +147,18 @@ export function generateFloor(dungeon, floor, seed) {
     // 파우더 종류는 별도 난수 — 상자 위치·수·나머지 굴림은 파우더 도입 전과 같다
     const powder = () => `powder-${STATS[Math.floor(createRng(hashSeed(seed, 1000 + i))() * STATS.length)]}`;
     chests.push({ x: p.x, y: p.y, item: roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder() : roll < 0.7 ? 'candy' : 'coins' });
+  }
+
+  // 8. 실제 적: 위협도 예산 굴림(별도 난수). 예약 자리 먼저, 모자라면 상자 뒤 남은 오른쪽 칸, 그래도 없으면 생략
+  const spare = right.filter((p) => !used.has(key(p.x, p.y)));
+  const leftSpare = leftCells(dist, g, used);
+  const placed = placeEnemies(rollEnemies(dungeon, floor, seed), reserved, spare, leftSpare);
+  for (const p of placed) take(p);
+  enemies.unshift(...placed);
+  const leftFree = leftSpare.filter((p) => !used.has(key(p.x, p.y)));
+  if (isBoss && !enemies.some((e) => e.boss) && leftFree.length) { // 오른쪽이 꽉 차 보스 자리가 없었으면 왼쪽(안전 칸 밖)에
+    const p = take(leftFree[0]);
+    enemies.push({ species: encounterPool(dungeon, floor, { boss: true })[0], level: dungeon.baseLevel[floor - 1] + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
   }
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, weather: rollWeather(dungeon, seed) };

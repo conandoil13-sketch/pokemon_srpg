@@ -3,7 +3,21 @@ import { SPECIES } from '../data/species.js';
 
 const RELAX_STEPS = 3;
 
-export function encounterPool(dungeon, floor, { boss = false } = {}) {
+// half: 'low' | 'high' — 그 층 후보의 종족값 하위/상위 절반 (무리형·준보스형)
+export function encounterPool(dungeon, floor, { boss = false, half = null } = {}) {
+  const pool = basePool(dungeon, floor, { boss });
+  if (!half || pool.length < 2) return pool;
+  const sorted = [...pool].sort((a, b) => SPECIES[a].bst - SPECIES[b].bst || a.localeCompare(b));
+  const mid = Math.ceil(sorted.length / 2);
+  return (half === 'low' ? sorted.slice(0, mid) : sorted.slice(sorted.length - mid)).sort();
+}
+
+function basePool(dungeon, floor, { boss = false } = {}) {
+  // 1~2층(보스 아님): 그 던전의 초반 종만 (진화 단계 상한 안)
+  if (!boss && floor <= 2 && dungeon.early?.length) {
+    const early = dungeon.early.filter((k) => SPECIES[k] && SPECIES[k].stage <= dungeon.stageCap(floor)).sort();
+    if (early.length) return early;
+  }
   let stageCap = dungeon.stageCap(floor);
   let bstCap = dungeon.bstCap + (boss ? 80 : 0);
   for (let step = 0; step <= RELAX_STEPS; step++) {
@@ -12,7 +26,7 @@ export function encounterPool(dungeon, floor, { boss = false } = {}) {
       .map((s) => s.key)
       .sort();
     if (pool.length) {
-      if (!boss) return pool;
+      if (!boss) return [...new Set([...pool, ...(dungeon.early ?? []).filter((k) => SPECIES[k].stage <= stageCap)])].sort();
       // 보스: 그 층 상한 단계를 우선
       const top = pool.filter((k) => SPECIES[k].stage === Math.min(stageCap, 2));
       return top.length ? top : pool;

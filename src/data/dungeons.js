@@ -6,10 +6,14 @@ export const DUNGEONS = [
     floors: 5,
     unlock: null, // 처음부터 열림
     theme: 'field',
-    level: (f) => 7 + f,
-    count: (f) => Math.min(3 + Math.ceil(f / 2), 6),
+    // 난이도 곡선 (docs/dungeon-guide.md): 층별 기준 레벨 · 위협도 예산(레벨 × 종족값 합 / 100) · 레벨 상한(= 보스 레벨)
+    baseLevel: [6, 7, 9, 10, 12],
+    budget: [55, 70, 90, 110, 125],
+    levelCap: 15,
+    // 1~2층 전용 초반 종: 여러 게임 첫 풀숲의 벌레·동네 새
+    early: ['caterpie', 'weedle', 'wurmple', 'kricketot', 'burmy', 'combee', 'ledyba', 'spinarak', 'pidgey', 'spearow', 'starly', 'hoothoot', 'rattata', 'sentret', 'zigzagoon', 'bidoof', 'sunkern', 'budew'],
     // 적 후보 규칙 (core/encounters.js): 테마 타입 · 종족값 합 상한 · 층별 진화 단계 상한
-    types: ['normal', 'grass', 'bug', 'flying', 'electric', 'fairy'],
+    types: ['normal', 'grass', 'bug', 'flying'],
     bstCap: 420,
     stageCap: (f) => (f <= 2 ? 0 : f <= 4 ? 1 : 2),
     fallback: 'pidgey',
@@ -25,8 +29,10 @@ export const DUNGEONS = [
     floors: 7,
     unlock: 'sinnoh-field', // 이 던전을 돌파하면 열림
     theme: 'cave',
-    level: (f) => 12 + f,
-    count: (f) => Math.min(4 + Math.ceil(f / 2), 6),
+    baseLevel: [13, 14, 15, 16, 17, 18, 19],
+    budget: [115, 130, 145, 160, 175, 190, 200],
+    levelCap: 22,
+    early: ['zubat', 'geodude', 'diglett', 'machop', 'sandshrew', 'makuhita', 'gastly', 'nidoran-f', 'nidoran-m', 'ekans', 'croagunk'],
     types: ['rock', 'ground', 'steel', 'ghost', 'poison', 'dragon', 'fighting'],
     bstCap: 470,
     stageCap: (f) => (f <= 3 ? 0 : f <= 6 ? 1 : 2),
