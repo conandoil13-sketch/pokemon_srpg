@@ -100,7 +100,7 @@ test('random branches: wurmple picks one by rng', () => {
 });
 
 // ---- 특성 ----
-import { abilityOf, swapAbility } from '../src/core/progress.js';
+import { abilityOf, unlockAbility, setAbilitySlot } from '../src/core/progress.js';
 import { makeUnit as mkA } from '../src/core/battle.js';
 import { encounterPool } from '../src/core/encounters.js';
 import { DUNGEONS } from '../src/data/dungeons.js';
@@ -113,14 +113,38 @@ test('members get an ability slot; evolution keeps the slot', () => {
   assert.equal(abilityOf(newMember('pikachu', 5, () => 0.9)), 'static'); // 특성 하나
 });
 
-test('swap ability with 3 shards of the line', () => {
+test('unlockAbility spends 3 line shards once and switches to the other ability', () => {
   const game = { party: [newMember('geodude', 5, () => 0)], shards: { geodude: 3 } };
-  assert.deepEqual(swapAbility(game, 'geodude'), { ok: true });
+  assert.equal(game.party[0].abilityUnlocked, false);
+  assert.deepEqual(unlockAbility(game, 'geodude'), { ok: true });
+  assert.equal(abilityOf(game.party[0]), 'sturdy');
+  assert.equal(game.party[0].abilityUnlocked, true);
+  assert.equal(game.shards.geodude, 0);
+  assert.equal(unlockAbility(game, 'geodude').reason, 'already');
+});
+
+test('unlock refuses: single ability / not enough shards / missing', () => {
+  const p = { party: [newMember('pikachu', 5)], shards: { pichu: 9, pikachu: 9 } };
+  assert.equal(unlockAbility(p, 'pikachu').reason, 'single');
+  const g = { party: [newMember('geodude', 5, () => 0)], shards: { geodude: 2 } };
+  assert.equal(unlockAbility(g, 'geodude').reason, 'shards');
+  assert.equal(g.shards.geodude, 2);
+  assert.equal(unlockAbility(g, 'onix').reason, 'missing');
+});
+
+test('setAbilitySlot is free after unlock, refused while locked; unlock survives evolution', () => {
+  const game = { party: [newMember('geodude', 5, () => 0.9)], shards: { geodude: 3 } }; // 슬롯 1 (옹골참)
+  assert.equal(setAbilitySlot(game, 'geodude', 0).reason, 'locked');
+  assert.deepEqual(setAbilitySlot(game, 'geodude', 1), { ok: true });
+  assert.equal(setAbilitySlot(game, 'geodude', 5).reason, 'slot');
+  unlockAbility(game, 'geodude');
+  assert.equal(abilityOf(game.party[0]), 'rock-head');
+  assert.deepEqual(setAbilitySlot(game, 'geodude', 1), { ok: true });
   assert.equal(abilityOf(game.party[0]), 'sturdy');
   assert.equal(game.shards.geodude, 0);
-  assert.equal(swapAbility(game, 'geodude').reason, 'shards');
-  const p = { party: [newMember('pikachu', 5)], shards: { pichu: 9, pikachu: 9 } };
-  assert.equal(swapAbility(p, 'pikachu').reason, 'single');
+  evolveMember(game.party[0], 'graveler');
+  assert.equal(game.party[0].abilityUnlocked, true);
+  assert.equal(abilityOf(game.party[0]), 'sturdy');
 });
 
 test('units carry abilities; Shedinja never appears as an enemy', () => {

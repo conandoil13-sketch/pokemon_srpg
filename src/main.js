@@ -19,7 +19,7 @@ import { pickupLoot } from './core/abilities.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
 import { createEvolutionChoice } from './game/evolutionChoice.js';
-import { createParty } from './game/party.js';
+import { createBox } from './game/box.js';
 import { createRng } from './core/rng.js';
 import { newGame, loadGame, saveGame } from './core/save.js';
 import { validateData } from './data/species.js';
@@ -178,7 +178,7 @@ const go = {
   },
   party: () => {
     requestSprites(game.party.map((m) => m.species));
-    scene = createParty({
+    scene = createBox({
       game,
       onBack: () => go.town(null, TOWN.partySpot),
       onSave: () => save(),

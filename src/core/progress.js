@@ -16,22 +16,34 @@ export const defaultSlot = (species) => (SPECIES[species].abilities.length > 1 ?
 export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
   const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
-  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot };
+  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false };
 }
 
 // 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)
 export const abilityOf = (m) => { const a = SPECIES[m.species].abilities; return a[m.abilitySlot ?? 0] ?? a[0]; };
 
-// 결정 3개로 다른 특성으로 (계열 뿌리 결정)
-export const ABILITY_SWAP_COST = 3;
-export function swapAbility(game, species) {
+// 특성 해금: 계열 뿌리 결정 3개를 한 번 쓰면 다른 특성이 열리고 바로 바뀐다. 그 뒤 전환은 공짜
+export const ABILITY_UNLOCK_COST = 3;
+export function unlockAbility(game, species) {
   const m = game.party.find((x) => x.species === species);
   if (!m) return { ok: false, reason: 'missing' };
   if (SPECIES[species].abilities.length < 2) return { ok: false, reason: 'single' };
+  if (m.abilityUnlocked) return { ok: false, reason: 'already' };
   const root = lineRoot(species);
-  if ((game.shards[root] ?? 0) < ABILITY_SWAP_COST) return { ok: false, reason: 'shards' };
-  game.shards[root] -= ABILITY_SWAP_COST;
+  if ((game.shards[root] ?? 0) < ABILITY_UNLOCK_COST) return { ok: false, reason: 'shards' };
+  game.shards[root] -= ABILITY_UNLOCK_COST;
+  m.abilityUnlocked = true;
   m.abilitySlot = (m.abilitySlot ?? 0) === 0 ? 1 : 0;
+  return { ok: true };
+}
+
+// 특성 슬롯 고르기: 잠겨 있으면 지금 슬롯만
+export function setAbilitySlot(game, species, slot) {
+  const m = game.party.find((x) => x.species === species);
+  if (!m) return { ok: false, reason: 'missing' };
+  if (!Number.isInteger(slot) || slot < 0 || slot >= SPECIES[species].abilities.length) return { ok: false, reason: 'slot' };
+  if (slot !== (m.abilitySlot ?? 0) && !m.abilityUnlocked) return { ok: false, reason: 'locked' };
+  m.abilitySlot = slot;
   return { ok: true };
 }
 

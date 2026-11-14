@@ -7,6 +7,7 @@ const KEYS = {
   z: { type: 'confirm' }, Z: { type: 'confirm' }, Enter: { type: 'confirm' }, ' ': { type: 'confirm' },
   x: { type: 'cancel' }, X: { type: 'cancel' }, Escape: { type: 'cancel' }, Backspace: { type: 'cancel' },
   e: { type: 'endTurn' }, E: { type: 'endTurn' },
+  s: { type: 'sort' }, S: { type: 'sort' }, // 편성소 박스 정렬
 };
 
 // getScale 은 인터페이스 호환용 (좌표는 실제 렌더 크기로 계산)
