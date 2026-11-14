@@ -11,7 +11,7 @@ import { calcDamage, hitChance, confusionDamage, rollHits } from './damage.js';
 import { unitsHit } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
-import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate } from './status.js';
+import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { startingMoves } from './learn.js';
@@ -102,9 +102,11 @@ function floorStartAbilities(state) {
 export const unitAt = (state, x, y) => state.units.find((u) => u.x === x && u.y === y);
 const byId = (state, id) => state.units.find((u) => u.id === id);
 
-export function moveUnit(state, id, x, y) {
+// cost: 이번 이동의 경로 비용 (치고 빠지기에서 남은 이동력 계산)
+export function moveUnit(state, id, x, y, cost = 0) {
   const u = byId(state, id);
   const stayed = u.x === x && u.y === y;
+  u.spent = (u.spent ?? 0) + cost;
   u.x = x; u.y = y; u.moved = true;
   state.log.arriveAbilityEvents = [];
   // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
@@ -198,6 +200,17 @@ export function redirectTarget(state, userId, moveId, aim) {
 
 export const HEAL_USES = 2;
 
+// 치고 빠지기: 남은 이동력 (없으면 0)
+export function canRetreat(state, unit) {
+  if (!unit.retreatReady || unit.retreated || !state.units.includes(unit)) return 0;
+  return Math.max(0, moveBudget(unit) - (unit.spent ?? 0));
+}
+export function retreatMove(state, id, x, y, cost = 0) {
+  const u = byId(state, id);
+  moveUnit(state, id, x, y, cost);
+  u.retreated = true; u.retreatReady = false;
+}
+
 // 공격기·변화기 공통. 공격기는 데미지 + 능력치 부가효과, 변화기는 대상별 랭크 변화
 const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
 
@@ -214,6 +227,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const rod = redirectTarget(state, userId, moveId, aim);
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = MOVES[moveId];
+  if (a.sealed) return { kind: move.category === 'status' ? 'status' : 'attack', blocked: 'sealed', stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; // 풀죽음: 이번 차례 기술 불가
   a.acted = true;
   if (has(a, 'truant')) a.loafNext = true; // 게으름: 다음 자기 차례는 쉰다
   a.moved = true;
@@ -301,6 +315,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const contactBase = move.category === 'physical';
   const breaksDef = has(a, 'mold-breaker');
   let dealt = 0; // 실제로 깎인 HP 합 (흡수·반동 기준)
+  const flinched = [];
   for (const d of targets) {
     const contact = contactBase && dist(a, d) === 1;
     const n = rollHits(a, move, rng); // 연속 공격 타수 (보통 1)
@@ -349,11 +364,20 @@ export function applyMove(state, userId, moveId, aim, rng) {
     const dust = !breaksDef && has(d, 'shield-dust'); // 인분: 받는 부가효과 무효
     if (landed && !fainted && !dust && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, true, breaksDef);
     if (landed && !fainted && !dust && move.ailment && roll(move.ailmentChance)) ail(d);
+    // 풀죽음: 다음 자기 차례 기술 봉인 (정신력·보스 면역, 봉인 중 재풀죽음 없음, 속이다는 대상마다 한 층 한 번)
+    if (landed && !fainted && !dust && move.flinchChance && !d.flinch && !d.sealed && !d.boss && !(has(d, 'inner-focus') && !breaksDef)
+      && !(move.id === 'fake-out' && d.fakedOut) && roll(move.flinchChance)) {
+      d.flinch = true;
+      if (move.id === 'fake-out') d.fakedOut = true;
+      flinched.push(d.id);
+    }
     if (landed && !fainted && last?.damage > 0) {
       if (has(d, 'color-change') && d.typeOverride !== moveTypeOf(a, move)) { d.typeOverride = moveTypeOf(a, move); abilityEvents.push({ unitId: d.id, ability: 'color-change' }); }
       if (hits.some((h) => h.unitId === d.id && h.crit) && has(d, 'anger-point')) { changeStats(d, [{ stat: 'attack', change: 12 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'anger-point' }); }
     }
   }
+  // 선제기: 기술이 나갔으면 이번 차례에 한 번 남은 이동력으로 다시 이동 (치고 빠지기)
+  if (move.priority > 0 && state.units.includes(a)) a.retreatReady = true;
   // 흡수(+)·반동(−): 실제로 깎인 HP 합 기준
   let drained = 0, recoilDamage = 0;
   if (dealt > 0 && move.drain > 0 && state.units.includes(a)) {
@@ -377,7 +401,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, flinched, retreat: !!a.retreatReady };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];
@@ -459,6 +483,7 @@ export function endPhase(state, rng = Math.random) {
       if (f.hp === 0) { knockOut(state, f, null); events.push({ unitId: f.id, kind: 'fainted' }); }
     }
   }
+  for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
   checkResult(state);
   state.log.expired = [];
   for (const u of state.units) {
@@ -472,6 +497,8 @@ export function endPhase(state, rng = Math.random) {
   for (const u of state.units) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false;
+    u.spent = 0; u.retreatReady = false; u.retreated = false; // 치고 빠지기
+    if (u.flinch) { u.flinch = false; u.sealed = true; events.push({ unitId: u.id, kind: 'sealed' }); } // 풀죽음 → 이번 차례 기술 봉인
     u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
     u.trapped = state.units.some((o) => o.side !== u.side && dist(o, u) === 1 && traps(o, u)); // 묶기
     if (state.result) continue;

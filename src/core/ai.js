@@ -273,3 +273,15 @@ function walkDistanceFromFoes(state, unit, foes) {
   }
   return dist;
 }
+
+// 치고 빠지기 후퇴 칸: 남은 이동력 안에서 상대 편 모두에게서 가장 먼(최소 거리가 가장 큰) 칸
+export function retreatSpot(state, unit, budget) {
+  const foes = state.units.filter((u) => u.side !== unit.side);
+  let best = null, bestD = -1;
+  for (const k of reachable(state.grid, state.units, unit, budget).keys()) {
+    const [x, y] = k.split(',').map(Number);
+    const d = foes.length ? Math.min(...foes.map((f) => manhattan({ x, y }, f))) : 0;
+    if (d > bestD) { bestD = d; best = { x, y }; }
+  }
+  return best;
+}

@@ -19,8 +19,8 @@ export const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
 // 다익스트라. 반환: { best: Map<"x,y", 비용>, parent: Map<"x,y", "x,y">, occ }
-function search(grid, units, unit) {
-  const budget = moveBudget(unit); // 마비면 절반
+function search(grid, units, unit, budgetOverride = null) {
+  const budget = budgetOverride ?? moveBudget(unit); // 마비면 절반 (치고 빠지기는 남은 이동력)
   const h = grid.length, w = grid[0].length;
   const occ = new Map(units.filter((o) => o !== unit && o.hp > 0).map((o) => [`${o.x},${o.y}`, o.side]));
   const best = new Map([[`${unit.x},${unit.y}`, 0]]);
@@ -50,8 +50,8 @@ function search(grid, units, unit) {
 }
 
 // 반환: Map<"x,y", 누적비용> (정지 가능한 칸만, 시작 칸 포함)
-export function reachable(grid, units, unit) {
-  const { best, occ } = search(grid, units, unit);
+export function reachable(grid, units, unit, budget = null) {
+  const { best, occ } = search(grid, units, unit, budget);
   // 같은 편이 서 있는 칸은 통과만 가능, 정지 불가
   for (const [k, side] of occ) if (side === unit.side) best.delete(k);
   return best;

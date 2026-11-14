@@ -106,3 +106,83 @@ test('healing moves: half HP, weather for synthesis, two uses per floor, refused
   const fresh = duel('chansey', 'pidgey');
   assert.equal(fresh.a.healUses, 2); // 새 층(새 전투)은 다시 2번
 });
+
+// ---- SRPG: 치고 빠지기 · 풀죽음 ----
+import { moveUnit, endPhase, canRetreat, retreatMove, arrive } from '../src/core/battle.js';
+import { reachable } from '../src/core/pathfind.js';
+import { moveBudget } from '../src/core/status.js';
+
+test('priority moves: after attacking, move again with the movement left (once)', () => {
+  const { s, a, f } = duel('rattata', 'snorlax', { foe: { hp: 999, maxHp: 999 } });
+  f.x = 3; f.y = 1;
+  moveUnit(s, a.id, 2, 1, 1); // 1칸 이동 (비용 1)
+  applyMove(s, a.id, 'quick-attack', f.id, () => 0.01);
+  const left = canRetreat(s, a);
+  assert.equal(left, moveBudget(a) - 1);
+  const far = [...reachable(s.grid, s.units, a, left).keys()];
+  assert.ok(far.length > 1);
+  retreatMove(s, a.id, 1, 1, 1);
+  assert.equal(canRetreat(s, a), 0); // 한 번만
+  const t = duel('rattata', 'snorlax', { foe: { hp: 999, maxHp: 999 } });
+  applyMove(t.s, t.a.id, 'tackle', t.f.id, () => 0.01);
+  assert.equal(canRetreat(t.s, t.a), 0); // 선제기가 아니면 없음
+  const p = duel('rattata', 'snorlax', { ally: { status: 'paralysis' }, foe: { hp: 999, maxHp: 999 } });
+  const r = applyMove(p.s, p.a.id, 'quick-attack', p.f.id, () => 0.01); // 마비 25% 실패
+  assert.equal(r.blocked, 'paralysis');
+  assert.equal(canRetreat(p.s, p.a), 0);
+});
+
+test('retreating onto a chest opens it like a normal move', () => {
+  const { s, a, f } = duel('rattata', 'snorlax', { foe: { hp: 999, maxHp: 999 } });
+  s.chests = [{ x: 1, y: 3, item: 'candy' }];
+  applyMove(s, a.id, 'quick-attack', f.id, () => 0.01);
+  retreatMove(s, a.id, 1, 3, 2);
+  assert.equal(arrive(s, a.id).item, 'candy');
+});
+
+test('flinch seals moves on the next own phase; inner focus, bosses and repeats are immune; fake out once per foe', () => {
+  const { s, a, f } = duel('zubat', 'snorlax', { foe: { hp: 999, maxHp: 999 } });
+  applyMove(s, a.id, 'bite', f.id, seq([0.01, 0.5, 0.5, 0.01]));
+  assert.equal(f.flinch, true);
+  endPhase(s, () => 0.9); // 적 차례 시작 → 봉인
+  assert.equal(f.sealed, true);
+  assert.equal(f.flinch, false);
+  assert.equal(applyMove(s, f.id, 'tackle', a.id, () => 0.01).blocked, 'sealed');
+  assert.ok(moveBudget(f) > 0); // 이동은 가능
+  endPhase(s, () => 0.9); // 적 차례 끝 → 풀림
+  assert.equal(f.sealed, false);
+  const inner = duel('zubat', 'snorlax', { foe: { ability: 'inner-focus', hp: 999, maxHp: 999 } });
+  applyMove(inner.s, inner.a.id, 'bite', inner.f.id, () => 0.01);
+  assert.equal(inner.f.flinch, false);
+  const boss = duel('zubat', 'snorlax', { foe: { boss: true, hp: 999, maxHp: 999 } });
+  applyMove(boss.s, boss.a.id, 'bite', boss.f.id, () => 0.01);
+  assert.equal(boss.f.flinch, false);
+  const fo = duel('meowth', 'snorlax', { foe: { hp: 999, maxHp: 999 } });
+  applyMove(fo.s, fo.a.id, 'fake-out', fo.f.id, () => 0.01);
+  assert.equal(fo.f.flinch, true);
+  endPhase(fo.s, () => 0.9); endPhase(fo.s, () => 0.9); // 봉인 끝
+  fo.a.acted = false;
+  applyMove(fo.s, fo.a.id, 'fake-out', fo.f.id, () => 0.01);
+  assert.equal(fo.f.flinch, false); // 속이다는 한 층 한 번
+});
+
+import { retreatSpot } from '../src/core/ai.js';
+import { createGame } from '../src/game/states.js';
+
+test('AI retreat spot is the reachable tile farthest from the other side', () => {
+  const { s, a, f } = duel('rattata', 'rattata', { foe: { hp: 999, maxHp: 999 } });
+  f.x = 2; f.y = 1;
+  const t = retreatSpot(s, f, 3);
+  const d = (p) => Math.abs(p.x - a.x) + Math.abs(p.y - a.y);
+  assert.ok(d(t) >= 3, JSON.stringify(t));
+});
+
+test('a sealed-only ally phase can still end (wait is always available)', () => {
+  const game = createGame({ rng: createRng(7) });
+  game.handle({ type: 'confirm' });
+  for (let i = 0; i < 40 && game.mode !== 'idle'; i++) { game.update(0.1); game.handle({ type: 'confirm' }); }
+  for (const u of game.state.units) if (u.side === 'ally') u.sealed = true;
+  game.handle({ type: 'endTurn' });
+  for (let i = 0; i < 400 && game.mode !== 'idle' && game.mode !== 'result'; i++) { game.update(0.1); game.handle({ type: 'confirm' }); }
+  assert.ok(['idle', 'result'].includes(game.mode), game.mode);
+});
