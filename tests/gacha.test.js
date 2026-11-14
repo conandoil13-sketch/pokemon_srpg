@@ -134,3 +134,22 @@ test('claimBalls: ten-pull charges 900 once, applies all, repeats in one pull be
   assert.equal(g.party.length - party + shards, 10);
   assert.deepEqual(claimBalls(game({ coins: 899 }), balls, createRng(2)), { ok: false, reason: 'coins' });
 });
+
+test('a duplicate pull raises the whole line and records genders the current form cannot use', async () => {
+  const { newGame } = await import('../src/core/save.js');
+  const { giveUid } = await import('../src/core/members.js');
+  const g = newGame();
+  const low = { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 };
+  const a = giveUid(g, { ...newMember('gallade', 30), ivs: { ...low }, gender: 'male', genders: ['male'] }); g.party.push(a);
+  const b = giveUid(g, { ...newMember('ralts', 20), ivs: { ...low }, gender: 'male', genders: ['male'] }); g.party.push(b);
+  g.coins = 99999;
+  const rng = createRng(3);
+  for (let i = 0; i < 30 && !a.genders.includes('female'); i++) claimBall(g, { species: 'ralts', rarity: 'common' }, rng);
+  assert.ok(a.genders.includes('female'), 'female recorded even though gallade is male-only');
+  assert.deepEqual(b.genders, a.genders);
+  assert.notEqual(b.genders, a.genders);
+  assert.ok(Object.values(a.ivs).some((v) => v > 0));
+  assert.deepEqual(b.ivs, a.ivs);
+  assert.equal(a.gender, 'male');
+  assert.equal(g.party.length, 7, 'no new member for a duplicate');
+});

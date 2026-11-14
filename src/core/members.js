@@ -1,17 +1,13 @@
 // 동료 구분 (순수): 고유 번호(uid) · 같은 계열 묶음 · 계열 공유 값(개체값·얻은 성별)
 import { SPECIES } from '../data/species.js';
 import { lineRoot } from './gacha.js';
-import { IV_KEYS, genderFits } from './individual.js';
+import { IV_KEYS, genderFits, findMember } from './individual.js';
 
 // 동료를 가리키는 열쇠: uid (없는 테스트용 멤버는 종 이름)
 export const memberKey = (m) => m.uid ?? m.species;
 
 // 열쇠로 찾기. JSON 키는 문자열이 되므로 문자열로 비교. uid 가 안 맞으면 종 이름으로(예전 형식 호환)
-export function memberByKey(game, key) {
-  if (key === null || key === undefined) return undefined;
-  const k = String(key);
-  return game.party.find((m) => String(memberKey(m)) === k) ?? game.party.find((m) => m.species === k);
-}
+export const memberByKey = findMember;
 
 const maxUid = (party) => party.reduce((n, m) => (Number.isInteger(m.uid) ? Math.max(n, m.uid) : n), 0);
 

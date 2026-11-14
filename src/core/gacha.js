@@ -4,7 +4,7 @@ import { newMember } from './progress.js';
 import { levelCapFor } from './difficulty.js';
 import { mergeIvs, rollIvs, rollGender, genderFits } from './individual.js';
 import { deployed } from './roster.js';
-import { giveUid } from './members.js';
+import { giveUid, syncLine } from './members.js';
 
 export const GACHA_COST = 100, GACHA_TEN_COST = 900; // 10연속은 10% 할인
 export const RARITY = [{ id: 'common', weight: 70 }, { id: 'rare', weight: 25 }, { id: 'epic', weight: 5 }];
@@ -83,14 +83,13 @@ export function claimBalls(game, balls, rng) {
 function applyBall(game, ball, rng) {
   const { species, rarity } = ball;
   const have = game.party.find((m) => lineRoot(m.species) === species);
-  if (have) { // 중복: 결정 + 개체값 능력치별 큰 값 + 새 성별 해금 (PokeRogue 식)
+  if (have) { // 중복: 결정 + 개체값 능력치별 큰 값 + 새 성별 해금 (PokeRogue 식) — 같은 계열 모두 같이
     game.shards ??= {};
     game.shards[species] = (game.shards[species] ?? 0) + 1;
     const merged = mergeIvs(have.ivs ?? {}, rollIvs(rng));
-    have.ivs = merged.ivs;
     const g = rollGender(species, rng);
-    const newGender = g && !(have.genders ?? []).includes(g) && genderFits(have.species, g) ? g : null;
-    if (newGender) have.genders = [...(have.genders ?? []), newGender];
+    const newGender = g && !(have.genders ?? []).includes(g) && genderFits(species, g) ? g : null; // 계열 뿌리 기준 (지금 모습이 못 써도 기록)
+    syncLine(game, species, { ivs: merged.ivs, genders: newGender ? [...(have.genders ?? []), newGender] : have.genders ?? [] });
     return { ok: true, species, rarity, duplicate: true, ivUp: merged.up, newGender };
   }
   const member = giveUid(game, newMember(species, joinLevel(game), rng)); // 특성 슬롯도 무작위

@@ -32,12 +32,22 @@ export const hashGender = (species, ...seed) => fromRoll(rateOf(species), hash(s
 export const genderFixed = (species) => { const r = rateOf(species); return r <= 0 || r >= 8; };
 export const genderFits = (species, g) => { const r = rateOf(species); return r < 0 ? g === null : r === 0 ? g === 'male' : r >= 8 ? g === 'female' : g === 'male' || g === 'female'; };
 
-// 성별 전환: 얻은 적 있는 성별(genders)로만, 비용 없음
-export function setGender(game, species, g) {
-  const m = game.party.find((x) => x.species === species);
+// 동료 찾기: 열쇠(uid) 로, 안 맞으면 종 이름으로 (members.memberByKey 와 같음 — 순환 import 피하려고 여기에)
+export function findMember(game, key) {
+  if (key === null || key === undefined) return undefined;
+  const k = String(key);
+  return game.party.find((m) => String(m.uid ?? m.species) === k) ?? game.party.find((m) => m.species === k);
+}
+
+// 얻은 성별(계열 기록) 중 지금 모습이 쓸 수 있는 것
+export const usableGenders = (m) => (m.genders ?? []).filter((g) => genderFits(m.species, g));
+
+// 성별 전환: 얻은 적 있는 성별 중 지금 모습에 맞는 것으로만, 비용 없음
+export function setGender(game, key, g) {
+  const m = findMember(game, key);
   if (!m) return { ok: false, reason: 'missing' };
-  if (genderFixed(species)) return { ok: false, reason: 'fixed' };
-  if (!(m.genders ?? []).includes(g)) return { ok: false, reason: 'locked' };
+  if (genderFixed(m.species)) return { ok: false, reason: 'fixed' };
+  if (!usableGenders(m).includes(g)) return { ok: false, reason: 'locked' };
   m.gender = g;
   return { ok: true };
 }

@@ -332,3 +332,14 @@ test('v9: duplicate or broken uids get fresh ones at the back', () => {
   assert.equal(back.party[0].uid, 1);
   assert.ok(back.party[2].uid > 5 && back.party[3].uid > 5);
 });
+
+test('loading keeps obtained genders the current form cannot use', async () => {
+  const { newMember } = await import('../src/core/progress.js');
+  const st = memStore();
+  const g = newGame();
+  g.party.push({ uid: 6, ...newMember('gallade', 30), gender: 'male', genders: ['male', 'female'] });
+  saveGame(st, g);
+  const m = loadGame(st).party.find((x) => x.uid === 6);
+  assert.equal(m.gender, 'male');
+  assert.deepEqual([...m.genders].sort(), ['female', 'male']);
+});

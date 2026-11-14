@@ -9,6 +9,7 @@ import { startingMoves } from './learn.js';
 import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 import { memberKey, unifyLines } from './members.js';
+import { lineRoot } from './gacha.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
 const VERSION = 9;
@@ -32,7 +33,8 @@ function cleanIndividual(m) {
   const src = m.ivs && typeof m.ivs === 'object' ? m.ivs : hashIvs(m.species);
   const ivs = Object.fromEntries(IV_KEYS.map((k) => [k, clampInt(src[k] ?? 0, 0, IV_MAX)]));
   const gender = genderFits(m.species, m.gender ?? null) ? m.gender ?? null : hashGender(m.species);
-  const genders = [...new Set([gender, ...(Array.isArray(m.genders) ? m.genders : [])].filter((g) => g && genderFits(m.species, g)))];
+  const root = lineRoot(m.species); // 얻은 성별은 계열 기록: 지금 모습이 못 쓰는 성별도 남긴다
+  const genders = [...new Set([gender, ...(Array.isArray(m.genders) ? m.genders : [])].filter((g) => g && genderFits(root, g)))];
   return { ivs, gender, genders };
 }
 

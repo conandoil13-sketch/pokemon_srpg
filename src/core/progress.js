@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { hash } from '../render/pixels.js';
 import { DEFAULT_BUILD, effectiveBase } from './dittoBuild.js';
-import { rollIvs, hashIvs, maxIvs, rollGender, hashGender, genderFits } from './individual.js';
+import { rollIvs, hashIvs, maxIvs, rollGender, hashGender, genderFits, findMember } from './individual.js';
 
 // 개체값·성별: rng 가 있으면 무작위, 없으면 종 이름으로 고정. 메타몽은 개체값 31·성별 없음
 function individualOf(species, rng) {
@@ -35,12 +35,12 @@ export const typesOfMember = (m) => m.build?.types ?? SPECIES[m.species].types;
 
 // 특성 해금: 계열 뿌리 결정 3개를 한 번 쓰면 다른 특성이 열리고 바로 바뀐다. 그 뒤 전환은 공짜
 export const ABILITY_UNLOCK_COST = 3;
-export function unlockAbility(game, species) {
-  const m = game.party.find((x) => x.species === species);
+export function unlockAbility(game, key) {
+  const m = findMember(game, key);
   if (!m) return { ok: false, reason: 'missing' };
-  if (SPECIES[species].abilities.length < 2) return { ok: false, reason: 'single' };
+  if (SPECIES[m.species].abilities.length < 2) return { ok: false, reason: 'single' };
   if (m.abilityUnlocked) return { ok: false, reason: 'already' };
-  const root = lineRoot(species);
+  const root = lineRoot(m.species);
   if ((game.shards[root] ?? 0) < ABILITY_UNLOCK_COST) return { ok: false, reason: 'shards' };
   game.shards[root] -= ABILITY_UNLOCK_COST;
   m.abilityUnlocked = true;
@@ -49,10 +49,10 @@ export function unlockAbility(game, species) {
 }
 
 // 특성 슬롯 고르기: 잠겨 있으면 지금 슬롯만
-export function setAbilitySlot(game, species, slot) {
-  const m = game.party.find((x) => x.species === species);
+export function setAbilitySlot(game, key, slot) {
+  const m = findMember(game, key);
   if (!m) return { ok: false, reason: 'missing' };
-  if (!Number.isInteger(slot) || slot < 0 || slot >= SPECIES[species].abilities.length) return { ok: false, reason: 'slot' };
+  if (!Number.isInteger(slot) || slot < 0 || slot >= SPECIES[m.species].abilities.length) return { ok: false, reason: 'slot' };
   if (slot !== (m.abilitySlot ?? 0) && !m.abilityUnlocked) return { ok: false, reason: 'locked' };
   m.abilitySlot = slot;
   return { ok: true };
@@ -109,9 +109,10 @@ export function resolveChoice(member, move, forgetIndex) {
 // 진화: 종족 교체 후 새 종족이 '현재 레벨'에 배우는 기술 처리
 export function evolveMember(member, to) {
   member.species = to;
-  // 새 종의 성별 비율과 안 맞으면(예: 껍데기몬 — 성별 없음) 고친다
-  if (!genderFits(to, member.gender ?? null)) member.gender = hashGender(to);
-  member.genders = (member.genders ?? []).filter((g) => genderFits(to, g));
+  // 새 종의 성별 비율과 안 맞으면(예: 껍데기몬 — 성별 없음) 얻은 성별 중 맞는 것, 없으면 종으로 정한 값
+  // 얻은 성별 목록(계열 기록)은 지우지 않는다: 같은 계열을 한 마리 더 데려오면 다른 갈래로 키울 수 있게
+  if (!genderFits(to, member.gender ?? null)) member.gender = (member.genders ?? []).find((g) => genderFits(to, g)) ?? hashGender(to);
+  member.genders = [...(member.genders ?? [])];
   if (member.gender && !member.genders.includes(member.gender)) member.genders.push(member.gender);
   const s = SPECIES[to];
   const moves = s.learnset.filter(([lv, mv]) => lv === member.level && MOVES[mv]?.learnable).map(([, mv]) => mv);
