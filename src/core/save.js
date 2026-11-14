@@ -8,7 +8,7 @@ import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 5;
+const VERSION = 6;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -33,7 +33,8 @@ function cleanMember(m) {
   moves = [...new Set(moves)].slice(0, 4);
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES, m.species);
   const slot = Number.isInteger(m.abilitySlot) && m.abilitySlot >= 0 && m.abilitySlot < s.abilities.length ? m.abilitySlot : m.abilitySlot === undefined ? defaultSlot(m.species) : 0;
-  return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot };
+  const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
+  return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
 }
 
 const isDungeon = (id) => typeof id === 'string' && DUNGEONS.some((d) => d.id === id);
@@ -90,6 +91,7 @@ export function loadGame(storage) {
   if (data?.version === 2) data = { ...data, version: 3 }; // v2 → v3: 메타몽은 아래 ensureDitto 가 넣는다
   if (data?.version === 3) data = { ...data, version: 4, coins: 0, shards: {}, sortie: [] }; // v3 → v4: 출전은 아래에서 파티 앞으로 채움
   if (data?.version === 4) data = { ...data, version: 5 }; // v4 → v5: 특성 슬롯은 cleanMember 가 채운다
+  if (data?.version === 5) data = { ...data, version: 6 }; // v5 → v6: 특성 해금(없으면 잠김)은 cleanMember 가 채운다
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
     const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);

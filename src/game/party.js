@@ -1,6 +1,6 @@
 // 편성소: 출전 멤버(메타몽 + 4) 정보, 출전 멤버 바꾸기, 진화의돌 사용
 import { SPECIES } from '../data/species.js';
-import { stoneTargets, abilityOf, swapAbility, ABILITY_SWAP_COST } from '../core/progress.js';
+import { stoneTargets, abilityOf, unlockAbility as swapAbility, ABILITY_UNLOCK_COST as ABILITY_SWAP_COST } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
 import { ABILITIES } from '../data/abilities.js';
 import { stoneEvolutionOptions } from '../core/evolution.js';
