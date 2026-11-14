@@ -58,7 +58,7 @@ export function setAbilitySlot(game, species, slot) {
   return { ok: true };
 }
 
-export const newParty = () => STARTERS.map((sp) => newMember(sp));
+export const newParty = () => STARTERS.map((sp, i) => ({ uid: i + 1, ...newMember(sp) })); // uid 1..5
 
 // 기술 목록을 멤버에게 적용: 4개 미만이면 바로 배움, 이미 알면 skip, 꽉 차면 choose(UI 가 resolveChoice)
 function learnEvents(member, moves) {

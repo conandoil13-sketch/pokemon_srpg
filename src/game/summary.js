@@ -6,6 +6,7 @@ import { josa } from '../data/text.js';
 import { statsAt, expForLevel, MAX_LEVEL } from '../core/stats.js';
 import { typesOfMember, abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
+import { memberKey } from '../core/members.js';
 import { effectiveBase } from '../core/dittoBuild.js';
 import { genderFixed, setGender, ivGrade } from '../core/individual.js';
 import * as ui from '../render/ui.js';
@@ -93,7 +94,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
         ctx.fillStyle = '#58b8f8'; ctx.fillRect(11, y0 + 14, Math.round(158 * r), 3);
         small(`진화: ${evolutionHint(m)}`, 10, y0 + 24);
         small(`${SPECIES[lineRoot(m.species)].name} 계열 결정: ${shards(m)}개`, 10, y0 + 38);
-        const out = m.species === 'ditto' || game.sortie.includes(m.species);
+        const out = m.species === 'ditto' || game.sortie.some((k) => String(k) === String(memberKey(m)));
         small(out ? '출전 중' : '대기 중', 10, y0 + 52, out ? '#2860c8' : '#808080');
         small(`특성: ${ABILITIES[abilityOf(m)]?.name ?? '-'} · 몸무게 ${m.build?.weight ?? s.weight}kg`, 10, y0 + 66);
         if (!genderFixed(m.species)) small(`확인: 성별 바꾸기 (${(m.genders ?? []).length > 1 ? '♂/♀' : '다른 성별 없음'})`, 10, y0 + 80, (m.genders ?? []).length > 1 ? '#c06010' : '#a0a0a0');

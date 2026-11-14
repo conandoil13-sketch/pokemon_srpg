@@ -4,6 +4,7 @@ import { newMember } from './progress.js';
 import { levelCapFor } from './difficulty.js';
 import { mergeIvs, rollIvs, rollGender, genderFits } from './individual.js';
 import { deployed } from './roster.js';
+import { giveUid } from './members.js';
 
 export const GACHA_COST = 100, GACHA_TEN_COST = 900; // 10연속은 10% 할인
 export const RARITY = [{ id: 'common', weight: 70 }, { id: 'rare', weight: 25 }, { id: 'epic', weight: 5 }];
@@ -92,7 +93,7 @@ function applyBall(game, ball, rng) {
     if (newGender) have.genders = [...(have.genders ?? []), newGender];
     return { ok: true, species, rarity, duplicate: true, ivUp: merged.up, newGender };
   }
-  const member = newMember(species, joinLevel(game), rng); // 특성 슬롯도 무작위
+  const member = giveUid(game, newMember(species, joinLevel(game), rng)); // 특성 슬롯도 무작위
   game.party.push(member);
   return { ok: true, species, rarity, duplicate: false, member };
 }

@@ -8,9 +8,10 @@ import { expForLevel, MAX_LEVEL } from './stats.js';
 import { startingMoves } from './learn.js';
 import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
+import { memberKey, unifyLines } from './members.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 8;
+const VERSION = 9;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -18,7 +19,7 @@ const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg
 // GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
 export const newGame = () => {
   const party = newParty();
-  return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {} };
+  return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {}, nextUid: party.length + 1 };
 };
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
@@ -46,7 +47,7 @@ function cleanMember(m) {
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES, m.species);
   const slot = Number.isInteger(m.abilitySlot) && m.abilitySlot >= 0 && m.abilitySlot < s.abilities.length ? m.abilitySlot : m.abilitySlot === undefined ? defaultSlot(m.species) : 0;
   const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
-  const out = { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
+  const out = { ...(Number.isInteger(m.uid) && m.uid > 0 ? { uid: m.uid } : {}), species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
   if (m.species === 'ditto') out.build = cleanBuild(m.build, level); // 메타몽만 빌드
   Object.assign(out, cleanIndividual(m));
   return out;
@@ -63,7 +64,7 @@ function cleanRun(r) {
     dungeonId: r.dungeonId,
     floor: r.floor,
     seed: r.seed >>> 0,
-    faintedLast: (Array.isArray(r.faintedLast) ? r.faintedLast : []).filter((sp) => own(SPECIES, sp)),
+    faintedLast: (Array.isArray(r.faintedLast) ? r.faintedLast : []).filter((u) => Number.isInteger(u) && u > 0), // 동료 uid
     loot: {
       evoStone: clampInt(r.loot?.evoStone, 0, 99),
       candy: (Array.isArray(r.loot?.candy) ? r.loot.candy : []).map((f) => clampInt(f, 1, d.floors)),
@@ -74,12 +75,30 @@ function cleanRun(r) {
   };
 }
 
-// 출전 목록: 파티에 있는 종족만, 메타몽 제외, 중복 제거, 최대 4. 비면 파티 앞에서 채운다
+// 출전 목록: 동료 열쇠(uid) 목록. 파티에 있는 동료만, 메타몽 제외, 중복 제거, 최대 4. 비면 파티 앞에서 채운다
+// 종 이름이 들어 있으면(예전 형식) 아직 안 뽑힌 그 종 동료로 바꾼다
 export const SORTIE_SIZE = 4;
 export function cleanSortie(sortie, party) {
-  const inParty = new Set(party.map((m) => m.species));
-  const list = [...new Set((Array.isArray(sortie) ? sortie : []).filter((k) => typeof k === 'string' && k !== 'ditto' && inParty.has(k)))].slice(0, SORTIE_SIZE);
-  return list.length ? list : party.filter((m) => m.species !== 'ditto').slice(0, SORTIE_SIZE).map((m) => m.species);
+  const picked = [];
+  for (const k of Array.isArray(sortie) ? sortie : []) {
+    if (typeof k !== 'string' && typeof k !== 'number') continue;
+    const m = party.find((x) => !picked.includes(x) && String(memberKey(x)) === String(k))
+      ?? (typeof k === 'string' ? party.find((x) => !picked.includes(x) && x.species === k) : undefined);
+    if (m && m.species !== 'ditto') picked.push(m);
+  }
+  const list = picked.slice(0, SORTIE_SIZE);
+  return (list.length ? list : party.filter((m) => m.species !== 'ditto').slice(0, SORTIE_SIZE)).map(memberKey);
+}
+
+// uid 정리: 양의 정수·중복 없음, 아니면 뒤에서 새로 (앞의 것이 번호를 지킨다)
+function fixUids(party) {
+  const seen = new Set();
+  let next = party.reduce((n, m) => (Number.isInteger(m.uid) ? Math.max(n, m.uid) : n), 0) + 1;
+  for (const m of party) {
+    if (!Number.isInteger(m.uid) || m.uid <= 0 || seen.has(m.uid)) m.uid = next++;
+    seen.add(m.uid);
+  }
+  return next;
 }
 
 // 메타몽(주인공)은 항상 파티 맨 앞에 정확히 하나
@@ -111,12 +130,17 @@ export function loadGame(storage) {
   if (data?.version === 5) data = { ...data, version: 6 }; // v5 → v6: 특성 해금(없으면 잠김)은 cleanMember 가 채운다
   if (data?.version === 6) data = { ...data, version: 7 }; // v6 → v7: 메타몽 빌드·가방은 아래 정리에서 기본값
   if (data?.version === 7) data = { ...data, version: 8 }; // v7 → v8: 개체값·성별은 cleanMember 가 채운다
+  let speciesRun = false;
+  if (data?.version === 8) { data = { ...data, version: 9 }; speciesRun = true; } // v8 → v9: uid 는 아래서 붙이고, 종 이름 출전·기절 기록은 uid 로
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
     const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
     if (!cleaned.length) return null;
     const party = ensureDitto(cleaned);
-    return {
+    const nextUid = Math.max(fixUids(party), Number.isInteger(data.nextUid) ? data.nextUid : 0);
+    let run = data.run;
+    if (speciesRun && run && Array.isArray(run.faintedLast)) run = { ...run, faintedLast: run.faintedLast.map((sp) => party.find((m) => m.species === sp)?.uid).filter(Boolean) }; // v8 은 종당 한 마리
+    const game = {
       version: VERSION,
       party,
       items: {
@@ -128,13 +152,16 @@ export function loadGame(storage) {
       best: Object.fromEntries(Object.entries(data.best && typeof data.best === 'object' ? data.best : {})
         .filter(([id]) => isDungeon(id)).map(([id, f]) => [id, clampInt(f, 0, dungeonById(id).floors)])),
       cleared: dungeonIds(data.cleared),
-      run: cleanRun(data.run),
+      run: cleanRun(run),
       coins: clampInt(data.coins, 0, 9999999),
       shards: Object.fromEntries(Object.entries(data.shards && typeof data.shards === 'object' ? data.shards : {})
         .filter(([k]) => own(SPECIES, k)).map(([k, n]) => [k, clampInt(n, 0, 9999)]).filter(([, n]) => n > 0)),
       sortie: cleanSortie(data.sortie, party),
       eggs: data.eggs?.turtwig === true ? { turtwig: true } : {}, // 이스터에그 받은 기록
+      nextUid,
     };
+    unifyLines(game); // 같은 계열은 개체값·얻은 성별을 같이 쓴다
+    return game;
   } catch (e) {
     warn(`invalid save ignored: ${e.message}`); // 어떤 이상한 형태든 부팅을 막지 않는다
     return null;

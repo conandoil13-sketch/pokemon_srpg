@@ -4,6 +4,7 @@ import { ABILITIES } from '../data/abilities.js';
 import { abilityOf, typesOfMember } from '../core/progress.js';
 import { stoneEvolutionOptions } from '../core/evolution.js';
 import { deployed, toggleSortie } from '../core/roster.js';
+import { memberKey } from '../core/members.js';
 import { SORTIE_SIZE } from '../core/save.js';
 import { sortMembers, boxesOf, SORT_KEYS, SORT_KO, BOX_SIZE } from '../core/box.js';
 import { lineRoot } from '../core/gacha.js';
@@ -29,7 +30,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   const list = () => sortMembers(game.party, sort);
   const boxes = () => boxesOf(list());
   const team = () => deployed(game); // 메타몽 + 출전
-  const isOut = (m) => m.species === 'ditto' || game.sortie.includes(m.species);
+  const isOut = (m) => m.species === 'ditto' || game.sortie.some((k) => String(k) === String(memberKey(m)));
   const current = () => (area === 'grid' ? boxes()[box]?.[cell] : team()[slot]) ?? null;
   const remember = () => Object.assign(remembered, { sort, box, species: current()?.species ?? remembered.species });
 
@@ -87,7 +88,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       return;
     }
     if (item.act === 'stone') { remember(); onEvolve(m, stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null)); return; } // 돌은 실제로 진화할 때 차감 (main)
-    const r = toggleSortie(game, m.species);
+    const r = toggleSortie(game, memberKey(m));
     if (!r.ok) { say(REASON[r.reason]); return; }
     onSave();
     if (area === 'deploy') slot = Math.min(slot, team().length - 1);

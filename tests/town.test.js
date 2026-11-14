@@ -355,7 +355,7 @@ test('box: arrows move over 31 members across two boxes, never onto empty cells'
 test('box: sortie toggle from the member menu, refusals and saves', async () => {
   const { box, game, calls } = await boxScene(2);
   // 커서를 대기 동료(6번째 칸)로
-  while (box.cursorMember && game.sortie.includes(box.cursorMember.species) || box.cursorMember?.species === 'ditto') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  while (box.cursorMember && game.sortie.includes(box.cursorMember.uid) || box.cursorMember?.species === 'ditto') box.handle({ type: 'dir', dx: 1, dy: 0 });
   const bench = box.cursorMember.species;
   box.handle({ type: 'confirm' });
   assert.equal(box.mode, 'menu');
@@ -369,7 +369,7 @@ test('box: sortie toggle from the member menu, refusals and saves', async () => 
   assert.equal(box.mode, 'deploy');
   while (box.cursorMember.species !== 'chimchar') box.handle({ type: 'dir', dx: box.cursorMember.species === 'ditto' ? 1 : -1, dy: 0 });
   box.handle({ type: 'confirm' }); box.handle({ type: 'confirm' });
-  assert.ok(!game.sortie.includes('chimchar'));
+  assert.ok(!game.sortie.includes(game.party.find((m) => m.species === 'chimchar').uid));
   assert.equal(calls.save, 1);
   // 메타몽은 뺄 수 없음
   while (box.cursorMember.species !== 'ditto') box.handle({ type: 'dir', dx: -1, dy: 0 });

@@ -166,8 +166,8 @@ const go = {
   town: (message = null, spawn = TOWN.start) => {
     requestSprites(game.party.map((m) => m.species));
     // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
-    const out = deployed(game).slice(1).map((m) => m.species);
-    const rest = game.party.filter((m) => m.species !== 'ditto' && !out.includes(m.species)).map((m) => m.species);
+    const outM = deployed(game).slice(1), out = outM.map((m) => m.species);
+    const rest = game.party.filter((m) => m.species !== 'ditto' && !outM.includes(m)).map((m) => m.species);
     scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onTurtwigGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
