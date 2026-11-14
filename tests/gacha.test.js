@@ -75,3 +75,45 @@ test('not enough coins → nothing happens', () => {
   assert.equal(g.coins, 99);
   assert.equal(g.party.length, 5);
 });
+
+import { rollBall, rollBalls, claimBall, BALL_OF } from '../src/core/gacha.js';
+
+test('rollBalls returns 3 independent results without touching the game', () => {
+  const g = game({ coins: 150 });
+  const party = g.party.length;
+  const a = rollBalls(createRng(5)), b = rollBalls(createRng(5));
+  assert.equal(a.length, 3);
+  assert.deepEqual(a, b);
+  assert.equal(g.coins, 150);
+  assert.equal(g.party.length, party);
+  const rng = createRng(9);
+  const n = { common: 0, rare: 0, epic: 0 };
+  for (let i = 0; i < 3334; i++) for (const ball of rollBalls(rng)) n[ball.rarity]++;
+  const total = n.common + n.rare + n.epic;
+  assert.ok(Math.abs(n.common / total * 100 - 70) <= 2, JSON.stringify(n));
+  assert.ok(Math.abs(n.rare / total * 100 - 25) <= 2, JSON.stringify(n));
+  assert.ok(Math.abs(n.epic / total * 100 - 5) <= 2, JSON.stringify(n));
+  assert.deepEqual(BALL_OF, { common: 'poke', rare: 'great', epic: 'ultra' });
+});
+
+test('claimBall charges once and applies only the chosen ball', () => {
+  const g = game({ coins: 150 });
+  const balls = [{ species: 'bulbasaur', rarity: 'rare' }, { species: 'dratini', rarity: 'epic' }, { species: 'caterpie', rarity: 'common' }];
+  const r = claimBall(g, balls[0], createRng(1));
+  assert.equal(r.ok, true);
+  assert.equal(g.coins, 50);
+  assert.ok(g.party.some((m) => m.species === 'bulbasaur'));
+  assert.ok(!g.party.some((m) => m.species === 'dratini' || m.species === 'caterpie'));
+  assert.deepEqual(g.shards, {});
+});
+
+test('claimBall refuses without coins; owned line gives a shard', () => {
+  const poor = game({ coins: 50 });
+  assert.deepEqual(claimBall(poor, { species: 'caterpie', rarity: 'common' }, createRng(1)), { ok: false, reason: 'coins' });
+  assert.equal(poor.coins, 50);
+  const g = game({ coins: 100 });
+  const r = claimBall(g, { species: 'chimchar', rarity: 'common' }, createRng(1));
+  assert.equal(r.duplicate, true);
+  assert.equal(g.shards.chimchar, 1);
+  assert.equal(rollBall(createRng(3)).species.length > 0, true);
+});

@@ -47,16 +47,27 @@ export function joinLevel(game) {
   return Math.max(5, Math.round(avg) - 2);
 }
 
-export function pull(game, rng) {
-  if ((game.coins ?? 0) < GACHA_COST) return { ok: false, reason: 'coins' };
-  game.coins -= GACHA_COST;
+// 희귀도 → 볼 모양 (뽑기 연출)
+export const BALL_OF = { common: 'poke', rare: 'great', epic: 'ultra' };
+
+// 볼 하나의 결과 (코인·파티는 건드리지 않음)
+export function rollBall(rng) {
   const total = RARITY.reduce((s, r) => s + r.weight, 0);
   let roll = rng() * total, rarity = RARITY[0].id;
   for (const r of RARITY) { if (roll < r.weight) { rarity = r.id; break; } roll -= r.weight; }
   const tier = gachaPool()[rarity];
-  const species = tier[Math.min(tier.length - 1, Math.floor(rng() * tier.length))];
-  const owned = game.party.some((m) => lineRoot(m.species) === species);
-  if (owned) {
+  return { species: tier[Math.min(tier.length - 1, Math.floor(rng() * tier.length))], rarity };
+}
+
+// 볼 n개 (각각 따로 굴림)
+export const rollBalls = (rng, n = 3) => Array.from({ length: n }, () => rollBall(rng));
+
+// 고른 볼 받기: 코인 차감 + 동료 합류(이미 있는 계열이면 결정)
+export function claimBall(game, ball, rng) {
+  if ((game.coins ?? 0) < GACHA_COST) return { ok: false, reason: 'coins' };
+  game.coins -= GACHA_COST;
+  const { species, rarity } = ball;
+  if (game.party.some((m) => lineRoot(m.species) === species)) {
     game.shards ??= {};
     game.shards[species] = (game.shards[species] ?? 0) + 1;
     return { ok: true, species, rarity, duplicate: true };
@@ -64,4 +75,10 @@ export function pull(game, rng) {
   const member = newMember(species, joinLevel(game), rng); // 특성 슬롯도 무작위
   game.party.push(member);
   return { ok: true, species, rarity, duplicate: false, member };
+}
+
+// 1회 뽑기 (기존 호출 호환). 코인이 없으면 굴리지 않는다
+export function pull(game, rng) {
+  if ((game.coins ?? 0) < GACHA_COST) return { ok: false, reason: 'coins' };
+  return claimBall(game, rollBall(rng), rng);
 }
