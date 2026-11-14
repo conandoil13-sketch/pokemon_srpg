@@ -25,9 +25,7 @@ import * as status_confused from './fx/status/confused.js';
 import * as nature_acid_splash from './fx/nature/acid-splash.js';
 import * as pickups_collect_burst from './fx/pickups/collect-burst.js';
 import * as fire_fireball from './fx/fire/fireball.js';
-import * as water_water_orb from './fx/water/water-orb.js';
 import * as ice_ice_lance from './fx/ice/ice-lance.js';
-import * as melee_uppercut from './fx/melee/uppercut.js';
 import * as melee_claw_swipe from './fx/melee/claw-swipe.js';
 import * as melee_double_slash from './fx/melee/double-slash.js';
 import * as melee_thrust from './fx/melee/thrust.js';
@@ -62,9 +60,7 @@ export const FX = {
   'nature/acid-splash': nature_acid_splash,
   'pickups/collect-burst': pickups_collect_burst,
   'fire/fireball': fire_fireball,
-  'water/water-orb': water_water_orb,
   'ice/ice-lance': ice_ice_lance,
-  'melee/uppercut': melee_uppercut,
   'melee/claw-swipe': melee_claw_swipe,
   'melee/double-slash': melee_double_slash,
   'melee/thrust': melee_thrust,

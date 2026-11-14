@@ -63,12 +63,12 @@ test('melee families and special shots look different', () => {
   assert.equal(f('bite').hit.id, 'pokemon/bite');
   assert.equal(f('fire-fang').hit.opts.palette, f('ember', 2).hit.opts.palette); // 불꽃엄니는 불꽃 색 이빨
   assert.equal(f('double-kick').hit.id, 'pokemon/kick');
-  assert.equal(f('fire-punch').cast.id, 'melee/uppercut');
+  assert.equal(f('fire-punch').hit.id, 'impacts/crit-hit');
   assert.equal(f('scratch').cast.id, 'melee/claw-swipe');
   assert.equal(f('peck').cast.id, 'melee/thrust');
   assert.equal(f('hyper-voice').cast.id, 'pokemon/sound-wave');
   assert.equal(f('ember', 1).travel.id, 'fire/fireball');
-  assert.equal(f('water-gun', 1).travel.id, 'water/water-orb');
+  assert.equal(f('water-gun', 1).travel.id, 'projectiles/plasma-shot'); // 물 구슬은 천천히 생겨 짧은 탄으로 안 보임
   assert.equal(fxForMove({ ...MOVES.ember, type: 'ice' }, { distance: 1 }).travel.id, 'ice/ice-lance');
   const ids = new Set(['scratch', 'bite', 'fire-punch', 'ember', 'hyper-voice', 'double-kick'].map((m) => JSON.stringify(f(m, 1))));
   assert.equal(ids.size, 6);
