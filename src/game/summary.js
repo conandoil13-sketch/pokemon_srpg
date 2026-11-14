@@ -4,7 +4,7 @@ import { MOVES } from '../data/moves.js';
 import { ABILITIES } from '../data/abilities.js';
 import { josa } from '../data/text.js';
 import { statsAt, expForLevel, MAX_LEVEL } from '../core/stats.js';
-import { abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST } from '../core/progress.js';
+import { typesOfMember, abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -27,6 +27,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
   // 특성 페이지 확인: 잠김 → 해금(바로 바뀜), 해금됨 → 공짜로 다른 특성
   function abilityAction() {
     const m = member(), name = SPECIES[m.species].name;
+    if (m.build) { say(['메타몽의 특성은', '박스 메뉴의 메타몽 빌드에서 바꾼다.']); return; }
     if (SPECIES[m.species].abilities.length < 2) { say([`${name}의 특성은 하나뿐이다.`]); return; }
     if (!m.abilityUnlocked) {
       const r = unlockAbility(game, m.species);
@@ -63,7 +64,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       drawPortrait(ctx, m.species, 'Normal', 8, 23);
       drawText(ctx, s.name, 54, 23);
       drawText(ctx, `Lv.${m.level}`, 54 + textWidth(s.name) + 8, 23);
-      s.types.forEach((ty, k) => ui.drawTypeBadge(ctx, ty, 54 + k * 34, 39));
+      typesOfMember(m).forEach((ty, k) => ui.drawTypeBadge(ctx, ty, 54 + k * 34, 39)); // 메타몽은 빌드 타입
       const sub = `${i + 1}/${list.length}  ▲▼ 다른 동료`;
       drawText(ctx, sub, W - 10 - textWidth(sub, 'small'), 52, '#909090', null, 'small');
       const y0 = 68, small = (text, x, y, c = '#383838') => drawText(ctx, text, x, y, c, null, 'small');
@@ -100,7 +101,8 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
         const cur = ABILITIES[abilityOf(m)], slots = s.abilities;
         drawText(ctx, `특성 ${cur?.name ?? '-'}`, 10, y0, cur?.inactive ? '#909090' : '#305830');
         fitLines(cur?.desc ?? '', W - 24).slice(0, 2).forEach((l, k) => small(l, 10, y0 + 14 + k * 11, '#505050'));
-        if (slots.length < 2) small('특성은 하나뿐이다.', 10, y0 + 46, '#808080');
+        if (m.build) small('메타몽 빌드에서 특성 캡슐로 바꾼다.', 10, y0 + 46, '#808080');
+        else if (slots.length < 2) small('특성은 하나뿐이다.', 10, y0 + 46, '#808080');
         else {
           const other = ABILITIES[slots[(m.abilitySlot ?? 0) === 0 ? 1 : 0]];
           drawText(ctx, `다른 특성 ${other?.name ?? '-'}`, 10, y0 + 42, m.abilityUnlocked ? '#305830' : '#808080');

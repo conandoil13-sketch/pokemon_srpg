@@ -469,3 +469,75 @@ test('box: clicking the drawn ▶ goes to the next box', async () => {
   box.handle({ type: 'click', px: 110, py: 6 });
   assert.equal(box.box, 0);
 });
+
+// ---- 메타몽 빌드 화면 ----
+const buildScene = async (setup) => {
+  const { createDittoBuild } = await import('../src/game/dittoBuild.js');
+  const game = newGame();
+  const d = game.party.find((m) => m.species === 'ditto');
+  setup?.(game, d);
+  const calls = { save: 0, closed: 0 };
+  const b = createDittoBuild({ game, onSave() { calls.save++; }, onClose() { calls.closed++; } });
+  const pass = () => { for (let i = 0; i < 5; i++) b.update(0.1); };
+  return { b, game, d, calls, pass };
+};
+
+test('ditto build: move capsule → slot → confirm applies, consumes and saves', async () => {
+  const { b, game, d, calls, pass } = await buildScene((g) => { g.items.capsules = [{ kind: 'move', value: 'ember', from: 'charmander' }]; });
+  assert.equal(b.mode, 'list');
+  b.handle({ type: 'confirm' });
+  assert.equal(b.mode, 'slot');
+  b.handle({ type: 'confirm' }); // 첫 칸 (몸통박치기)
+  assert.equal(b.mode, 'confirm');
+  b.handle({ type: 'confirm' });
+  assert.deepEqual(d.moves, ['ember']);
+  assert.equal(game.items.capsules.length, 0);
+  assert.equal(calls.save, 1);
+  pass(); b.handle({ type: 'confirm' });
+  assert.equal(b.mode, 'list');
+});
+
+test('ditto build: cancelling at slot or confirm keeps everything', async () => {
+  const { b, game, d, calls } = await buildScene((g) => { g.items.capsules = [{ kind: 'move', value: 'ember', from: 'charmander' }]; });
+  b.handle({ type: 'confirm' }); b.handle({ type: 'cancel' });
+  assert.equal(b.mode, 'list');
+  b.handle({ type: 'confirm' }); b.handle({ type: 'confirm' }); b.handle({ type: 'cancel' }); // 확인에서 아니오
+  assert.equal(b.mode, 'list');
+  assert.deepEqual(d.moves, ['tackle']);
+  assert.equal(game.items.capsules.length, 1);
+  assert.equal(calls.save, 0);
+  b.handle({ type: 'cancel' });
+  assert.equal(calls.closed, 1);
+});
+
+test('ditto build: powder over the cap is refused; Lv.9 type capsule has one slot only', async () => {
+  const { b, game, d, calls } = await buildScene((g, dd) => {
+    dd.level = 9; dd.build.bonus.atk = 30; // 합계 318, 상한 320
+    g.items.powders.atk = 2;
+    g.items.capsules = [{ kind: 'type', value: 'fire', from: 'charmander' }];
+  });
+  // 목록: [타입 캡슐, 공격파우더]
+  b.handle({ type: 'confirm' });
+  assert.equal(b.mode, 'confirm'); // 칸이 하나뿐이면 바로 확인
+  b.handle({ type: 'confirm' });
+  assert.deepEqual(d.build.types, ['fire']);
+  b.handle({ type: 'confirm' }); // (잠금 전) 대사 유지
+  for (let i = 0; i < 5; i++) b.update(0.1);
+  b.handle({ type: 'confirm' });
+  b.handle({ type: 'confirm' }); // 공격파우더 → 상한 거절
+  assert.equal(b.mode, 'msg');
+  assert.equal(game.items.powders.atk, 2);
+  assert.equal(calls.save, 1);
+});
+
+test('box: only ditto has the build menu item', async () => {
+  const { box } = await boxScene(0);
+  box.handle({ type: 'confirm' }); // 첫 칸 = 메타몽
+  assert.equal(box.cursorMember.species, 'ditto');
+  const labels = () => box.menuLabels;
+  assert.ok(labels().includes('메타몽 빌드'));
+  box.handle({ type: 'cancel' });
+  box.handle({ type: 'dir', dx: 1, dy: 0 });
+  box.handle({ type: 'confirm' });
+  assert.ok(!labels().includes('메타몽 빌드'));
+});
