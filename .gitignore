@@ -4,8 +4,7 @@
 node_modules/
 
 # 사용자 스프라이트 팩은 커밋하지 않는다
-assets/sprites/pmd/*
-!assets/sprites/pmd/README.md
+!assets/sprites/pmd/
 
 # PMD Sprite Collab 저장소 통째 (1.7GB) — 커밋 금지
 SpriteCollab-master/
