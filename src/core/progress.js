@@ -1,6 +1,7 @@
 // 파티 진행 (순수): 새 파티, 경험치 적용 → 레벨업·기술·진화 이벤트
 import { SPECIES } from '../data/species.js';
 import { hash } from '../render/pixels.js';
+import { DEFAULT_BUILD } from './dittoBuild.js';
 import { lineRoot } from './gacha.js';
 import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
@@ -16,11 +17,12 @@ export const defaultSlot = (species) => (SPECIES[species].abilities.length > 1 ?
 export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
   const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
-  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false };
+  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false, ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
 }
 
 // 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)
-export const abilityOf = (m) => { const a = SPECIES[m.species].abilities; return a[m.abilitySlot ?? 0] ?? a[0]; };
+export const abilityOf = (m) => { if (m.build) return m.build.ability; const a = SPECIES[m.species].abilities; return a[m.abilitySlot ?? 0] ?? a[0]; }; // 메타몽은 빌드
+export const typesOfMember = (m) => m.build?.types ?? SPECIES[m.species].types;
 
 // 특성 해금: 계열 뿌리 결정 3개를 한 번 쓰면 다른 특성이 열리고 바로 바뀐다. 그 뒤 전환은 공짜
 export const ABILITY_UNLOCK_COST = 3;

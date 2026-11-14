@@ -7,7 +7,7 @@ const game = () => ({ version: 2, party: [{ species: 'chimchar' }, { species: 'p
 
 test('startRun / floorSeed', () => {
   const r = startRun('sinnoh-field', 42);
-  assert.deepEqual(r, { dungeonId: 'sinnoh-field', floor: 1, seed: 42, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 0 } });
+  assert.deepEqual(r, { dungeonId: 'sinnoh-field', floor: 1, seed: 42, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 0, capsules: [], powders: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 } } });
   assert.equal(floorSeed(r), hashSeed(42, 1));
 });
 
