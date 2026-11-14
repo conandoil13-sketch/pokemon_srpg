@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { hash } from '../render/pixels.js';
 import { DEFAULT_BUILD, effectiveBase } from './dittoBuild.js';
-import { rollIvs, hashIvs, maxIvs, rollGender, hashGender } from './individual.js';
+import { rollIvs, hashIvs, maxIvs, rollGender, hashGender, genderFits } from './individual.js';
 
 // 개체값·성별: rng 가 있으면 무작위, 없으면 종 이름으로 고정. 메타몽은 개체값 31·성별 없음
 function individualOf(species, rng) {
@@ -101,6 +101,10 @@ export function resolveChoice(member, move, forgetIndex) {
 // 진화: 종족 교체 후 새 종족이 '현재 레벨'에 배우는 기술 처리
 export function evolveMember(member, to) {
   member.species = to;
+  // 새 종의 성별 비율과 안 맞으면(예: 껍데기몬 — 성별 없음) 고친다
+  if (!genderFits(to, member.gender ?? null)) member.gender = hashGender(to);
+  member.genders = (member.genders ?? []).filter((g) => genderFits(to, g));
+  if (member.gender && !member.genders.includes(member.gender)) member.genders.push(member.gender);
   const s = SPECIES[to];
   const moves = s.learnset.filter(([lv, mv]) => lv === member.level && MOVES[mv]?.learnable).map(([, mv]) => mv);
   return learnEvents(member, moves);

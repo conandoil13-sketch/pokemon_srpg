@@ -1,7 +1,7 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
 import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
-import { STATUS_KO, canInflict } from '../core/status.js';
+import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage } from '../render/mapAttack.js';
 import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
@@ -50,8 +50,15 @@ const pickOne = (mv) => !mv.kind || mv.kind === 'enemy' || mv.kind === 'ally'; /
 const helpful = (mv) => mv.kind === 'self' || mv.kind === 'ally' || mv.kind === 'allies';
 export const effectSummary = (mv) => [...(mv.statChanges ?? []).map((c) => `${STAT_KO[API_STAT[c.stat]]} ${c.change > 0 ? '+' : ''}${c.change}`), ...(mv.ailment ? [STATUS_KO[mv.ailment]] : [])].join(' ');
 // 상태이상 변화기 예상 창 경고: 면역 / 이미 상태이상 (없으면 null)
-export function ailmentNote(target, mv) {
+export function ailmentNote(target, mv, attacker = null) {
+  const opposite = attacker && target.gender && attacker.gender && target.gender !== attacker.gender;
+  if (mv.id === 'captivate') return opposite ? null : '효과 없음'; // 유혹: 반대 성별만
   if (!mv.ailment) return null;
+  if (mv.ailment === 'infatuation') { // 메로메로: 반대 성별·둔감·이미 헤롱헤롱
+    if (!attacker) return null;
+    const r = canInfatuate(target, attacker);
+    return r.ok ? null : r.reason === 'already' ? '이미 헤롱헤롱' : '효과 없음';
+  }
   const r = canInflict(target, mv.ailment, mv);
   return r.ok ? null : r.reason === 'immune' ? '효과 없음' : '이미 상태이상';
 }
@@ -584,7 +591,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const wanted = new Map(), hidden = hiddenIds();
     for (const u of st.units) {
       if (hidden.has(u.id)) continue; // 안개 속 유닛에는 상태 표시를 그리지 않는다
-      const kinds = [u.status, u.confusion > 0 ? 'confusion' : null, u.infatuation > 0 ? 'infatuation' : null].filter(Boolean);
+      const kinds = [u.status, u.confusion > 0 ? 'confusion' : u.infatuation > 0 ? 'infatuation' : null].filter(Boolean); // 헤롱헤롱은 혼란과 같은 연출 → 하나만
       for (const k of kinds) {
         const loop = fxForAilment(k).loop;
         if (!loop) continue;
@@ -715,7 +722,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, effectSummary(mv), 92, y + 20, '#5848a0');
     const foes = (one ? [one] : list).filter((u) => u.side !== a.side);
     if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x], effectiveWeather(st))}%`, 10, y + 35);
-    const note = one ? ailmentNote(one, mv) : null;
+    const note = one ? ailmentNote(one, mv, a) : null;
     if (note) drawText(ctx, note, W - 12 - textWidth(note), y + 35, '#808080');
     else if (!one) drawText(ctx, list.length ? `대상 ${list.length}마리` : '범위 안에 대상이 없다', 10, y + 35, list.length ? '#383838' : '#a0a0a0');
   }

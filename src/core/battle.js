@@ -51,8 +51,8 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
   const units = [];
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
     const { x, y } = mapDef.allySlots[i];
-    const build = m.species === 'ditto' && m.build ? { types: m.build.types, base: effectiveBase(m.build) } : {}; // 메타몽 빌드
-    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ivs: m.ivs ?? null, gender: m.gender ?? null, ...build });
+    const build = m.species === 'ditto' && m.build ? { types: m.build.types, base: effectiveBase(m.build), ...(m.build.weight ? { weight: m.build.weight } : {}) } : {}; // 메타몽 빌드
+    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ivs: m.ivs ?? (m.species === 'ditto' ? null : hashIvs(m.species)), gender: m.gender ?? null, ...build });
     if (hpRatio[m.species]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[m.species]));
     units.push(u);
   });
@@ -310,7 +310,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     }
     // 접촉 반격 (거리 1 물리기): 정전기·독가시·불꽃몸·포자 30%, 까칠한피부 1/8, 유폭(기절 시) 1/4
     if (landed && r.damage > 0 && contact && state.units.includes(a)) {
-      if (has(d, 'cute-charm') && rng() * 100 < 30) { // 헤롱헤롱바디
+      if (!fainted && has(d, 'cute-charm') && rng() * 100 < 30) { // 헤롱헤롱바디 (쓰러진 상대는 못 건다)
         const res = infatuate(a, d);
         if (res.ok) { statusChanges.push({ unitId: a.id, ailment: 'infatuation', ...res }); abilityEvents.push({ unitId: d.id, ability: 'cute-charm' }); }
       }

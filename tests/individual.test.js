@@ -168,3 +168,28 @@ test('oblivious is immune; cute charm infatuates contact attackers 30%; rivalry 
   applyMove(cap2.s, cap2.a.id, 'captivate', cap2.f.id, () => 0.1);
   assert.equal(cap2.f.stages.spa, -2);
 });
+
+// ---- 리뷰 수정 ----
+import { evolveMember } from '../src/core/progress.js';
+import { ailmentNote } from '../src/game/states.js';
+
+test('review: cute charm from a fainted holder does nothing; evolving into a genderless species drops gender', () => {
+  const { s, a, f } = arena({ unit: { gender: 'male' } }, { gender: 'female', ability: 'cute-charm', hp: 1 });
+  applyMove(s, a.id, 'tackle', f.id, () => 0.1);
+  assert.ok(!s.units.includes(f));
+  assert.equal(a.infatuation, 0);
+  const n = newMember('nincada', 20, createRng(3));
+  n.gender = 'male'; n.genders = ['male', 'female'];
+  evolveMember(n, 'shedinja');
+  assert.equal(n.gender, null);
+  assert.deepEqual(n.genders, []);
+});
+
+test('review: attract/captivate forecast notes follow gender', () => {
+  const atk = { gender: 'male' }, foeF = { species: 'eevee', gender: 'female', status: 'poison', confusion: 0, infatuation: 0 }, foeM = { ...foeF, gender: 'male' };
+  assert.equal(ailmentNote(foeF, MOVES.attract, atk), null); // 독이어도 걸린다
+  assert.equal(ailmentNote(foeM, MOVES.attract, atk), '효과 없음');
+  assert.equal(ailmentNote({ ...foeF, infatuation: 2 }, MOVES.attract, atk), '이미 헤롱헤롱');
+  assert.equal(ailmentNote(foeM, MOVES.captivate, atk), '효과 없음');
+  assert.equal(ailmentNote(foeF, MOVES.captivate, atk), null);
+});

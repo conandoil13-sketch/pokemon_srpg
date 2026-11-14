@@ -63,7 +63,8 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       if (ev.type === 'dir' && ev.dy && list.length) i = (i + ev.dy + list.length) % list.length;
       if (ev.type === 'click' && ev.py !== undefined && ev.py < 16) { pg = Math.max(0, Math.min(PAGES.length - 1, Math.floor((ev.px - 2) / TAB_W))); return; } // 탭
       if (pick && pg === 3) abilityAction();
-      if (pick && pg === 0) genderAction();
+      if (ev.type === 'confirm' && pg === 0) genderAction();
+      if (ev.type === 'click' && pg === 0 && !genderFixed(member().species) && ev.py >= 146 && ev.py < 160) genderAction(); // 성별 줄을 눌렀을 때만
     },
     update(dt) { t += dt; },
     draw(ctx, time) {
@@ -113,7 +114,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
           drawText(ctx, mv.name, 10, y);
           ui.drawTypeBadge(ctx, mv.type, 120, y + 1);
           small(CATEGORY_KO[mv.category] ?? '', 158, y + 2);
-          small([`위력 ${mv.power ?? '-'}`, `명중 ${mv.accuracy ?? '-'}`, ui.shapeLabel(mv)].filter(Boolean).join(' · '), 10, y + 13, '#606060');
+          small([mv.weightPower ? '위력 몸무게' : `위력 ${mv.power ?? '-'}`, `명중 ${mv.accuracy ?? '-'}`, ui.shapeLabel(mv)].filter(Boolean).join(' · '), 10, y + 13, '#606060');
         });
       } else {
         const cur = ABILITIES[abilityOf(m)], slots = s.abilities;

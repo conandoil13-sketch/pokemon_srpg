@@ -214,7 +214,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
         results.forEach((r, i) => {
           const x = i < 5 ? 10 : W / 2 + 4, y = 28 + (i % 5) * 30, name = SPECIES[r.species].name;
           drawText(ctx, name, x, y, RARITY[r.rarity].color === '#f8f8f8' ? '#383838' : RARITY[r.rarity].color, null);
-          drawText(ctx, r.duplicate ? ['결정 +1', r.ivUp?.length ? '개체값↑' : '', r.newGender ? `${r.newGender === 'male' ? '♂' : '♀'} 해금` : ''].filter(Boolean).join(' ') : `새 동료 Lv.${r.member.level}`, x, y + 13, r.duplicate ? '#808080' : '#2f8a3a', null, 'small');
+          drawText(ctx, r.duplicate ? ['결정+1', r.ivUp?.length ? 'IV↑' : '', r.newGender ? (r.newGender === 'male' ? '♂' : '♀') : ''].filter(Boolean).join(' ') : `새 동료 Lv.${r.member.level}`, x, y + 13, r.duplicate ? '#808080' : '#2f8a3a', null, 'small');
         });
       } else if (mode === 'msg') {
         ui.drawMessage(ctx, msg, null, blink);
