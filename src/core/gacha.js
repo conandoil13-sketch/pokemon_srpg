@@ -1,6 +1,7 @@
 // 뽑기 (순수, rng 주입): 1단계 포켓몬, 계열 최종형 종족값으로 희귀도, 같은 계열이 있으면 결정
 import { SPECIES } from '../data/species.js';
 import { newMember } from './progress.js';
+import { levelCapFor } from './difficulty.js';
 import { mergeIvs, rollIvs, rollGender, genderFits } from './individual.js';
 import { deployed } from './roster.js';
 
@@ -43,9 +44,10 @@ export function lineRoot(key) {
 export function joinLevel(game) {
   const out = game.sortie ? deployed(game).filter((m) => m.species !== 'ditto') : [];
   const pool = out.length ? out : game.party.filter((m) => m.species !== 'ditto');
-  if (!pool.length) return 5;
+  const cap = levelCapFor(game); // 레벨 상한
+  if (!pool.length) return Math.min(5, cap);
   const avg = pool.reduce((s, m) => s + m.level, 0) / pool.length;
-  return Math.max(5, Math.round(avg) - 2);
+  return Math.min(cap, Math.max(5, Math.round(avg) - 2));
 }
 
 // 희귀도 → 볼 모양 (뽑기 연출)

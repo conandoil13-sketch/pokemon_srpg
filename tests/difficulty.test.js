@@ -91,3 +91,38 @@ test('generated floors place the rolled enemies (minus missing spots) plus the b
     assert.equal(m.enemies.filter((e) => e.boss).length, f === d.floors ? 1 : 0);
   }
 });
+
+// ---- 레벨 상한 ----
+import { applyExp, newMember } from '../src/core/progress.js';
+import { expForLevel } from '../src/core/stats.js';
+import { joinLevel } from '../src/core/gacha.js';
+import { newGame } from '../src/core/save.js';
+
+test('level cap: overflow exp is discarded at the cap; over-cap members keep their level', () => {
+  const m = newMember('pidgey', 14);
+  const ev = applyExp([m], { pidgey: 999999 }, Math.random, 15);
+  assert.equal(m.level, 15);
+  assert.equal(m.exp, expForLevel(SPECIES.pidgey.growth, 15)); // 상한 레벨 시작점
+  assert.ok(ev.some((e) => e.capped));
+  const old = newMember('rattata', 18);
+  const before = old.exp;
+  applyExp([old], { rattata: 5000 }, Math.random, 15);
+  assert.equal(old.level, 18);
+  assert.equal(old.exp, before);
+});
+
+test('level cap: evolving exactly at the cap still happens', () => {
+  const m = newMember('caterpie', 6); // 캐터피 → 단데기 Lv.7
+  const evoLevel = SPECIES.caterpie.evolutions[0].rule.level;
+  const ev = applyExp([m], { caterpie: 999999 }, Math.random, evoLevel);
+  assert.equal(m.level, evoLevel);
+  assert.ok(ev.some((e) => e.type === 'evolve'));
+});
+
+test('gacha joins never exceed the cap', () => {
+  const g = newGame();
+  for (const m of g.party) m.level = 40;
+  assert.equal(joinLevel(g), 15);
+  g.cleared = ['sinnoh-field'];
+  assert.equal(joinLevel(g), 22);
+});

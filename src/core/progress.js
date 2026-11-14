@@ -71,13 +71,16 @@ function learnEvents(member, moves) {
 }
 
 // expBySpecies: 전투 로그 { [species]: exp }. 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
-export function applyExp(party, expBySpecies, rng = Math.random) {
+// cap: 레벨 상한 (던전 돌파로 열림). 상한을 넘는 경험치는 버린다, 이미 넘은 멤버는 그대로
+export function applyExp(party, expBySpecies, rng = Math.random, cap = MAX_LEVEL) {
   const events = [];
   for (const m of party) {
     const gain = expBySpecies[m.species];
     if (!gain) continue;
     const s = SPECIES[m.species];
-    m.exp = Math.min(m.exp + gain, expForLevel(s.growth, MAX_LEVEL));
+    const ceiling = Math.max(m.exp, expForLevel(s.growth, Math.min(cap, MAX_LEVEL)));
+    if (m.exp + gain > ceiling) events.push({ type: 'capped', species: m.species, capped: true, cap });
+    m.exp = Math.min(m.exp + gain, ceiling);
     const to = levelForExp(s.growth, m.exp);
     if (to <= m.level) continue;
     const from = m.level;
