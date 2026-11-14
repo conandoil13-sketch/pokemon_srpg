@@ -11,7 +11,7 @@ import { STAT_KEYS } from '../core/stages.js';
 import { STATUS_KO } from '../core/status.js';
 import { ABILITIES } from '../data/abilities.js';
 
-export const STATUS_COLOR = { paralysis: '#e0b818', burn: '#e07030', poison: '#a050c0', toxic: '#702890', sleep: '#909090', freeze: '#60b8e8', confusion: '#d060a0' };
+export const STATUS_COLOR = { paralysis: '#e0b818', burn: '#e07030', poison: '#a050c0', toxic: '#702890', sleep: '#909090', freeze: '#60b8e8', confusion: '#d060a0', infatuation: '#f070b0' };
 
 // 상태 배지 (작은 글씨, 색 바탕)
 export function drawStatusBadge(ctx, ailment, x, y) {

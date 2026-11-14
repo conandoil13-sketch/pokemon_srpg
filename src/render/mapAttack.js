@@ -31,7 +31,7 @@ export function stageMessages(changes, byId) {
 // 상태이상 대사. isStatusMove: 변화기면 실패도 알리고, 부가효과면 실패는 조용히
 const INFLICT = {
   paralysis: '마비되어 기술이 나오기 어려워졌다!', burn: '화상을 입었다!', poison: '독에 걸렸다!', toxic: '맹독에 걸렸다!',
-  sleep: '잠들어 버렸다!', freeze: '얼어붙었다!', confusion: '혼란에 빠졌다!',
+  sleep: '잠들어 버렸다!', freeze: '얼어붙었다!', confusion: '혼란에 빠졌다!', infatuation: '헤롱헤롱해졌다!',
 };
 export function statusMessages(changes, byId, isStatusMove) {
   const get = typeof byId === 'function' ? byId : (id) => byId[id];
@@ -131,6 +131,8 @@ function createBlockedAnim({ attacker, result, fx }) {
   const hpBefore = attacker.hp + (result.selfHit?.damage ?? 0);
   const steps = result.blocked === 'paralysis'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 몸이 저려서 움직일 수 없다!`), emo: 'Pain' }]
+    : result.blocked === 'infatuation'
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 헤롱헤롱해서 기술을 쓸 수 없었다!`), emo: 'Normal' }]
     : result.blocked === 'damp'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage('습기 때문에 폭발할 수 없다!'), emo: 'Normal' }]
     : [

@@ -1,4 +1,5 @@
 // 전투 상태 (순수 로직, 상태 객체를 직접 갱신)
+import { hashIvs, hashGender } from './individual.js';
 import { effectiveBase } from './dittoBuild.js';
 import { MAP } from '../data/map.js';
 import { hash } from '../render/pixels.js';
@@ -10,7 +11,7 @@ import { calcDamage, hitChance, confusionDamage } from './damage.js';
 import { unitsHit } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
-import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd } from './status.js';
+import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { startingMoves } from './learn.js';
@@ -19,11 +20,15 @@ import { newParty, abilityOf } from './progress.js';
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base }) {
-  const stats = statsAt(base ?? SPECIES[species].base, level); // base: 메타몽 빌드 종족값
+export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base, ivs, gender, weight }) {
+  // 개체값·성별: 아군은 멤버 값, 적은 위치·레벨로 정해지는 무작위 (같은 층이면 같음). 메타몽은 31·성별 없음
+  ivs ??= species === 'ditto' ? null : hashIvs(species, x, y, level);
+  if (gender === undefined) gender = hashGender(species, x, y, level);
+  const stats = statsAt(base ?? SPECIES[species].base, level, ivs); // base: 메타몽 빌드 종족값
   return {
     id: id ?? `${side}-${species}`, species, side, x, y, level, stats,
     types: [...(types ?? SPECIES[species].types)], // 타입은 유닛 기준 (메타몽 빌드)
+    ivs, gender, weight: weight ?? SPECIES[species].weight,
     hp: stats.hp, maxHp: stats.hp,
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES, species),
     moved: false, acted: false,
@@ -47,7 +52,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
     const { x, y } = mapDef.allySlots[i];
     const build = m.species === 'ditto' && m.build ? { types: m.build.types, base: effectiveBase(m.build) } : {}; // 메타몽 빌드
-    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ...build });
+    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ivs: m.ivs ?? null, gender: m.gender ?? null, ...build });
     if (hpRatio[m.species]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[m.species]));
     units.push(u);
   });
@@ -140,6 +145,7 @@ function awardShare(state, defender) {
 // 같은 편끼리 쓰러뜨리면 경험치·코인 없음 (awardExp 는 아군→적만 지급)
 function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   state.units = state.units.filter((u) => u !== d);
+  for (const u of state.units) if (u.infatuatedBy === d.id) { u.infatuation = 0; u.infatuatedBy = null; } // 건 상대가 쓰러지면 헤롱헤롱이 풀린다
   let expGained = {};
   if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
   else if (reward) awardShare(state, d);
@@ -221,6 +227,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   };
   const ail = (t) => {
     if (!move.ailment) return;
+    if (move.ailment === 'infatuation') { statusChanges.push({ unitId: t.id, ailment: 'infatuation', ...infatuate(t, a, { breaker: moldBreaker }) }); return; } // 메로메로
     const r = inflict(t, move.ailment, rng, move, W, { breaker: t !== a && moldBreaker });
     statusChanges.push({ unitId: t.id, ailment: move.ailment, ...r });
     // 싱크로: 독·마비·화상을 건 상대에게도
@@ -267,6 +274,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
       if (ab) { absorb(t, ab); continue; }
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
+      if (move.id === 'captivate' && !(t.gender && a.gender && t.gender !== a.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
@@ -302,6 +310,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
     }
     // 접촉 반격 (거리 1 물리기): 정전기·독가시·불꽃몸·포자 30%, 까칠한피부 1/8, 유폭(기절 시) 1/4
     if (landed && r.damage > 0 && contact && state.units.includes(a)) {
+      if (has(d, 'cute-charm') && rng() * 100 < 30) { // 헤롱헤롱바디
+        const res = infatuate(a, d);
+        if (res.ok) { statusChanges.push({ unitId: a.id, ailment: 'infatuation', ...res }); abilityEvents.push({ unitId: d.id, ability: 'cute-charm' }); }
+      }
       const spell = CONTACT_AILMENT[d.ability];
       if (spell && rng() * 100 < 30) {
         const ail2 = spell[spell.length > 1 ? Math.floor(rng() * spell.length) : 0];
@@ -373,6 +385,7 @@ export function endPhase(state, rng = Math.random) {
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
     if (r.confusionEnded) events.push({ unitId: u.id, kind: 'confusionEnd' });
+    if (r.infatuationEnded) events.push({ unitId: u.id, kind: 'infatuationEnd' });
     // 모래바람·싸라기눈 피해 (상태 피해 다음, 보상도 같은 규칙)
     const w = weatherChipImmune(u, W) ? null : phaseEndWeather(u, W);
     if (w) {

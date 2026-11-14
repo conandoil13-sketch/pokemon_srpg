@@ -5,7 +5,7 @@ import { typeMultiplier } from '../data/types.js';
 import { weatherBlocksAilment } from './weather.js';
 import { blocksAilment, has, moveBonus, ignoresParalysisSlow } from './abilities.js';
 
-export const STATUS_KO = { paralysis: '마비', burn: '화상', poison: '독', toxic: '맹독', sleep: '잠듦', freeze: '얼음', confusion: '혼란' };
+export const STATUS_KO = { paralysis: '마비', burn: '화상', poison: '독', toxic: '맹독', sleep: '잠듦', freeze: '얼음', confusion: '혼란', infatuation: '헤롱헤롱' };
 const PRIMARY = ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze'];
 const IMMUNE = { burn: ['fire'], freeze: ['ice'], poison: ['poison', 'steel'], toxic: ['poison', 'steel'] };
 const FREEZE_MAX = 3;      // 얼음으로 쉬는 최대 턴 (사용자 결정)
@@ -14,7 +14,21 @@ const PARALYSIS_FAIL = 0.25;
 const CONFUSION_HIT = 0.5;
 const TOXIC_MAX = 15;
 
-export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0 });
+export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0, infatuation: 0, infatuatedBy: null });
+
+// 헤롱헤롱: 서로 성별이 있고 반대일 때만, 둔감 면역(틀깨기면 무시), 이미 걸렸으면 실패
+export const INFATUATION_TURNS = 3, INFATUATION_FAIL = 0.5;
+export function canInfatuate(target, source, { breaker = false } = {}) {
+  if (!target.gender || !source.gender || target.gender === source.gender) return { ok: false, reason: 'immune' };
+  if (!breaker && has(target, 'oblivious')) return { ok: false, reason: 'ability' };
+  if (target.infatuation > 0) return { ok: false, reason: 'already' };
+  return { ok: true };
+}
+export function infatuate(target, source, opts) {
+  const r = canInfatuate(target, source, opts);
+  if (r.ok) { target.infatuation = INFATUATION_TURNS; target.infatuatedBy = source.id; }
+  return r;
+}
 
 const types = (unit) => unit.types ?? SPECIES[unit.species].types; // 메타몽 빌드 타입
 
@@ -70,14 +84,16 @@ export function phaseEnd(unit) {
     damage = Math.max(1, Math.floor(unit.maxHp * unit.statusTurns / 16)); kind = 'toxic';
     unit.statusTurns = Math.min(TOXIC_MAX, unit.statusTurns + 1);
   }
-  let confusionEnded = false;
+  let confusionEnded = false, infatuationEnded = false;
   if (unit.confusion > 0) { unit.confusion--; confusionEnded = unit.confusion === 0; }
-  return { damage, ...(kind ? { kind } : {}), confusionEnded };
+  if (unit.infatuation > 0) { unit.infatuation--; infatuationEnded = unit.infatuation === 0; if (infatuationEnded) unit.infatuatedBy = null; }
+  return { damage, ...(kind ? { kind } : {}), confusionEnded, infatuationEnded };
 }
 
 // 기술을 쓰기 직전: 마비 25% 실패, 혼란 50% 자해
 export function checkAction(unit, rng) {
   if (unit.status === 'paralysis' && rng() < PARALYSIS_FAIL) return 'paralysis';
   if (unit.confusion > 0 && rng() < CONFUSION_HIT) return 'confusion';
+  if (unit.infatuation > 0 && rng() < INFATUATION_FAIL) return 'infatuation'; // 헤롱헤롱: 기술이 나가지 않음
   return null;
 }

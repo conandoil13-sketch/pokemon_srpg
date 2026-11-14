@@ -43,12 +43,12 @@ test('paralysis: half movement (min 1), half speed', () => {
 
 test('poison 1/8, toxic n/16 growing, burn 1/8, min 1', () => {
   const p = u('pikachu'); inflict(p, 'poison', seq([]));
-  assert.deepEqual(phaseEnd(p), { damage: 10, kind: 'poison', confusionEnded: false });
+  assert.deepEqual(phaseEnd(p), { damage: 10, kind: 'poison', confusionEnded: false, infatuationEnded: false });
   const t = u('pikachu'); inflict(t, 'toxic', seq([]));
   assert.equal(phaseEnd(t).damage, 5);
   assert.equal(phaseEnd(t).damage, 10);
   const b = u('pikachu', { maxHp: 4, hp: 4 }); inflict(b, 'burn', seq([]));
-  assert.deepEqual(phaseEnd(b), { damage: 1, kind: 'burn', confusionEnded: false });
+  assert.deepEqual(phaseEnd(b), { damage: 1, kind: 'burn', confusionEnded: false, infatuationEnded: false });
 });
 
 test('burn halves physical damage only', () => {
