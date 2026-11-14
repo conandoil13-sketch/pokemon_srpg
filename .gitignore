@@ -3,7 +3,7 @@
 .DS_Store
 node_modules/
 
-# 사용자 스프라이트 팩은 커밋하지 않는다
+# 테스트 배포(GitHub Pages)용 1~4세대 스프라이트는 커밋한다 (codex-reviews/deployment.md)
 !assets/sprites/pmd/
 
 # PMD Sprite Collab 저장소 통째 (1.7GB) — 커밋 금지

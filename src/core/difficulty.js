@@ -48,7 +48,8 @@ export function rollEnemies(dungeon, floor, seed) {
   const pool = encounterPool(dungeon, floor, { half: shape.half });
   const all = encounterPool(dungeon, floor);
   const max = Math.min(shape.max, early ? EARLY_MAX : Infinity);
-  const cheapest = (list, level) => [...list].sort((a, b) => threat(level, a) - threat(level, b) || a.localeCompare(b))[0];
+  // 약한 쪽으로 맞출 때: 가장 약한 몇 종 중 무작위 (한 종만 계속 나오지 않게)
+  const cheapest = (list, level) => { const w = [...list].sort((a, b) => threat(level, a) - threat(level, b) || a.localeCompare(b)).slice(0, 4); return w[Math.floor(rng() * w.length)]; };
   const out = [];
   let sum = 0;
   while (out.length < max) {
