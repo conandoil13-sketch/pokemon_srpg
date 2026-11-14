@@ -29,13 +29,22 @@ const SHAPE = {
 };
 export const BUDGET_SLACK = 1.15, MIN_ENEMIES = 2, EARLY_MAX = 4;
 
+// 깊을수록 예산이 무작위로 더 커질 수 있다 (사용자 결정): 1~2층 0, 그 뒤 층마다 +5%p, 뒤 던전일수록 +5%p, 최대 +25%
+export const BONUS_STEP = 0.05, BONUS_MAX = 0.25;
+export function budgetBonusMax(dungeon, floor) {
+  if (floor <= 2) return 0;
+  const order = Math.max(0, DUNGEONS.findIndex((d) => d.id === dungeon.id));
+  return Math.min(BONUS_MAX, BONUS_STEP * (floor - 2) + BONUS_STEP * order);
+}
+
 export function rollEnemies(dungeon, floor, seed) {
   const rng = createRng((seed ^ Math.imul(floor + 7919, 0x85ebca6b) ^ 0x5bd1e995) >>> 0);
   const early = floor <= 2;
   const table = early ? COMPOSITION.early : COMPOSITION.later;
   let r = rng(), kind = table[table.length - 1].id;
   for (const t of table) { if (r < t.w) { kind = t.id; break; } r -= t.w; }
-  const shape = SHAPE[kind], base = dungeon.baseLevel[floor - 1], budget = dungeon.budget[floor - 1];
+  const shape = SHAPE[kind], base = dungeon.baseLevel[floor - 1];
+  const budget = dungeon.budget[floor - 1] * (1 + rng() * budgetBonusMax(dungeon, floor)); // 깊은 층은 가끔 더 빡빡
   const pool = encounterPool(dungeon, floor, { half: shape.half });
   const all = encounterPool(dungeon, floor);
   const max = Math.min(shape.max, early ? EARLY_MAX : Infinity);

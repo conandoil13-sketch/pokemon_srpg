@@ -43,7 +43,7 @@ test('level cap: first uncleared dungeon in the chain, last one stays after ever
 });
 
 // ---- 적 굴림 ----
-import { rollEnemies } from '../src/core/difficulty.js';
+import { rollEnemies, budgetBonusMax } from '../src/core/difficulty.js';
 import { generateFloor } from '../src/core/floorgen.js';
 import { createHash } from 'node:crypto';
 
@@ -57,7 +57,7 @@ test('rollEnemies: deterministic, within budget, at least 2, early-only small fl
       for (let seed = 1; seed <= 300; seed++) {
         const list = rollEnemies(d, f, seed), tag = `${d.id} ${f} ${seed}`;
         assert.ok(list.length >= 2, tag);
-        assert.ok(total(list) <= d.budget[f - 1] * 1.15 + 1e-9, `${tag}: ${total(list)}`);
+        assert.ok(total(list) <= d.budget[f - 1] * (1 + budgetBonusMax(d, f)) + 1e-9, `${tag}: ${total(list)}`);
         if (f <= 2) {
           assert.ok(list.length <= 4, tag);
           for (const e of list) assert.ok(d.early.includes(e.species), `${tag}: ${e.species}`);
@@ -125,4 +125,18 @@ test('gacha joins never exceed the cap', () => {
   assert.equal(joinLevel(g), 15);
   g.cleared = ['sinnoh-field'];
   assert.equal(joinLevel(g), 22);
+});
+
+test('budget bonus: none on floors 1-2, grows with depth and later dungeons, capped at 25%', () => {
+  const [field, cave] = DUNGEONS;
+  assert.equal(budgetBonusMax(field, 1), 0);
+  assert.equal(budgetBonusMax(field, 2), 0);
+  assert.ok(Math.abs(budgetBonusMax(field, 3) - 0.05) < 1e-9);
+  assert.ok(Math.abs(budgetBonusMax(field, 5) - 0.15) < 1e-9);
+  assert.ok(budgetBonusMax(cave, 3) > budgetBonusMax(field, 3));
+  assert.equal(budgetBonusMax(cave, 7), 0.25);
+  // 실제로 예산보다 큰 층이 가끔 나온다
+  let over = 0;
+  for (let seed = 1; seed <= 500; seed++) if (total(rollEnemies(cave, 6, seed)) > cave.budget[5]) over++;
+  assert.ok(over > 0);
 });
