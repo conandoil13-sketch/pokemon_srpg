@@ -2,7 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fxForMove, fxForStage, fxForAilment, TYPE_PALETTE, RANK_UP_PAL, RANK_DOWN_PAL } from '../src/data/moveFx.js';
 import { MOVES } from '../src/data/moves.js';
-import { FX } from '../src/vendor/pixelfx/fx-index.js';
+import { FX as VFX } from '../src/vendor/pixelfx/fx-index.js';
+import { CUSTOM_FX } from '../src/fx-custom/index.js';
+const FX = { ...VFX, ...CUSTOM_FX };
 import { PAL } from '../src/vendor/pixelfx/core/index.js';
 
 const f = (id, distance = 1) => fxForMove(MOVES[id], { distance });
@@ -11,7 +13,7 @@ test('templates by shape and category', () => {
   assert.deepEqual([f('tackle').hit.id, f('tackle').hit.opts.palette], ['pickups/collect-burst', PAL.bone]); // 위력 35 → 약
   const sb = f('shadow-ball', 2);
   assert.deepEqual([sb.travel.id, sb.hit.id, sb.hit.opts.palette], ['projectiles/plasma-shot', 'impacts/blunt-hit', PAL.shadow]);
-  assert.equal(f('shadow-ball', 1).travel, undefined);
+  assert.equal(f('shadow-ball', 1).travel.id, 'projectiles/plasma-shot'); // 특수는 붙어서도 탄이 날아간다
   assert.deepEqual([f('hydro-pump').travel.id, f('hydro-pump').travel.opts.palette], ['arcane/arcane-beam', PAL.water]);
   assert.deepEqual([f('heat-wave').cast.id, f('heat-wave').cast.opts.palette], ['fire/fire-breath', PAL.fire]);
   assert.equal(f('earthquake').cast.id, 'impacts/ground-slam');
@@ -49,10 +51,25 @@ test('json overrides win', async () => {
 test('power tiers: weak is small and cute, strong is layered and bigger', () => {
   assert.equal(f('tackle').hit.id, 'pickups/collect-burst');            // 40 → 약
   assert.equal(f('ember').hit.id, 'pickups/collect-burst');
-  assert.equal(f('crunch').hit.id, 'impacts/hit-spark');                // 80 → 중
-  assert.equal(f('crunch').hit2, undefined);
-  const tb = f('thunderbolt');                                           // 95 → 강
+  assert.equal(f('headbutt').hit.id, 'impacts/hit-spark');              // 70 → 중 (계열 없는 물리)
+  assert.equal(f('headbutt').hit2, undefined);
+  const tb = f('thunderbolt');                                           // 95 → 강 (직선 기술)
   assert.deepEqual([tb.hit.id, tb.hit2.id, tb.hit.opts.light], ['impacts/hit-spark', 'impacts/blunt-hit', 1.4]);
   assert.ok(f('earthquake').cast.opts.reach > f('discharge').cast.opts.reach); // 100 vs 80: 충격파 더 넓게
   assert.ok(tb.travel.life > f('bubble-beam').travel.life);              // 강한 빔은 더 오래
+});
+
+test('melee families and special shots look different', () => {
+  assert.equal(f('bite').hit.id, 'pokemon/bite');
+  assert.equal(f('fire-fang').hit.opts.palette, f('ember', 2).hit.opts.palette); // 불꽃엄니는 불꽃 색 이빨
+  assert.equal(f('double-kick').hit.id, 'pokemon/kick');
+  assert.equal(f('fire-punch').cast.id, 'melee/uppercut');
+  assert.equal(f('scratch').cast.id, 'melee/claw-swipe');
+  assert.equal(f('peck').cast.id, 'melee/thrust');
+  assert.equal(f('hyper-voice').cast.id, 'pokemon/sound-wave');
+  assert.equal(f('ember', 1).travel.id, 'fire/fireball');
+  assert.equal(f('water-gun', 1).travel.id, 'water/water-orb');
+  assert.equal(fxForMove({ ...MOVES.ember, type: 'ice' }, { distance: 1 }).travel.id, 'ice/ice-lance');
+  const ids = new Set(['scratch', 'bite', 'fire-punch', 'ember', 'hyper-voice', 'double-kick'].map((m) => JSON.stringify(f(m, 1))));
+  assert.equal(ids.size, 6);
 });

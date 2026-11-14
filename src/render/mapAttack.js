@@ -204,7 +204,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
-  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'pickups/collect-burst', opts: { palette: PAL.leaf }, timeScale: 1, layer: 'front' }, attacker); spawnChangeFx(fx, s, result, get); }; // 회복: 초록 반짝임
+  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'holy/heal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); spawnChangeFx(fx, s, result, get); }; // 회복: 초록 반짝임
   return {
     defender: target,
     get done() { return i >= steps.length; },
