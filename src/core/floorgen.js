@@ -31,6 +31,9 @@ function distances(tiles, start) {
 
 export const reachableFrom = (tiles, start) => new Set(distances(tiles, start).keys());
 
+// 예전 층별 적 수 (공용 난수 소비를 그대로 지켜 지형·상자를 같게 하는 데 쓴다)
+const LEGACY_COUNT = (d, f) => (d.id === 'sinnoh-cave' ? Math.min(4 + Math.ceil(f / 2), 6) : Math.min(3 + Math.ceil(f / 2), 6));
+
 export function generateFloor(dungeon, floor, seed) {
   const rng = createRng(seed);
   const int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
@@ -103,13 +106,13 @@ export function generateFloor(dungeon, floor, seed) {
   shuffle(right);
   const pool = encounterPool(dungeon, floor);
   const enemies = [];
-  for (let i = 0; i < dungeon.count(floor); i++) {
+  for (let i = 0; i < LEGACY_COUNT(dungeon, floor); i++) {
     const p = take(right.pop());
-    enemies.push({ species: pick(pool), level: dungeon.level(floor), x: p.x, y: p.y });
+    enemies.push({ species: pick(pool), level: dungeon.baseLevel[floor - 1], x: p.x, y: p.y });
   }
   if (isBoss) {
     const p = take(right.pop());
-    enemies.push({ species: pick(encounterPool(dungeon, floor, { boss: true })), level: dungeon.level(floor) + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
+    enemies.push({ species: pick(encounterPool(dungeon, floor, { boss: true })), level: dungeon.baseLevel[floor - 1] + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
   }
 
   // 7. 보물상자 0~2개 (0: 30%, 1: 50%, 2: 20%)

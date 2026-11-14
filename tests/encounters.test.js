@@ -37,8 +37,8 @@ test('deterministic order', () => {
 
 test('impossible caps relax, then fall back without crashing', () => {
   const weird = { ...DUNGEONS[0], types: ['ice'], bstCap: 1, stageCap: () => 0 };
-  const pool = encounterPool(weird, 1);
+  const pool = encounterPool({ ...weird, early: [] }, 3); // 초반 종 없이 3층: 완화 경로
   assert.ok(pool.length > 0);
   const none = { ...DUNGEONS[0], types: ['not-a-type'], fallback: 'pidgey' };
-  assert.deepEqual(encounterPool(none, 1), ['pidgey']);
+  assert.deepEqual(encounterPool({ ...none, early: [] }, 3), ['pidgey']);
 });
