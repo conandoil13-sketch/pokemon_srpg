@@ -62,8 +62,8 @@ test('accuracy and crits', () => {
   assert.equal(hitChance(plain('machamp'), mk('machamp', 'no-guard'), M('dynamic-punch'), '"'), 100);
   const rng = (vals) => { let i = 0; return () => vals[i++] ?? 0.5; };
   const tgt = plain('snorlax');
-  assert.equal(calcDamage(mk('absol', 'super-luck'), tgt, M('slash'), { rng: rng([0, 0.1, 0.5]), defTile: '.' }).crit, true);
-  assert.equal(calcDamage(plain('absol'), tgt, M('slash'), { rng: rng([0, 0.1, 0.5]), defTile: '.' }).crit, false);
+  assert.equal(calcDamage(mk('absol', 'super-luck'), tgt, M('slash'), { rng: rng([0, 0.13, 0.5]), defTile: '.' }).crit, true); // 베어가르기(급소↑)+대운 = 1/4
+  assert.equal(calcDamage(plain('absol'), tgt, M('slash'), { rng: rng([0, 0.13, 0.5]), defTile: '.' }).crit, false); // 베어가르기 1/8
   assert.equal(calcDamage(plain('absol'), mk('shellder', 'shell-armor'), M('slash'), { rng: rng([0, 0, 0.5]), defTile: '.' }).crit, false);
   const s1 = calcDamage(mk('beedrill', 'sniper'), tgt, M('slash'), { rng: rng([0, 0, 0.5]), defTile: '.' }).damage;
   const s0 = calcDamage(plain('beedrill'), tgt, M('slash'), { rng: rng([0, 0, 0.5]), defTile: '.' }).damage;

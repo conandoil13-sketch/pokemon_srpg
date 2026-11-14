@@ -3,6 +3,10 @@ import POKEDEX from './generated/pokedex.js';
 
 // SRPG 로 다시 해석한 특성 (스펙 §4-③) — 설명은 게임 규칙 그대로
 export const SRPG_ABILITY_TEXT = {
+  'rock-head': '반동 기술을 써도 반동 피해를 받지 않는다.',
+  'skill-link': '연속 기술이 항상 최대 횟수로 맞는다.',
+  'liquid-ooze': '이 포켓몬의 HP 를 흡수하는 기술은 오히려 상대가 피해를 입는다.',
+  'inner-focus': '풀죽지 않는다.',
   rivalry: '성별이 같은 상대에게는 위력이 1.25배, 다른 상대에게는 0.75배가 된다.',
   'cute-charm': '접촉 공격을 받으면 30% 확률로 상대(다른 성별)를 헤롱헤롱하게 만든다.',
   oblivious: '헤롱헤롱 상태가 되지 않는다.',
@@ -37,7 +41,7 @@ export const SRPG_ABILITY_TEXT = {
 
 // 지금 게임에 해당 시스템이 없어 효과가 없는 특성 (스펙 §4-②)
 export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk', 'multitype', 'run-away', 'suction-cups', 'natural-cure',
-  'pressure', 'inner-focus', 'steadfast', 'stench', 'rock-head', 'reckless', 'skill-link', 'illuminate', 'liquid-ooze'];
+  'pressure', 'steadfast', 'stench', 'reckless', 'illuminate'];
 
 export const ABILITIES = Object.fromEntries(Object.values(POKEDEX.abilities).map((a) => [a.id, {
   ...a,

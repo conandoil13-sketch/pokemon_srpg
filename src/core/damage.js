@@ -4,7 +4,7 @@ import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
 import { weatherDamageMult, weatherAccuracy } from './weather.js';
-import { typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult } from './abilities.js';
+import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult } from './abilities.js';
 
 
 const sp = (unit) => SPECIES[unit.species];
@@ -40,13 +40,37 @@ function baseDamage(attacker, defender, move, defTile, weather = null) {
 }
 
 // spread: 여러 마리를 맞히면 0.75 (본가 4세대)
-export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null }) {
+// 연속 공격 타수: 2~5회 = 2·3 각 37.5%, 4·5 각 12.5% (4세대), 고정 횟수는 그대로, 스킬링크는 최대
+export function rollHits(attacker, move, rng) {
+  const lo = move.minHits, hi = move.maxHits;
+  if (!lo || !hi || hi <= 1) return 1;
+  if (lo === hi || has(attacker, 'skill-link')) return hi;
+  if (lo === 2 && hi === 5) { const r = rng(); return r < 0.375 ? 2 : r < 0.75 ? 3 : r < 0.875 ? 4 : 5; }
+  return lo + Math.floor(rng() * (hi - lo + 1));
+}
+export const avgHits = (move) => (!move.minHits || !move.maxHits || move.maxHits <= 1 ? 1 : move.minHits === move.maxHits ? move.maxHits : move.minHits === 2 && move.maxHits === 5 ? 3 : (move.minHits + move.maxHits) / 2);
+
+// 고정 데미지 (지구던지기·나이트헤드 = 레벨, 용의분노 40, 소닉붐 20): 상성 무효만 적용
+export function fixedDamage(attacker, defender, move, weather = null) {
+  if (!move.fixedDamage) return null;
+  if (typeEffect(attacker, defender, move, weather) === 0 || immunity(attacker, defender, move, 1)) return 0;
+  return move.fixedDamage === 'level' ? attacker.level : move.fixedDamage;
+}
+
+// forceHit: 연속 공격 2타째부터 (명중은 첫 타만)
+export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false }) {
+  if (move.fixedDamage) {
+    const fd = fixedDamage(attacker, defender, move, weather);
+    if (fd === 0) return { hit: true, crit: false, typeMult: 0, damage: 0 };
+    const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather);
+    return { hit, crit: false, typeMult: 1, damage: hit ? fd : 0 };
+  }
   const { raw: base, typeMult, blocked } = baseDamage(attacker, defender, move, defTile, weather);
   const raw = base * spread;
   // 면역은 명중 판정 없이 "효과가 없다" (빗나감 메시지가 나오지 않도록). 특성 무효면 absorbed 로 알림
   if (typeMult === 0) return { hit: true, crit: false, typeMult, damage: 0, ...(blocked ? { absorbed: blocked } : {}) };
-  const hit = rng() * 100 < hitChance(attacker, defender, move, defTile, weather);
-  const crit = hit && rng() < critRate(attacker, defender);
+  const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather);
+  const crit = hit && rng() < critRate(attacker, defender, move);
   const roll = 0.85 + rng() * 0.15;
   if (!hit) return { hit, crit: false, typeMult, damage: 0 };
   const damage = Math.max(1, Math.floor(raw * (crit ? critMult(attacker) : 1) * roll));
@@ -54,8 +78,10 @@ export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1,
 }
 
 export function expectedDamage(attacker, defender, move, defTile, spread = 1, weather = null) {
+  const acc = hitChance(attacker, defender, move, defTile, weather) / 100;
+  if (move.fixedDamage) return fixedDamage(attacker, defender, move, weather) * acc;
   const { raw } = baseDamage(attacker, defender, move, defTile, weather);
-  return raw * spread * 0.925 * hitChance(attacker, defender, move, defTile, weather) / 100;
+  return raw * spread * 0.925 * acc * avgHits(move); // 연속 공격은 평균 타수
 }
 
 // 혼란 자해: 위력 40 · 타입 없음 · 물리, 자기 공격/방어 랭크와 화상 반영, 난수·급소 없음
