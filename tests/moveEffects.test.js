@@ -186,3 +186,26 @@ test('a sealed-only ally phase can still end (wait is always available)', () => 
   for (let i = 0; i < 400 && game.mode !== 'idle' && game.mode !== 'result'; i++) { game.update(0.1); game.handle({ type: 'confirm' }); }
   assert.ok(['idle', 'result'].includes(game.mode), game.mode);
 });
+
+// ---- AI · 기술 정보 ----
+import { planEnemyAction } from '../src/core/ai.js';
+import { moveEffectTags } from '../src/game/states.js';
+
+test('AI: skips recoil moves that would knock itself out; heals when low with uses left', () => {
+  const { s, a, f } = duel('rattata', 'pidgeot', { foe: { hp: 1, moves: ['double-edge'] } });
+  a.hp = 999; a.maxHp = 999;
+  assert.equal(planEnemyAction(s, f).attack, null);
+  const h = duel('rattata', 'chansey', { foe: { moves: ['soft-boiled', 'pound'] } });
+  h.f.hp = Math.floor(h.f.maxHp * 0.4);
+  assert.equal(planEnemyAction(h.s, h.f).attack?.moveId, 'soft-boiled');
+  h.f.healUses = 0;
+  assert.notEqual(planEnemyAction(h.s, h.f).attack?.moveId, 'soft-boiled');
+});
+
+test('move info tags describe the new effects', () => {
+  assert.ok(moveEffectTags(MOVES['giga-drain']).includes('흡수 50%'));
+  assert.ok(moveEffectTags(MOVES['pin-missile']).includes('2~5회'));
+  assert.ok(moveEffectTags(MOVES['quick-attack']).includes('선제'));
+  assert.ok(moveEffectTags(MOVES.bite).includes('풀죽음 30%'));
+  assert.ok(moveEffectTags(MOVES['double-edge']).includes('반동 1/3'));
+});

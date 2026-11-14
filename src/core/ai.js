@@ -20,6 +20,7 @@ const isStatus = (m) => m.category === 'status';
 // 이번 계획의 날씨 (planEnemyAction 이 정한다; 계산 함수들이 같이 쓴다)
 let W = null;
 const FRIENDLY_WEIGHT = 1.5;  // 같은 편이 휘말린 데미지 감점 배율
+const HEAL_WEIGHT = 1.2;      // 회복기 점수: 회복량 × 이 값
 const SELF_KO = ['self-destruct', 'explosion'];
 const SELF_TURNS = 3;         // 자폭 감점: 자기 최선 기대 데미지 × 3턴
 const SIG_SELF_KO = 0.3, OTHER_SELF_KO = 2;
@@ -39,6 +40,13 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   }
   if (!enemies) return null;
   if (mates && score <= 0) return null; // 같은 편을 휘말려 손해면 쓰지 않는다
+  // 흡수는 기대 회복만큼 가산, 반동은 감산 — 반동으로 자기가 쓰러질 기대면 쓰지 않는다
+  if (move.drain) {
+    const dealt = hit.filter((t) => t.side !== unit.side).reduce((s, t) => s + Math.min(t.hp, expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W)), 0);
+    const amt = dealt * Math.abs(move.drain) / 100;
+    if (move.drain > 0) score += Math.min(amt, unit.maxHp - unit.hp) * 0.5;
+    else if (unit.ability !== 'rock-head' && unit.ability !== 'magic-guard') { if (amt >= unit.hp) return null; score -= amt; }
+  }
   if (SELF_KO.includes(move.id)) {
     const sig = SIGNATURE_MOVES[unit.species] === move.id;
     if (!sig && !kos) return null; // 신중: 하나라도 쓰러뜨릴 때만
@@ -106,6 +114,13 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
     const risk = THREAT_WEIGHT * threatAt(threats, ghost, p.x, p.y, state.grid[p.y][p.x]);
     for (const mid of unit.moves) {
       const move = MOVES[mid];
+      if (move.heal) { // 회복기: HP 절반 이하이고 남은 횟수가 있을 때만, 안전한 칸에서
+        if (unit.hp <= unit.maxHp / 2 && (unit.healUses ?? 0) > 0) {
+          const score = Math.min(unit.maxHp / 2, unit.maxHp - unit.hp) * HEAL_WEIGHT - risk;
+          if (!bestStatus || score > bestStatus.score) bestStatus = { score, moveTo: p, attack: { moveId: mid, targetId: unit.id } };
+        }
+        continue;
+      }
       if (isStatus(move)) {
         const cand = positionalStatus(state, unit, ghost, move, foes);
         if (cand && cand.value > 0) {

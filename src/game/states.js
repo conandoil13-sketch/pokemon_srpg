@@ -48,6 +48,19 @@ const isAttack = (mv) => mv.category !== 'status';
 const DIR_OF = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
 const pickOne = (mv) => !mv.kind || mv.kind === 'enemy' || mv.kind === 'ally'; // 대상을 직접 고르는 기술
 const helpful = (mv) => mv.kind === 'self' || mv.kind === 'ally' || mv.kind === 'allies';
+// 기술 특수 효과 글자 (기술 정보·자세히 보기)
+export function moveEffectTags(mv) {
+  const tags = [];
+  if (mv.drain > 0) tags.push(`흡수 ${mv.drain}%`);
+  if (mv.drain < 0) tags.push(`반동 ${-mv.drain === 33 ? '1/3' : -mv.drain === 25 ? '1/4' : -mv.drain === 50 ? '1/2' : `${-mv.drain}%`}`);
+  if (mv.minHits && mv.maxHits > 1) tags.push(mv.minHits === mv.maxHits ? `${mv.maxHits}회` : `${mv.minHits}~${mv.maxHits}회`);
+  if (mv.critRate > 0) tags.push('급소↑');
+  if (mv.fixedDamage) tags.push(mv.fixedDamage === 'level' ? '고정 레벨' : `고정 ${mv.fixedDamage}`);
+  if (mv.priority > 0) tags.push('선제');
+  if (mv.flinchChance > 0) tags.push(`풀죽음 ${mv.flinchChance}%`);
+  if (mv.heal) tags.push('회복 (층 2번)');
+  return tags;
+}
 export const effectSummary = (mv) => [...(mv.statChanges ?? []).map((c) => `${STAT_KO[API_STAT[c.stat]]} ${c.change > 0 ? '+' : ''}${c.change}`), ...(mv.ailment ? [STATUS_KO[mv.ailment]] : [])].join(' ');
 // 상태이상 변화기 예상 창 경고: 면역 / 이미 상태이상 (없으면 null)
 export function ailmentNote(target, mv, attacker = null) {
@@ -391,7 +404,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function openAction() {
     menu = sel.moves.map((m) => ({
       label: MOVES[m].name, moveId: m,
-      enabled: !sel.sealed && (isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MOVES[m].kind === 'self' || targetsFor(sel, m).length > 0), // 풀죽음 봉인
+      enabled: !sel.sealed && (MOVES[m].heal ? sel.hp < sel.maxHp && (sel.healUses ?? 0) > 0 : true) && (isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MOVES[m].kind === 'self' || targetsFor(sel, m).length > 0), // 풀죽음 봉인
       ...(MOVES[m].category === 'status' ? { tag: '변화' } : {}),
     }));
     menu.push({ label: '대기', enabled: true });
@@ -776,17 +789,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (mv.category === 'status') {
       drawText(ctx, '변화', x + 44, y + 4);
       drawText(ctx, `대상 ${TARGET_LABEL[mv.kind]}`, x + 6, y + 19);
-      drawText(ctx, `효과 ${effectSummary(mv)}`, x + 6, y + 33, '#5848a0');
+      drawText(ctx, mv.heal ? `회복 · 남은 ${sel?.healUses ?? 0}번` : `효과 ${effectSummary(mv)}`, x + 6, y + 33, '#5848a0');
       return;
     }
     drawText(ctx, mv.category === 'physical' ? '물리' : '특수', x + 44, y + 4);
-    drawText(ctx, mv.weightPower ? '위력 몸무게' : `위력 ${mv.power ?? '-'}`, x + 6, y + 19);
+    drawText(ctx, mv.weightPower ? '위력 몸무게' : mv.fixedDamage ? '위력 고정' : `위력 ${mv.power ?? '-'}`, x + 6, y + 19);
     drawText(ctx, `명중 ${mv.accuracy}`, x + 60, y + 19);
     drawText(ctx, ui.shapeLabel(mv), x + 6, y + 33);
-    if (mv.ailment) { // 부가효과 상태이상: "화상 10%"
-      const t = `${STATUS_KO[mv.ailment]} ${mv.ailmentChance || 100}%`;
-      drawText(ctx, t, x + w - 8 - textWidth(t, 'small'), y + 35, '#5848a0', null, 'small');
-    }
+    const extra = [...(mv.ailment ? [`${STATUS_KO[mv.ailment]} ${mv.ailmentChance || 100}%`] : []), ...moveEffectTags(mv)].slice(0, 2).join(' · '); // "화상 10% · 흡수 50%"
+    if (extra) drawText(ctx, extra, x + w - 8 - textWidth(extra, 'small'), y + 35, '#5848a0', null, 'small');
   }
 
   // 상태 데미지 알림: 유닛 위 데미지 숫자 + 줄어드는 HP 바 (월드 좌표)
