@@ -136,3 +136,43 @@ test('custom effects (bite, kick, sound wave) run, take a palette and end empty'
     assert.ok(!m.draw(null, 'front', { x: 0, y: 0 }).color.some((c) => c), `${id} ends empty`);
   }
 });
+
+// 위·아래로 돌려도 이펙트가 몸 높이(발밑 위)에 남는다 (예전엔 높이만큼 옆으로 비켜 바닥에 그려졌다)
+function centroid(m, frames = 14) {
+  for (let i = 0; i < frames; i++) m.update(1 / 60);
+  const f = m.draw(null, 'front', { x: 0, y: 0 });
+  let sx = 0, sy = 0, n = 0;
+  for (let i = 0; i < f.color.length; i++) if (f.color[i]) { sx += i % 256; sy += Math.floor(i / 256); n++; }
+  return { x: sx / n, y: sy / n, n };
+}
+test('effects keep body height when turned up or down', () => {
+  const at = { x: 128, y: 110 };
+  const H = { 'pokemon/bite': 20, 'pokemon/kick': 20, 'impacts/hit-spark': 20, 'pokemon/sound-wave': 20, 'arcane/spell-charge': 22, 'melee/thrust': 20 };
+  for (const [id, h] of Object.entries(H)) {
+    const B = { x: at.x, y: at.y - h }; // 몸 높이 점: 돌려도 여기를 중심으로 돈다
+    const base = centroid((() => { const m = createFxManager(); m.spawn({ id, opts: {} }, at, { dir: 'right' }); return m; })());
+    const dx = base.x - B.x, dy = base.y - B.y;
+    // 오른쪽 그림을 몸 높이 점 둘레로 돌린 자리: 위 = (dy, -dx), 아래 = (-dy, dx)
+    for (const [dir, ex, ey] of [['up', dy, -dx], ['down', -dy, dx]]) {
+      const m = createFxManager(); m.spawn({ id, opts: {} }, at, { dir });
+      const c = centroid(m);
+      assert.ok(c.n > 0, `${id} ${dir} draws`);
+      // 옆(가로)으로는 거의 정확히, 나아가는 쪽(세로)으로는 이펙트 캔버스 끝에 잘리는 만큼만 차이
+      const msg = `${id} ${dir}: (${(c.x - B.x).toFixed(1)},${(c.y - B.y).toFixed(1)}) want (${ex.toFixed(1)},${ey.toFixed(1)})`;
+      assert.ok(Math.abs(c.x - B.x - ex) < 3, msg);
+      assert.ok(Math.abs(c.y - B.y - ey) < 10, msg);
+    }
+  }
+});
+
+test('round and ground effects stay upright when aimed up or down', () => {
+  const at = { x: 128, y: 110 };
+  for (const id of ['impacts/ground-slam', 'lightning/thunderclap', 'pickups/collect-burst']) {
+    const right = (() => { const m = createFxManager(); m.spawn({ id, opts: {} }, at, { dir: 'right' }); return centroid(m); })();
+    for (const dir of ['up', 'down']) {
+      const m = createFxManager(); m.spawn({ id, opts: {} }, at, { dir });
+      const c = centroid(m);
+      assert.ok(Math.abs(c.x - right.x) < 1 && Math.abs(c.y - right.y) < 1, `${id} ${dir} drawn like right`);
+    }
+  }
+});

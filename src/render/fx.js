@@ -6,6 +6,12 @@ const FX = { ...VENDOR_FX, ...CUSTOM_FX }; // pixelfx 라이브러리 + 이 게�
 import { createFrame, clearFrame, createFx, composite } from '../vendor/pixelfx/core/index.js';
 
 const ORIENT = { right: { flip: false, angle: 0 }, left: { flip: true, angle: 0 }, up: { flip: false, angle: -Math.PI / 2 }, down: { flip: false, angle: Math.PI / 2 } };
+// 위·아래로 돌릴 때의 회전 중심 높이(발밑 위 px): 이펙트는 "발밑 + 몸 높이" 에 그려지는데, 그대로 돌리면
+// 그 높이까지 돌아가 옆으로 비켜 바닥에 깔린다. height 옵션이 없는 손 위치 이펙트는 여기서 정한다
+const PIVOT = { 'arcane/spell-charge': 22, 'melee/thrust': 20, 'melee/claw-swipe': 24 };
+// 방향이 없는 이펙트(땅에 퍼지는 고리, 둥근 반짝임): 위·아래여도 돌리지 않는다 (돌리면 세로로 서 버린다)
+const NO_TURN = new Set(['impacts/ground-slam', 'lightning/thunderclap', 'ice/frost-nova', 'nature/acid-splash', 'ui/level-up', 'pickups/collect-burst']);
+const pivotOf = (spec, mod) => spec.opts?.height ?? mod.meta?.options?.height ?? PIVOT[spec.id] ?? 0;
 const BEAM_PAD = 8; // 빔 클립: 시작점 뒤쪽 여유
 const LOOP_FPS = 15; // 지속 표시는 초당 15번만 다시 그리고 그 사이엔 캐시를 찍는다 (픽셀 이펙트라 티가 안 남)
 
@@ -19,8 +25,11 @@ export function createFxManager({ w = 256, h = 192, makeCanvas = null } = {}) {
     try {
       const mod = FX[spec?.id];
       if (!mod) throw new Error(`no effect ${spec?.id}`);
-      const o = ORIENT[dir] ?? ORIENT.right;
-      const fx = createFx(mod, { ...(spec.opts ?? {}), x: at.x + (spec.dx ?? 0), y: at.y + (spec.dy ?? 0), flip: o.flip, angle: o.angle, ...(actor ? { actor } : {}) });
+      const o = NO_TURN.has(spec.id) && (dir === 'up' || dir === 'down') ? ORIENT.right : ORIENT[dir] ?? ORIENT.right;
+      // 돌린 이펙트: 몸 높이 점 (0,-h) 이 돌아간 뒤에도 화면의 (0,-h) 에 오게 원점을 옮긴다 (빔은 BEAM_HAND 로 따로 맞춤)
+      let px = 0, py = 0;
+      if (o.angle && clipTo == null) { const h = pivotOf(spec, mod), c = Math.cos(o.angle), sn = Math.sin(o.angle); px = -(h * sn); py = -h + h * c; }
+      const fx = createFx(mod, { ...(spec.opts ?? {}), x: at.x + (spec.dx ?? 0) + px, y: at.y + (spec.dy ?? 0) + py, flip: o.flip, angle: o.angle, ...(actor ? { actor } : {}) });
       const e = { fx, actor: actor ?? null, layer: spec.layer ?? 'front', timeScale: spec.timeScale ?? 1, delay, life: spec.life ?? null, age: 0, stopped: false, clipTo, dir, at, key, getPos };
       list.push(e);
       log.push(spec.id); if (log.length > 200) log.shift();

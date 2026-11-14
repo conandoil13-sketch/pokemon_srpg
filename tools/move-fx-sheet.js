@@ -1,5 +1,5 @@
 // 기술 연출을 게임과 같은 순서로 오프라인 렌더해 컨택트 시트 PNG 로 (브라우저 없이 눈으로 확인)
-// 사용: node tools/move-fx-sheet.js <out.png> <기술id[:거리]> ...
+// 사용: node tools/move-fx-sheet.js <out.png> <기술id[:거리[:방향]]> ...   방향: right(기본) left up down
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { createFxManager } from '../src/render/fx.js';
@@ -7,28 +7,31 @@ import { fxForMove } from '../src/data/moveFx.js';
 import { MOVES } from '../src/data/moves.js';
 import { actorFor } from '../src/render/fxActor.js';
 
-const W = 112, H = 64, FRAMES = [0.1, 0.2, 0.3, 0.38, 0.45, 0.55, 0.65, 0.8], S = 3;
+const W = 112, H = 112, FRAMES = [0.1, 0.2, 0.3, 0.38, 0.45, 0.55, 0.65, 0.8], S = 3;
 const [out, ...ids] = process.argv.slice(2);
 const rows = ids.map((arg) => {
-  const [id, d = '1'] = arg.split(':'), dist = Number(d), mv = MOVES[id];
+  const [id, d = '1', dir = 'right'] = arg.split(':'), dist = Number(d), mv = MOVES[id];
   if (!mv) { console.error(`없는 기술: ${id}`); process.exit(1); }
-  const A = { x: 24, y: 48 }, T = { x: 24 + 16 * dist, y: 48 };
+  const V = { right: [1, 0], left: [-1, 0], up: [0, -1], down: [0, 1] }[dir];
+  if (!V) { console.error(`없는 방향: ${dir}`); process.exit(1); }
+  // 사용자 자리: 쏘는 방향 반대쪽에 (게임처럼 발밑 기준)
+  const A = { x: 56 - V[0] * 8 * dist, y: 66 - V[1] * 8 * dist }, T = { x: A.x + V[0] * 16 * dist, y: A.y + V[1] * 16 * dist };
   const spec = fxForMove(mv, { distance: dist });
   const m = createFxManager({ w: W, h: H }), actor = actorFor('pikachu', null);
   const events = [];
-  if (spec.cast) events.push([0, () => m.spawn(spec.cast, A, { dir: 'right' })]);
+  if (spec.cast) events.push([0, () => m.spawn(spec.cast, A, { dir })]);
   let shot = null;
-  if (spec.travel) events.push([0.18, () => { shot = m.spawn(spec.travel, { x: A.x, y: A.y - 6 }, { dir: 'right', ...(spec.travel.clip ? { clipTo: T.x - A.x } : {}) }); }]);
+  if (spec.travel) events.push([0.18, () => { shot = m.spawn(spec.travel, { x: A.x, y: A.y - 6 }, { dir, ...(spec.travel.clip ? { clipTo: Math.abs(T.x - A.x) + Math.abs(T.y - A.y) } : {}) }); }]);
   const hitAt = spec.travel ? 0.43 : 0.18;
-  if (spec.hit) events.push([hitAt, () => m.spawn(spec.hit, T, { dir: 'right', actor })]);
-  if (spec.hit2) events.push([hitAt + 0.08, () => m.spawn(spec.hit2, T, { dir: 'right', actor })]);
-  if (spec.burst) events.push([hitAt, () => m.spawn(spec.burst, T, { dir: 'right' })]);
+  if (spec.hit) events.push([hitAt, () => m.spawn(spec.hit, T, { dir, actor })]);
+  if (spec.hit2) events.push([hitAt + 0.08, () => m.spawn(spec.hit2, T, { dir, actor })]);
+  if (spec.burst) events.push([hitAt, () => m.spawn(spec.burst, T, { dir })]);
   const frames = [];
   let t = 0;
   for (const ft of FRAMES) {
     while (t < ft) {
       for (const e of events) if (!e.done && t >= e[0]) { e[1](); e.done = true; }
-      if (shot && !spec.travel.clip && t >= 0.18 && t <= 0.43) { const k = (t - 0.18) / 0.25; shot.fx.options.x = A.x + (T.x - A.x) * k; shot.fx.options.y = A.y - 6; }
+      if (shot && !spec.travel.clip && t >= 0.18 && t <= 0.43) { const k = (t - 0.18) / 0.25; shot.fx.options.x = A.x + (T.x - A.x) * k; shot.fx.options.y = A.y - 6 + (T.y - A.y) * k; }
       m.update(1 / 60); t += 1 / 60;
     }
     const back = m.draw(null, 'back', { x: 0, y: 0 }), front = m.draw(null, 'front', { x: 0, y: 0 });
