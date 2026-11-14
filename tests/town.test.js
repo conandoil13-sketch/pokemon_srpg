@@ -587,3 +587,26 @@ test('gacha duplicate lines mention IVs and a new gender', async () => {
   assert.match(lines.join(' '), /공격·스피드 개체값이 올랐다/);
   assert.match(lines.join(' '), /♀/);
 });
+
+test('box: "한 마리 더" copies the member for 4 shards and focuses the new one; refusal message when short', async () => {
+  const { box, game, calls } = await boxScene(0);
+  while (box.cursorMember.species !== 'chimchar') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  const pick = () => {
+    box.handle({ type: 'confirm' });
+    const i = box.menuLabels.findIndex((l) => l.startsWith('한 마리 더'));
+    assert.ok(i >= 0, box.menuLabels.join(','));
+    for (let k = 0; k < i; k++) box.handle({ type: 'dir', dx: 0, dy: 1 });
+    box.handle({ type: 'confirm' });
+  };
+  pick();
+  assert.deepEqual(box.message, ['결정이 모자라다. (4개 필요)']);
+  assert.equal(game.party.length, 5);
+  box.handle({ type: 'confirm' });
+  game.shards = { chimchar: 4 };
+  pick();
+  assert.equal(game.party.length, 6);
+  assert.deepEqual(box.message, ['불꽃숭이가 한 마리 더 합류했다!']);
+  assert.equal(calls.save, 1);
+  box.handle({ type: 'confirm' });
+  assert.equal(box.cursorMember, game.party[5]);
+});
