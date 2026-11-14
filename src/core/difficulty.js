@@ -12,3 +12,51 @@ export function levelCapFor(game) {
   const next = DUNGEONS.find((d) => !cleared.includes(d.id));
   return (next ?? DUNGEONS[DUNGEONS.length - 1]).levelCap;
 }
+
+// ---- 층 적 굴림 (층 시드에서 별도 난수 — 지형·상자·날씨 불변) ----
+import { encounterPool } from './encounters.js';
+import { createRng } from './rng.js';
+
+// 구성 유형: 무리형(약한 적 잔뜩) · 보통형 · 준보스형(센 적 몇 마리). 1~2층은 준보스 없음
+export const COMPOSITION = {
+  early: [{ id: 'swarm', w: 0.4 }, { id: 'normal', w: 0.6 }],
+  later: [{ id: 'swarm', w: 0.3 }, { id: 'normal', w: 0.5 }, { id: 'elite', w: 0.2 }],
+};
+const SHAPE = {
+  swarm: { half: 'low', dl: [-1, -1], max: 7 },
+  normal: { half: null, dl: [-1, 1], max: 6 },
+  elite: { half: 'high', dl: [2, 2], max: 3 },
+};
+export const BUDGET_SLACK = 1.15, MIN_ENEMIES = 2, EARLY_MAX = 4;
+
+export function rollEnemies(dungeon, floor, seed) {
+  const rng = createRng((seed ^ Math.imul(floor + 7919, 0x85ebca6b) ^ 0x5bd1e995) >>> 0);
+  const early = floor <= 2;
+  const table = early ? COMPOSITION.early : COMPOSITION.later;
+  let r = rng(), kind = table[table.length - 1].id;
+  for (const t of table) { if (r < t.w) { kind = t.id; break; } r -= t.w; }
+  const shape = SHAPE[kind], base = dungeon.baseLevel[floor - 1], budget = dungeon.budget[floor - 1];
+  const pool = encounterPool(dungeon, floor, { half: shape.half });
+  const all = encounterPool(dungeon, floor);
+  const max = Math.min(shape.max, early ? EARLY_MAX : Infinity);
+  const cheapest = (list, level) => [...list].sort((a, b) => threat(level, a) - threat(level, b) || a.localeCompare(b))[0];
+  const out = [];
+  let sum = 0;
+  while (out.length < max) {
+    const level = Math.max(2, base + shape.dl[0] + Math.floor(rng() * (shape.dl[1] - shape.dl[0] + 1)));
+    let species = pool[Math.floor(rng() * pool.length)];
+    let lv = level;
+    if (sum + threat(lv, species) > budget) { // 더 약한 종·낮은 레벨로 다시 맞춰 본다
+      lv = Math.max(2, base + shape.dl[0]);
+      species = cheapest(pool, lv);
+      if (sum + threat(lv, species) > budget) break;
+    }
+    out.push({ species, level: lv });
+    sum += threat(lv, species);
+  }
+  while (out.length < MIN_ENEMIES) { // 최소 2마리: 그 층 가장 약한 후보로
+    const lv = Math.max(2, base - 1), species = cheapest(all, lv);
+    out.push({ species, level: lv });
+  }
+  return out;
+}

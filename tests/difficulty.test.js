@@ -41,3 +41,53 @@ test('level cap: first uncleared dungeon in the chain, last one stays after ever
   assert.equal(levelCapFor({ cleared: ['sinnoh-field'] }), 22);
   assert.equal(levelCapFor({ cleared: ['sinnoh-field', 'sinnoh-cave'] }), 22);
 });
+
+// ---- 적 굴림 ----
+import { rollEnemies } from '../src/core/difficulty.js';
+import { generateFloor } from '../src/core/floorgen.js';
+import { createHash } from 'node:crypto';
+
+const total = (list) => list.reduce((s, e) => s + threat(e.level, e.species), 0);
+const median = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+
+test('rollEnemies: deterministic, within budget, at least 2, early-only small floors 1-2', () => {
+  for (const d of DUNGEONS) {
+    assert.deepEqual(rollEnemies(d, 1, 42), rollEnemies(d, 1, 42));
+    for (let f = 1; f <= d.floors; f++) {
+      for (let seed = 1; seed <= 300; seed++) {
+        const list = rollEnemies(d, f, seed), tag = `${d.id} ${f} ${seed}`;
+        assert.ok(list.length >= 2, tag);
+        assert.ok(total(list) <= d.budget[f - 1] * 1.15 + 1e-9, `${tag}: ${total(list)}`);
+        if (f <= 2) {
+          assert.ok(list.length <= 4, tag);
+          for (const e of list) assert.ok(d.early.includes(e.species), `${tag}: ${e.species}`);
+          for (const e of list) assert.ok(e.level <= d.baseLevel[f - 1] + 1, tag); // 준보스(+2) 없음
+        }
+      }
+    }
+  }
+});
+
+test('threat medians rise floor by floor inside each dungeon (300 seeds)', () => {
+  for (const d of DUNGEONS) {
+    const meds = Array.from({ length: d.floors }, (_, i) => median(Array.from({ length: 300 }, (_, s) => total(rollEnemies(d, i + 1, s + 1)))));
+    for (let i = 1; i < meds.length; i++) assert.ok(meds[i] > meds[i - 1], `${d.id}: ${meds.join(' ')}`);
+  }
+});
+
+test('same seeds keep terrain, chests, stairs, ally slots and weather (enemies only change)', () => {
+  const h = createHash('sha1');
+  for (const dg of DUNGEONS) for (let seed = 1; seed <= 40; seed++) for (let fl = 1; fl <= dg.floors; fl++) { const m = generateFloor(dg, fl, seed); h.update(JSON.stringify([m.tiles, m.chests, m.weather, m.stairs, m.allySlots])); }
+  assert.equal(h.digest('hex'), '19fa3023a2062ce5e5b58bcd5597a142541b88e8');
+});
+
+test('generated floors place the rolled enemies (minus missing spots) plus the boss', () => {
+  for (const d of DUNGEONS) for (let seed = 1; seed <= 60; seed++) for (const f of [1, d.floors]) {
+    const m = generateFloor(d, f, seed);
+    const normal = m.enemies.filter((e) => !e.boss);
+    const rolled = rollEnemies(d, f, seed);
+    assert.ok(normal.length <= rolled.length && normal.length >= Math.min(2, rolled.length), `${d.id} ${f} ${seed}`);
+    assert.deepEqual(normal.map((e) => e.species), rolled.slice(0, normal.length).map((e) => e.species));
+    assert.equal(m.enemies.filter((e) => e.boss).length, f === d.floors ? 1 : 0);
+  }
+});

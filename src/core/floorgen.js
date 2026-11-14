@@ -1,6 +1,7 @@
 // 층 맵 생성 (순수, 시드 고정이면 같은 결과). 탁 트인 필드에 지형 덩어리를 뿌리고 연결성을 보장한다.
 import { createRng } from './rng.js';
 import { STATS } from './dittoBuild.js';
+import { rollEnemies } from './difficulty.js';
 import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
 
@@ -104,17 +105,15 @@ export function generateFloor(dungeon, floor, seed) {
     .filter((p) => p.x >= 8 && '."^'.includes(g[p.y][p.x]) && !used.has(key(p.x, p.y)))
     .sort((a, b) => a.y - b.y || a.x - b.x);
   shuffle(right);
+  // 예전과 같은 공용 난수 소비(자리 예약 + 종 고르기) — 지형·상자가 같은 시드에서 그대로이게
   const pool = encounterPool(dungeon, floor);
+  const reserved = [];
+  for (let i = 0; i < LEGACY_COUNT(dungeon, floor) && right.length; i++) { reserved.push(take(right.pop())); pick(pool); }
   const enemies = [];
-  for (let i = 0; i < LEGACY_COUNT(dungeon, floor); i++) {
-    const p = take(right.pop());
-    enemies.push({ species: pick(pool), level: dungeon.baseLevel[floor - 1], x: p.x, y: p.y });
-  }
-  if (isBoss) {
+  if (isBoss && right.length) {
     const p = take(right.pop());
     enemies.push({ species: pick(encounterPool(dungeon, floor, { boss: true })), level: dungeon.baseLevel[floor - 1] + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
   }
-
   // 7. 보물상자 0~2개 (0: 30%, 1: 50%, 2: 20%)
   const r = rng();
   const nChests = r < 0.3 ? 0 : r < 0.8 ? 1 : 2;
@@ -130,6 +129,14 @@ export function generateFloor(dungeon, floor, seed) {
     const powder = () => `powder-${STATS[Math.floor(createRng(hashSeed(seed, 1000 + i))() * STATS.length)]}`;
     chests.push({ x: p.x, y: p.y, item: roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder() : roll < 0.7 ? 'candy' : 'coins' });
   }
+
+  // 8. 실제 적: 위협도 예산 굴림(별도 난수). 예약 자리 먼저, 모자라면 상자 뒤 남은 오른쪽 칸, 그래도 없으면 생략
+  const spare = right.filter((p) => !used.has(key(p.x, p.y)));
+  const normal = rollEnemies(dungeon, floor, seed).map((e) => {
+    const p = reserved.shift() ?? (spare.length ? take(spare.pop()) : null);
+    return p ? { ...e, x: p.x, y: p.y } : null;
+  }).filter(Boolean);
+  enemies.unshift(...normal);
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, weather: rollWeather(dungeon, seed) };
 }
