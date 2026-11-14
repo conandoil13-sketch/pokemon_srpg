@@ -3,7 +3,7 @@ import { SPECIES } from '../data/species.js';
 import { newMember } from './progress.js';
 import { deployed } from './roster.js';
 
-export const GACHA_COST = 100;
+export const GACHA_COST = 100, GACHA_TEN_COST = 900; // 10연속은 10% 할인
 export const RARITY = [{ id: 'common', weight: 70 }, { id: 'rare', weight: 25 }, { id: 'epic', weight: 5 }];
 const RARE_MIN = 450, EPIC_MIN = 535;
 
@@ -66,6 +66,17 @@ export const rollBalls = (rng, n = 3) => Array.from({ length: n }, () => rollBal
 export function claimBall(game, ball, rng) {
   if ((game.coins ?? 0) < GACHA_COST) return { ok: false, reason: 'coins' };
   game.coins -= GACHA_COST;
+  return applyBall(game, ball, rng);
+}
+
+// 10연속: 한 번에 결제하고 순서대로 받는다 (같은 계열 두 번째부터 결정)
+export function claimBalls(game, balls, rng) {
+  if ((game.coins ?? 0) < GACHA_TEN_COST) return { ok: false, reason: 'coins' };
+  game.coins -= GACHA_TEN_COST;
+  return { ok: true, results: balls.map((b) => applyBall(game, b, rng)) };
+}
+
+function applyBall(game, ball, rng) {
   const { species, rarity } = ball;
   if (game.party.some((m) => lineRoot(m.species) === species)) {
     game.shards ??= {};

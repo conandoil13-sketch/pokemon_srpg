@@ -60,5 +60,14 @@
 - [ ] **Step 5: Verify** 브라우저(창이 숨겨져 있으면 열어 달라고 요청)에서 평범·희귀·매우 희귀 한 번씩 (테스트용으로 `__app` 에서 rng 대신 결과 주입 가능하면 사용) — 볼 모양·흔들림·옆 볼 공개 확인
 - [ ] **Step 6: Commit** `feat: pick one of three balls, upgrade on open`
 
+### Task 2b: 10연속 (사용자 추가 결정)
+
+**Files:** Modify `src/core/gacha.js`, `src/game/gacha.js` · Test `tests/gacha.test.js`, `tests/town.test.js`
+
+**Interfaces:** `GACHA_TEN_COST = 900`; `claimBalls(game, balls, rng) => { ok:false, reason:'coins' } | { ok:true, results: Array<claim result> }` (900 한 번 차감, 순서대로 적용 → 같은 계열 두 번째는 결정). 장면 메뉴 `뽑기 (100코인)` · `10연속 (900코인)` · `돌아가기`; mode `ten`: 볼 10개(5×2), 확인마다 열리지 않은 첫 볼 한 단계, 취소 = 모두 열기(자동 빠르게), 다 열리면 확인 → `tenList`(이름·새 동료/결정 목록) → 확인 → menu. 결제·저장(`onPulled`)은 10개가 나오는 순간 한 번.
+
+- [ ] tests: claimBalls 900 차감·10개 적용·같은 계열 겹치면 결정·부족 거절; 장면 10연속 연타 → 코인 −900 한 번, onPulled 1회, 모든 볼 opened
+- [ ] Implement · `npm test` → PASS · Commit `feat: ten-pull with ten balls`
+
 ### Task 3: 문서
 README 모집소 설명(볼 3개·볼 단계) · ROADMAP 완료 줄 · `npm test` · Commit `docs: gacha balls`

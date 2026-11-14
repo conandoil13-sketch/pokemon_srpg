@@ -117,3 +117,20 @@ test('claimBall refuses without coins; owned line gives a shard', () => {
   assert.equal(g.shards.chimchar, 1);
   assert.equal(rollBall(createRng(3)).species.length > 0, true);
 });
+
+import { claimBalls, GACHA_TEN_COST } from '../src/core/gacha.js';
+
+test('claimBalls: ten-pull charges 900 once, applies all, repeats in one pull become shards', () => {
+  assert.equal(GACHA_TEN_COST, 900);
+  const g = game({ coins: 1000 });
+  const balls = [...rollBalls(createRng(11), 8), { species: 'bulbasaur', rarity: 'rare' }, { species: 'bulbasaur', rarity: 'rare' }];
+  const party = g.party.length;
+  const r = claimBalls(g, balls, createRng(2));
+  assert.equal(r.ok, true);
+  assert.equal(r.results.length, 10);
+  assert.equal(g.coins, 100);
+  assert.equal(r.results[9].duplicate, true);
+  const shards = Object.values(g.shards).reduce((a, b) => a + b, 0);
+  assert.equal(g.party.length - party + shards, 10);
+  assert.deepEqual(claimBalls(game({ coins: 899 }), balls, createRng(2)), { ok: false, reason: 'coins' });
+});

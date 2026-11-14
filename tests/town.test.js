@@ -250,3 +250,78 @@ test('party office: swap ability costs 3 line shards, refuses when short', async
   assert.equal(game.shards.geodude, 0);
   assert.equal(saved, 1);
 });
+
+const gachaSeq = (vals) => { let i = 0; return () => vals[i++] ?? 0.5; };
+const mash = (g, n, ev = { type: 'confirm' }) => { for (let i = 0; i < n; i++) { g.update(0.1); g.handle(ev); } };
+
+test('gacha: cancel while choosing keeps coins; no coins → message', async () => {
+  const { createGachaScene } = await import('../src/game/gacha.js');
+  const game = newGame();
+  game.coins = 150;
+  let pulled = 0;
+  const g = createGachaScene({ game, rng: createRng(3), onBack() {}, onPulled() { pulled++; } });
+  g.handle({ type: 'confirm' });
+  assert.equal(g.mode, 'choose');
+  assert.ok(g.balls.length === 3 && g.balls.every((b) => b.kind === 'poke'));
+  g.handle({ type: 'cancel' });
+  assert.equal(g.mode, 'menu');
+  assert.equal(game.coins, 150);
+  assert.equal(pulled, 0);
+  game.coins = 0;
+  g.handle({ type: 'confirm' });
+  assert.equal(g.mode, 'msg');
+});
+
+test('gacha: an epic ball steps poke → great → ultra → open, then the others open too', async () => {
+  const { createGachaScene } = await import('../src/game/gacha.js');
+  const game = newGame();
+  game.coins = 100;
+  const g = createGachaScene({ game, rng: gachaSeq([0.97, 0.1, 0.1, 0.1, 0.5, 0.1]), onBack() {}, onPulled() {} });
+  g.handle({ type: 'confirm' });
+  g.handle({ type: 'dir', dx: -1, dy: 0 }); // 첫 번째 볼
+  assert.equal(g.cursor, 0);
+  mash(g, 3, { type: 'none' });
+  g.handle({ type: 'confirm' });
+  assert.equal(g.mode, 'open');
+  assert.equal(game.coins, 0);
+  const kinds = [];
+  for (let i = 0; i < 3; i++) { mash(g, 3, { type: 'none' }); g.handle({ type: 'confirm' }); kinds.push(g.balls[0].opened ? 'open' : g.balls[0].kind); }
+  assert.deepEqual(kinds, ['great', 'ultra', 'open']);
+  mash(g, 5, { type: 'none' });
+  g.handle({ type: 'confirm' });
+  assert.equal(g.mode, 'others');
+  mash(g, 30, { type: 'none' });
+  assert.ok(g.balls.every((b) => b.opened));
+  const gained = game.party.length - 5 + Object.values(game.shards).reduce((a, b) => a + b, 0);
+  assert.equal(gained, 1);
+});
+
+test('gacha: ten-pull charges 900 once, opens all ten (cancel = open all), lists results', async () => {
+  const { createGachaScene } = await import('../src/game/gacha.js');
+  const game = newGame();
+  game.coins = 1000;
+  let pulled = 0;
+  const g = createGachaScene({ game, rng: createRng(8), onBack() {}, onPulled() { pulled++; } });
+  g.handle({ type: 'dir', dx: 0, dy: 1 });
+  g.handle({ type: 'confirm' });
+  assert.equal(g.mode, 'ten');
+  assert.equal(game.coins, 100);
+  assert.equal(g.balls.length, 10);
+  g.handle({ type: 'cancel' });
+  mash(g, 40, { type: 'none' });
+  assert.ok(g.balls.every((b) => b.opened));
+  mash(g, 30); // 연타
+  assert.equal(pulled, 1);
+  assert.equal(game.coins, 100);
+});
+
+test('gacha: menu cursor returns to the last menu row after a pull', async () => {
+  const { createGachaScene } = await import('../src/game/gacha.js');
+  const game = newGame();
+  game.coins = 100;
+  const g = createGachaScene({ game, rng: createRng(5), onBack() {}, onPulled() {} });
+  g.handle({ type: 'confirm' });
+  g.handle({ type: 'dir', dx: 1, dy: 0 }); // 세 번째 볼
+  mash(g, 80);
+  assert.equal(g.mode, 'msg'); // 다시 뽑으려다 코인 부족 (1회 뽑기 줄 그대로)
+});
