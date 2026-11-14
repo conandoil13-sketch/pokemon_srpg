@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>이펙트 미리보기</title>
+<style>
+  :root { --bg: #141a28; --panel: #1f2738; --ink: #e8ecf4; --muted: #8a94a8; --accent: #f8d050; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { color: var(--muted); margin: 0 0 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 10px; }
+  label { color: var(--muted); }
+  select, button { background: var(--panel); color: var(--ink); border: 1px solid #39445c; border-radius: 6px; padding: 6px 10px; font: inherit; }
+  button.primary { background: var(--accent); color: #202020; border-color: var(--accent); font-weight: 600; }
+  canvas { image-rendering: pixelated; width: 768px; max-width: 100%; aspect-ratio: 4 / 3; background: #3a5a3a; border-radius: 6px; display: block; }
+  #info { color: var(--muted); margin-top: 8px; min-height: 1.5em; }
+</style>
+</head>
+<body>
+<h1>이펙트 미리보기</h1>
+<p class="note">개발용 페이지 (게임에서 연결되지 않음). 게임과 같은 <code>fxForMove</code> · <code>fxForAilment</code> 를 그대로 호출한다.</p>
+<div class="row">
+  <label>타입 <select id="type"></select></label>
+  <label>위력 <select id="tier"><option value="40">약 (≤50)</option><option value="70" selected>중</option><option value="100">강 (≥90)</option></select></label>
+  <label>분류 <select id="cat"><option value="physical">물리</option><option value="special" selected>특수</option></select></label>
+  <label>모양 <select id="shape"><option value="single1">단일 (1칸)</option><option value="single2">단일 (원거리)</option><option value="line">직선</option><option value="cone">부채꼴</option><option value="around">주변</option><option value="blast">착탄</option></select></label>
+  <button class="primary" id="play">재생</button>
+</div>
+<div class="row">
+  <label>상태이상 <select id="ailment"></select></label>
+  <button id="playAil">상태이상 재생</button>
+  <label><input type="checkbox" id="loop"> 반복</label>
+</div>
+<canvas id="cv" width="256" height="192"></canvas>
+<div id="info"></div>
+<script type="module">
+import { createFxManager } from '../src/render/fx.js';
+import { fxForMove, fxForAilment, TYPE_PALETTE } from '../src/data/moveFx.js';
+import { actorFor } from '../src/render/fxActor.js';
+
+const $ = (id) => document.getElementById(id);
+const TYPES = [...Object.keys(TYPE_PALETTE), 'dark'];
+$('type').innerHTML = TYPES.map((t) => `<option ${t === 'poison' ? 'selected' : ''}>${t}</option>`).join('');
+const AILS = ['poison', 'toxic', 'burn', 'paralysis', 'sleep', 'freeze', 'confusion', 'infatuation'];
+$('ailment').innerHTML = AILS.map((a) => `<option>${a}</option>`).join('');
+
+const cv = $('cv'), ctx = cv.getContext('2d');
+const fx = createFxManager({ makeCanvas: (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) });
+const actor = actorFor('pikachu', null);
+const A = { x: 64, y: 110 }, D = { x: 176, y: 110 };
+const VEC = { single1: 1, single2: 3, line: 3, cone: 2, around: 1, blast: 3 };
+
+function play() {
+  fx.clear();
+  const shapeKey = $('shape').value;
+  const shape = shapeKey.startsWith('single') ? { type: 'single', range: [1, VEC[shapeKey]] } : { type: shapeKey, length: 3, range: [2, 3] };
+  const move = { id: 'preview', type: $('type').value, category: $('cat').value, power: Number($('tier').value), shape };
+  const spec = fxForMove(move, { distance: VEC[shapeKey] });
+  const at = { ...D };
+  const steps = [];
+  if (spec.cast) steps.push([0, () => fx.spawn(spec.cast, A, { dir: 'right' })]);
+  if (spec.travel) steps.push([0.25, () => fx.spawn(spec.travel, A, { dir: 'right', clipTo: D.x - A.x })]);
+  if (spec.hit) steps.push([0.55, () => fx.spawn(spec.hit, at, { dir: 'right', actor })]);
+  if (spec.hit2) steps.push([0.65, () => fx.spawn(spec.hit2, at, { dir: 'right', actor })]);
+  if (spec.burst) steps.push([0.55, () => fx.spawn(spec.burst, at, { dir: 'right' })]);
+  for (const [t, fn] of steps) setTimeout(fn, t * 1000);
+  $('info').textContent = `${move.type} · ${move.category} · 위력 ${move.power} · ${shapeKey} → ${Object.keys(spec).join(', ')}`;
+}
+function playAil() {
+  fx.clear();
+  const s = fxForAilment($('ailment').value);
+  if (s.inflict) fx.spawn(s.inflict, D, { actor });
+  if (s.loop) setTimeout(() => fx.follow('loop', s.loop, () => D, actor), 300);
+  $('info').textContent = `${$('ailment').value} → ${Object.keys(s).join(', ')}`;
+}
+$('play').onclick = play;
+$('playAil').onclick = playAil;
+
+let last = performance.now(), again = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  fx.update(dt);
+  ctx.fillStyle = '#3a5a3a'; ctx.fillRect(0, 0, 256, 192);
+  ctx.fillStyle = '#e8d070'; ctx.fillRect(A.x - 6, A.y - 6, 12, 12);   // 사용자 자리
+  ctx.fillStyle = '#e0e0f0'; ctx.fillRect(D.x - 6, D.y - 6, 12, 12);   // 대상 자리
+  fx.draw(ctx, 'back', { x: 0, y: 0 });
+  fx.draw(ctx, 'front', { x: 0, y: 0 });
+  if ($('loop').checked && (again += dt) > 1.6) { again = 0; play(); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+play();
+</script>
+</body>
+</html>

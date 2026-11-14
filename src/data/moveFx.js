@@ -13,7 +13,9 @@ export const RANK_DOWN_PAL = PAL.water; // 내리면 파랑
 
 // 악 타입: 내장 night 는 거의 검정이라 맵 위에서 안 보임 → 보랏빛 검정에서 밝은 연보라까지
 const DARK_PAL = ['#120c1a', '#24182e', '#3a2a48', '#5a4470', '#8a6aa8', '#c0a0e0', '#f0e0ff'];
-const pal = (type) => (type === 'dark' ? DARK_PAL : PAL[TYPE_PALETTE[type]] ?? PAL.bone);
+// 독 타입: 포켓몬의 독은 보라 — 내장 poison(초록) 대신 자주에서 연분홍빛 보라까지 (사용자 결정)
+export const POISON_PAL = ['#1a0a1e', '#3a1442', '#5e1e6a', '#8a2a96', '#b048c0', '#d878e0', '#f0b0f4', '#fff0ff'];
+const pal = (type) => (type === 'dark' ? DARK_PAL : type === 'poison' ? POISON_PAL : PAL[TYPE_PALETTE[type]] ?? PAL.bone);
 const bright = (p) => p.slice(-4); // 보조 색이 주인공처럼 보이는 이펙트용 밝은 쪽
 const spec = (id, opts = {}, timeScale = 1, layer = 'front', extra = {}) => ({ id, opts, timeScale, layer, ...extra });
 const SELF_KO = { 'self-destruct': 'explosions/small-explosion', explosion: 'explosions/big-explosion' };
@@ -79,8 +81,8 @@ export const fxForStage = (applied) => (applied > 0
 const AILMENT_FX = {
   paralysis: { inflict: spec('impacts/hit-spark', { palette: PAL.volt }), loop: spec('status/stunned') },
   burn: { inflict: spec('status/burning', { light: 1.5 }, 1, 'front', { life: 0.6 }), loop: spec('status/burning', { light: 0.5 }) },
-  poison: { inflict: spec('nature/acid-splash', {}, 2, 'front', { life: 0.6 }), loop: spec('status/poisoned') },
-  toxic: { inflict: spec('nature/acid-splash', {}, 2, 'front', { life: 0.6 }), loop: spec('status/poisoned', { light: 1.5 }) },
+  poison: { inflict: spec('nature/acid-splash', { palette: POISON_PAL }, 2, 'front', { life: 0.6 }), loop: spec('status/poisoned', { palette: POISON_PAL }) },
+  toxic: { inflict: spec('nature/acid-splash', { palette: POISON_PAL }, 2, 'front', { life: 0.6 }), loop: spec('status/poisoned', { palette: POISON_PAL, light: 1.5 }) },
   sleep: { loop: spec('status/sleep') },
   freeze: { inflict: spec('ice/frost-nova', { reach: AREA_REACH / 2 }, 2, 'back', { life: 0.8 }), loop: spec('status/frozen') },
   confusion: { loop: spec('status/confused') },

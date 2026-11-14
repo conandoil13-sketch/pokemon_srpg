@@ -109,3 +109,16 @@ test('a lingering loop takes the real sprite actor once it is available', () => 
   m.update(1 / 60);
   assert.equal(m.count, 1);
 });
+
+import { POISON_PAL } from '../src/data/moveFx.js';
+import { fxForMove as fxm2 } from '../src/data/moveFx.js';
+import { MOVES as MV } from '../src/data/moves.js';
+
+test('poison effects are purple (R >= G and B >= G for every color)', () => {
+  const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  for (const c of POISON_PAL) { const [r, g, b] = rgb(c); assert.ok(r >= g && b >= g, c); }
+  assert.deepEqual(fxForAilment('poison').loop.opts.palette, POISON_PAL);
+  assert.deepEqual(fxForAilment('toxic').inflict.opts.palette, POISON_PAL);
+  const spec = fxm2(MV['poison-sting'], { distance: 1 });
+  assert.ok(JSON.stringify(spec).includes(POISON_PAL[4]), 'poison move uses the purple palette');
+});
