@@ -16,8 +16,9 @@ const STEP_LOCK = 0.25;   // 볼 한 단계 뒤 연타 방지
 const AUTO_STEP = 0.4;    // 안 고른 볼 자동 공개 간격
 const TEN_AUTO = 0.12;    // 10연속 모두 열기 간격
 const SHAKE = 0.45;
+const RETURN_LOCK = 1.0; // 뽑기를 마치고 메뉴로 돌아온 뒤 연타로 다시 사지 않게
 const THREE_X = [W / 2 - 72, W / 2, W / 2 + 72];
-const TEN_POS = Array.from({ length: 10 }, (_, i) => ({ x: 28 + (i % 5) * 50, y: i < 5 ? 50 : 108 }));
+const TEN_POS = Array.from({ length: 10 }, (_, i) => ({ x: 28 + (i % 5) * 50, y: i < 5 ? 40 : 94 })); // 둘째 줄 이름이 대사 창에 안 가리게
 
 export function createGachaScene({ game, rng, onBack, onPulled }) {
   let mode = 'menu', cursor = 0, menuCursor = 0, t = 0, clock = 0, msg = null;
@@ -28,8 +29,10 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
     { label: `10연속 (${GACHA_TEN_COST}코인)`, enabled: true },
     { label: '돌아가기', enabled: true },
   ];
+  const menuBox = () => { const r = ui.menuRect(items(), 0, 0); return { x: W - r.w - 4, y: H - 54 - r.h, w: r.w, h: r.h }; };
   const say = (lines) => { msg = lines; mode = 'msg'; t = 0; };
-  const toMenu = () => { mode = 'menu'; t = 0; balls = []; chosen = -1; cursor = menuCursor; }; // 메뉴는 마지막 고른 줄로
+  let menuLock = CHOICE_LOCK;
+  const toMenu = (lock = CHOICE_LOCK) => { mode = 'menu'; t = 0; menuLock = lock; balls = []; chosen = -1; cursor = menuCursor; }; // 메뉴는 마지막 고른 줄로
 
   const makeBalls = (list) => list.map((b) => ({ ...b, kind: 'poke', target: BALL_OF[b.rarity], opened: false, shake: 0 }));
   // 볼 한 단계: 목표 볼보다 낮으면 바뀌고, 같으면 열림
@@ -76,14 +79,31 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
       if (mode === 'menu') {
         if (ev.type === 'cancel') { onBack(); return; }
         if (ev.type === 'dir' && ev.dy) cursor = (cursor + ev.dy + 3) % 3;
-        if (pick) { menuCursor = cursor; if (cursor === 0) startOne(); else if (cursor === 1) startTen(); else onBack(); }
+        if (ev.type === 'click') { // 누른 줄만 (메뉴 밖 클릭은 무시)
+          const r = menuBox();
+          if (ev.px < r.x || ev.px >= r.x + r.w || ev.py < r.y || ev.py >= r.y + r.h) return;
+          const i = ui.menuIndexAt(items(), r.x, r.y, ev.py);
+          if (i < 0 || i >= 3) return;
+          cursor = i;
+        }
+        if (pick && t >= menuLock) {
+          menuCursor = cursor === 1 ? 0 : cursor; // 10연속 뒤엔 1회 줄로 (연타 재구매 방지)
+          if (cursor === 0) startOne(); else if (cursor === 1) startTen(); else onBack();
+        }
         return;
       }
       if (mode === 'choose') {
         if (ev.type === 'cancel') { toMenu(); return; } // 고르기 전 취소: 코인 그대로
         if (ev.type === 'dir' && ev.dx) cursor = (cursor + ev.dx + 3) % 3;
-        if (ev.type === 'click' && ev.px !== undefined) cursor = THREE_X.reduce((best, x, i) => (Math.abs(ev.px - x) < Math.abs(ev.px - THREE_X[best]) ? i : best), 0);
-        if (pick && t >= STEP_LOCK) choose(cursor);
+        if (ev.type === 'click' && ev.px !== undefined) { // 볼 위를 누른 경우만 그 볼, 그 밖은 지금 커서 볼
+          const hit = THREE_X.findIndex((x) => Math.abs(ev.px - x) <= 18 && ev.py >= 54 && ev.py <= 100);
+          if (hit >= 0) cursor = hit;
+        }
+        if (ev.type === 'cursor' && ev.px !== undefined) { // 마우스를 올리면 그 볼로
+          const hit = THREE_X.findIndex((x) => Math.abs(ev.px - x) <= 18 && ev.py >= 54 && ev.py <= 100);
+          if (hit >= 0) cursor = hit;
+        }
+        if (pick && t >= CHOICE_LOCK) choose(cursor);
         return;
       }
       if (mode === 'open') {
@@ -93,7 +113,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
         else if (t >= CHOICE_LOCK) { mode = 'others'; t = 0; auto = 0; }
         return;
       }
-      if (mode === 'others') { if (pick && t >= CHOICE_LOCK && balls.every((b) => b.opened)) toMenu(); return; }
+      if (mode === 'others') { if (pick && t >= CHOICE_LOCK && balls.every((b) => b.opened)) toMenu(RETURN_LOCK); return; }
       if (mode === 'ten') {
         const next = balls.findIndex((b) => !b.opened);
         if (next < 0) { if (pick && t >= CHOICE_LOCK) { mode = 'tenList'; t = 0; } return; }
@@ -101,7 +121,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
         if (pick && t >= STEP_LOCK && !autoOn) { step(balls[next], TEN_POS[next]); t = 0; }
         return;
       }
-      if (mode === 'tenList') { if ((pick || ev.type === 'cancel') && t >= CHOICE_LOCK) toMenu(); }
+      if (mode === 'tenList') { if ((pick || ev.type === 'cancel') && t >= CHOICE_LOCK) toMenu(RETURN_LOCK); }
     },
     update(dt) {
       t += dt; clock += dt;
@@ -137,8 +157,8 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
       if (mode === 'menu') {
         drawBall(ctx, 'poke', W / 2, 74);
         ui.drawMessage(ctx, ['동료를 모집할까?', '볼 3개 중 하나를 고른다 · 10연속은 10% 할인'], null, false);
-        const r = ui.menuRect(items(), 0, 0);
-        ui.drawMenu(ctx, items(), cursor, W - r.w - 4, H - 54 - r.h);
+        const r = menuBox();
+        ui.drawMenu(ctx, items(), cursor, r.x, r.y);
       } else if (mode === 'choose') {
         balls.forEach((b, i) => {
           const bob = i === cursor ? Math.round(Math.sin(clock * 6) * 2) - 3 : 0;
@@ -148,7 +168,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
         ui.drawMessage(ctx, ['어느 볼을 열까?', '좌우로 고르고 확인'], null, blink);
       } else if (mode === 'open') {
         const b = balls[chosen];
-        balls.forEach((o, i) => { if (i !== chosen) drawBall(ctx, 'poke', i < chosen ? 24 : W - 24, 74, { r: 8 }); }); // 옆 볼은 작게 대기
+        [0, 1, 2].filter((i) => i !== chosen).forEach((i, k) => drawBall(ctx, 'poke', k === 0 ? 24 : W - 24, 74, { r: 8 })); // 옆 볼은 작게 양쪽에서 대기
         if (!b.opened) {
           drawBall(ctx, b.kind, W / 2, 72, { r: 18, dx: wobble(b) });
           ui.drawMessage(ctx, ['클릭해서 열자!', ''], null, blink);
