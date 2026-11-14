@@ -113,9 +113,9 @@ export function createDittoBuild({ game, onSave = () => {}, onClose }) {
         if (sel < top) top = sel;
         if (sel >= top + ROWS) top = sel - ROWS + 1;
       }
-      if (ev.type === 'click' && ev.py !== undefined && ev.py >= LIST_Y) {
-        const k = top + Math.floor((ev.py - LIST_Y) / ROW_H);
-        if (k >= list.length) return;
+      if (ev.type === 'click' && ev.py !== undefined) { // 목록 줄을 누른 경우만
+        const row = Math.floor((ev.py - LIST_Y) / ROW_H), k = top + row;
+        if (ev.py < LIST_Y || row >= ROWS || k >= list.length) return;
         sel = k;
       }
       if (pick && list[sel]) choose(list[sel]);

@@ -177,7 +177,7 @@ export function traps(trapper, foe) {
 export function pickupLoot(members, rng) {
   const out = [];
   for (const m of members) {
-    const a = SPECIES[m.species].abilities[m.abilitySlot ?? 0] ?? SPECIES[m.species].abilities[0];
+    const a = m.build?.ability ?? SPECIES[m.species].abilities[m.abilitySlot ?? 0] ?? SPECIES[m.species].abilities[0]; // 메타몽은 빌드 특성
     if ((a === 'pickup' || a === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'pickupCoins' : 'candy');
   }
   return out;

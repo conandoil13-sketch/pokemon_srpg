@@ -541,3 +541,18 @@ test('box: only ditto has the build menu item', async () => {
   box.handle({ type: 'confirm' });
   assert.ok(!labels().includes('메타몽 빌드'));
 });
+
+test('review: clicks outside the build list do nothing; town shows a second message page', async () => {
+  const { b, calls } = await buildScene((g) => { g.items.capsules = [{ kind: 'move', value: 'ember', from: 'charmander' }]; });
+  b.handle({ type: 'click', px: 100, py: 40 }); // 위쪽 패널
+  assert.equal(b.mode, 'list');
+  b.handle({ type: 'click', px: 100, py: 186 }); // 목록 아래 (6번째 줄 자리)
+  assert.equal(b.mode, 'list');
+  assert.equal(calls.save, 0);
+  const town = createTown({ onSortie() {}, message: [['마을로 돌아왔다.', '코인 10'], ['가방이 가득 차서', '오래된 캡슐 1개를 버렸다.']] });
+  assert.deepEqual(town.message.lines, ['마을로 돌아왔다.', '코인 10']);
+  town.handle({ type: 'confirm' });
+  assert.deepEqual(town.message.lines, ['가방이 가득 차서', '오래된 캡슐 1개를 버렸다.']);
+  town.handle({ type: 'confirm' });
+  assert.equal(town.message, null);
+});

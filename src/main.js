@@ -117,7 +117,6 @@ function endRun(outcome, reached = game.run.floor) {
   let loot = `코인 ${run.loot.coins} · 진화의돌 ${run.loot.evoStone} · 사탕 ${run.loot.candy.length}` + (capsules || powders ? ` · 캡슐 ${capsules} · 파우더 ${powders}` : '');
   const before = [...game.unlocked];
   const reward = outcome === 'wiped' ? { exp: {} } : settleLoot(game, run);
-  if (reward.dropped) loot = `가방이 가득 차 오래된 캡슐 ${reward.dropped}개를 버렸다.`; // 조용히 버리지 않는다
   finishRun(game, run, outcome);
   save();
   const opened = game.unlocked.filter((id) => !before.includes(id)).map((id) => dungeonById(id).name);
@@ -125,7 +124,8 @@ function endRun(outcome, reached = game.run.floor) {
     ? [`${josa(d.name, '을/를')} 돌파했다!`, opened.length ? `${josa(opened[0], '이/가')} 열렸다!` : loot]
     : outcome === 'retreat' ? ['마을로 돌아왔다.', loot]
     : ['눈앞이 캄캄해졌다...', '모은 보물을 잃고 마을로 돌아왔다.'];
-  const toTown = () => go.town(lines, TOWN.returnSpot);
+  const pages = reward.dropped ? [lines, ['가방이 가득 차서', `오래된 캡슐 ${reward.dropped}개를 버렸다.`]] : lines; // 조용히 버리지 않는다
+  const toTown = () => go.town(pages, TOWN.returnSpot);
   if (!Object.keys(reward.exp).length) { toTown(); return; }
   // 경험 사탕: 탐험 보상 결산
   // 사탕 경험치는 출전 멤버만

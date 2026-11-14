@@ -56,7 +56,7 @@ function cleanRun(r) {
       evoStone: clampInt(r.loot?.evoStone, 0, 99),
       candy: (Array.isArray(r.loot?.candy) ? r.loot.candy : []).map((f) => clampInt(f, 1, d.floors)),
       coins: clampInt(r.loot?.coins, 0, 9999999),
-      capsules: (Array.isArray(r.loot?.capsules) ? r.loot.capsules : []).map(cleanCapsule).filter(Boolean),
+      capsules: (Array.isArray(r.loot?.capsules) ? r.loot.capsules : []).map(cleanCapsule).filter(Boolean).slice(-CAPSULE_BAG_MAX),
       powders: cleanPowders(r.loot?.powders),
     },
   };

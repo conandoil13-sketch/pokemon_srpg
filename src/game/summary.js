@@ -6,6 +6,7 @@ import { josa } from '../data/text.js';
 import { statsAt, expForLevel, MAX_LEVEL } from '../core/stats.js';
 import { typesOfMember, abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
+import { effectiveBase } from '../core/dittoBuild.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
 import { drawPortrait } from '../render/sprites.js';
@@ -80,7 +81,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
         small(out ? '출전 중' : '대기 중', 10, y0 + 52, out ? '#2860c8' : '#808080');
         small(`특성: ${ABILITIES[abilityOf(m)]?.name ?? '-'}`, 10, y0 + 66);
       } else if (pg === 1) {
-        const st = statsAt(s.base, m.level), top = Math.max(...Object.values(st)) * 1.1; // 가장 큰 값 기준
+        const st = statsAt(m.build ? effectiveBase(m.build) : s.base, m.level), top = Math.max(...Object.values(st)) * 1.1; // 가장 큰 값 기준
         STAT_ROWS.forEach(([k, label], r) => {
           const y = y0 + r * 14;
           small(label, 10, y);

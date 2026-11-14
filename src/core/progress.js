@@ -1,7 +1,7 @@
 // 파티 진행 (순수): 새 파티, 경험치 적용 → 레벨업·기술·진화 이벤트
 import { SPECIES } from '../data/species.js';
 import { hash } from '../render/pixels.js';
-import { DEFAULT_BUILD } from './dittoBuild.js';
+import { DEFAULT_BUILD, effectiveBase } from './dittoBuild.js';
 import { lineRoot } from './gacha.js';
 import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
@@ -72,7 +72,8 @@ export function applyExp(party, expBySpecies, rng = Math.random) {
     const to = levelForExp(s.growth, m.exp);
     if (to <= m.level) continue;
     const from = m.level;
-    events.push({ type: 'level', species: m.species, from, to, before: statsAt(s.base, from), after: statsAt(s.base, to) });
+    const base = m.build ? effectiveBase(m.build) : s.base; // 메타몽은 빌드 종족값
+    events.push({ type: 'level', species: m.species, from, to, before: statsAt(base, from), after: statsAt(base, to) });
     m.level = to;
     events.push(...learnEvents(m, movesLearnedBetween(s.learnset, from, to, MOVES)));
     // 진화: 갈래 1개면 그대로, 원작이 무작위면 rng, 그 외는 플레이어가 고름 (UI 가 options 로 선택 창)

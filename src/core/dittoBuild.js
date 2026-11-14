@@ -49,7 +49,9 @@ export function capsuleUse(member, capsule) {
   const b = member.build;
   if (capsule.kind === 'move') {
     if (member.moves.includes(capsule.value)) return { ok: false, reason: 'same', slots: [] };
-    return { ok: true, slots: [0, 1, 2, 3] };
+    const slots = member.moves.map((_, k) => k); // 지금 기술 칸 + (4개 미만이면) 다음 빈 칸 하나
+    if (member.moves.length < 4) slots.push(member.moves.length);
+    return { ok: true, slots };
   }
   if (capsule.kind === 'type') {
     const open = member.level >= SECOND_TYPE_LEVEL ? [0, 1] : [0];
@@ -128,7 +130,8 @@ export function cleanBuild(b, level) {
   if (!types.length) types = def.types;
   const bonus = Object.fromEntries(STATS.map((s) => {
     const v = Math.floor(Number(b.bonus?.[s]) || 0);
-    return [s, Math.max(0, Math.min(STAT_MAX - DITTO_BASE, v - (v % POWDER_STEP)))];
+    const top = Math.floor((STAT_MAX - DITTO_BASE) / POWDER_STEP) * POWDER_STEP; // 파우더로 닿을 수 있는 값만 (200)
+    return [s, Math.max(0, Math.min(top, v - (v % POWDER_STEP)))];
   }));
   // 합계 상한을 넘으면 큰 값부터 깎는다
   let over = DITTO_BASE * STATS.length + STATS.reduce((a, s) => a + bonus[s], 0) - statCap(level);

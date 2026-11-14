@@ -46,7 +46,7 @@ test('capsules: slots, same refusals, second type only from Lv.10, consumed on u
     { kind: 'ability', value: 'blaze', from: 'charmander' },
   ];
   assert.equal(capsuleUse(d, g.items.capsules[0]).reason, 'same');
-  assert.deepEqual(capsuleUse(d, g.items.capsules[1]).slots, [0, 1, 2, 3]);
+  assert.deepEqual(capsuleUse(d, g.items.capsules[1]).slots, [0, 1]); // 지금 기술 + 다음 빈 칸
   assert.deepEqual(capsuleUse(d, g.items.capsules[2]).slots, [0]); // Lv.9
   assert.equal(capsuleUse(d, g.items.capsules[3]).reason, 'same');
   assert.deepEqual(applyCapsule(g, 1, 1), { ok: true });
@@ -131,4 +131,22 @@ test('an enemy ditto keeps plain normal stats; enemy KOs are logged for capsules
   assert.equal(s.log.defeated.length, 1);
   assert.deepEqual(Object.keys(s.log.defeated[0]).sort(), ['ability', 'boss', 'moves', 'species', 'types']);
   assert.equal(s.log.defeated[0].species, 'squirtle');
+});
+
+// ---- 리뷰 수정 ----
+import { pickupLoot } from '../src/core/abilities.js';
+import { applyExp } from '../src/core/progress.js';
+import { cleanBuild } from '../src/core/dittoBuild.js';
+
+test('review: pickup from a capsule works; level-up stats use the build; move slots are real; save bonus stays on the grid', () => {
+  const d = newMember('ditto', 9);
+  d.build.ability = 'pickup';
+  assert.equal(pickupLoot([d], () => 0.05).length, 1);
+  d.build.bonus.atk = 100;
+  const plain = newMember('ditto', 9);
+  const [ev] = applyExp([d], { ditto: 99999 });
+  const [ev0] = applyExp([plain], { ditto: 99999 });
+  assert.ok(ev.after.atk > ev0.after.atk);
+  assert.deepEqual(capsuleUse(newMember('ditto', 9), { kind: 'move', value: 'ember', from: 'charmander' }).slots, [0, 1]);
+  assert.equal(cleanBuild({ types: ['normal'], bonus: { hp: 250 }, ability: 'limber' }, 99).bonus.hp, 200);
 });
