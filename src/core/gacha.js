@@ -1,6 +1,7 @@
 // 뽑기 (순수, rng 주입): 1단계 포켓몬, 계열 최종형 종족값으로 희귀도, 같은 계열이 있으면 결정
 import { SPECIES } from '../data/species.js';
 import { newMember } from './progress.js';
+import { mergeIvs, rollIvs, rollGender, genderFits } from './individual.js';
 import { deployed } from './roster.js';
 
 export const GACHA_COST = 100, GACHA_TEN_COST = 900; // 10연속은 10% 할인
@@ -78,10 +79,16 @@ export function claimBalls(game, balls, rng) {
 
 function applyBall(game, ball, rng) {
   const { species, rarity } = ball;
-  if (game.party.some((m) => lineRoot(m.species) === species)) {
+  const have = game.party.find((m) => lineRoot(m.species) === species);
+  if (have) { // 중복: 결정 + 개체값 능력치별 큰 값 + 새 성별 해금 (PokeRogue 식)
     game.shards ??= {};
     game.shards[species] = (game.shards[species] ?? 0) + 1;
-    return { ok: true, species, rarity, duplicate: true };
+    const merged = mergeIvs(have.ivs ?? {}, rollIvs(rng));
+    have.ivs = merged.ivs;
+    const g = rollGender(species, rng);
+    const newGender = g && !(have.genders ?? []).includes(g) && genderFits(have.species, g) ? g : null;
+    if (newGender) have.genders = [...(have.genders ?? []), newGender];
+    return { ok: true, species, rarity, duplicate: true, ivUp: merged.up, newGender };
   }
   const member = newMember(species, joinLevel(game), rng); // 특성 슬롯도 무작위
   game.party.push(member);

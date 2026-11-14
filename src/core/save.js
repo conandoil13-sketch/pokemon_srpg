@@ -1,4 +1,5 @@
 // 저장 / 불러오기 (순수 + 주입한 storage). storage = { getItem(key), setItem(key, value) }
+import { IV_KEYS, IV_MAX, maxIvs, hashIvs, hashGender, genderFits } from './individual.js';
 import { cleanBuild, cleanCapsule, cleanPowders, emptyPowders, CAPSULE_BAG_MAX } from './dittoBuild.js';
 import { SPECIES } from '../data/species.js';
 import { defaultSlot } from './progress.js';
@@ -9,7 +10,7 @@ import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 7;
+const VERSION = 8;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -24,6 +25,16 @@ const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) |
 
 const own = (obj, k) => typeof k === 'string' && Object.hasOwn(obj, k);
 
+// 개체값·성별 정리: 없으면 종 이름으로 고정값, 범위 밖이면 가두기. 메타몽은 31·성별 없음
+function cleanIndividual(m) {
+  if (m.species === 'ditto') return { ivs: maxIvs(), gender: null, genders: [] };
+  const src = m.ivs && typeof m.ivs === 'object' ? m.ivs : hashIvs(m.species);
+  const ivs = Object.fromEntries(IV_KEYS.map((k) => [k, clampInt(src[k] ?? 0, 0, IV_MAX)]));
+  const gender = genderFits(m.species, m.gender ?? null) ? m.gender ?? null : hashGender(m.species);
+  const genders = [...new Set([gender, ...(Array.isArray(m.genders) ? m.genders : [])].filter((g) => g && genderFits(m.species, g)))];
+  return { ivs, gender, genders };
+}
+
 function cleanMember(m) {
   if (!m || typeof m !== 'object' || !own(SPECIES, m.species)) return null;
   const s = SPECIES[m.species];
@@ -37,6 +48,7 @@ function cleanMember(m) {
   const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
   const out = { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
   if (m.species === 'ditto') out.build = cleanBuild(m.build, level); // 메타몽만 빌드
+  Object.assign(out, cleanIndividual(m));
   return out;
 }
 
@@ -98,6 +110,7 @@ export function loadGame(storage) {
   if (data?.version === 4) data = { ...data, version: 5 }; // v4 → v5: 특성 슬롯은 cleanMember 가 채운다
   if (data?.version === 5) data = { ...data, version: 6 }; // v5 → v6: 특성 해금(없으면 잠김)은 cleanMember 가 채운다
   if (data?.version === 6) data = { ...data, version: 7 }; // v6 → v7: 메타몽 빌드·가방은 아래 정리에서 기본값
+  if (data?.version === 7) data = { ...data, version: 8 }; // v7 → v8: 개체값·성별은 cleanMember 가 채운다
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
     const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);

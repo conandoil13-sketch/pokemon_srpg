@@ -27,8 +27,10 @@ export function classifyBranches(fromSpecies, branches, line, balance = BALANCE)
 }
 
 const evos = (sp) => sp.evolutions ?? [];
-export const levelEvolutionOptions = (sp, level) => evos(sp).filter((e) => e.rule.kind === 'level' && level >= e.rule.level).map((e) => e.to);
-export const stoneEvolutionOptions = (sp) => evos(sp).filter((e) => e.rule.kind === 'stone').map((e) => e.to);
+// gender: 그 순간의 성별 (성별 진화 — 엘레이드 ♂·눈여아 ♀ 등). undefined 면 성별 조건을 보지 않음(호환)
+const genderOk = (e, gender) => !e.rule.gender || gender === undefined || e.rule.gender === gender;
+export const levelEvolutionOptions = (sp, level, gender) => evos(sp).filter((e) => e.rule.kind === 'level' && level >= e.rule.level && genderOk(e, gender)).map((e) => e.to);
+export const stoneEvolutionOptions = (sp, gender) => evos(sp).filter((e) => e.rule.kind === 'stone' && genderOk(e, gender)).map((e) => e.to);
 
 // 0개 → null, 1개 → auto, 모두 무작위 갈래 → rng 로 auto, 그 외 → 플레이어가 고름
 export function pickEvolution(options, sp, rng) {

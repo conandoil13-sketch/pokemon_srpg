@@ -50,7 +50,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   function openMenu() {
     const m = current();
     if (!m) return;
-    const canStone = stoneEvolutionOptions(SPECIES[m.species]).length > 0 && game.items.evoStone > 0;
+    const canStone = stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null).length > 0 && game.items.evoStone > 0;
     menu = [
       { label: isOut(m) ? '출전에서 빼기' : '출전에 넣기', enabled: true, act: 'sortie' },
       { label: '자세히 보기', enabled: true, act: 'summary' },
@@ -86,7 +86,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       mode = 'summary';
       return;
     }
-    if (item.act === 'stone') { remember(); onEvolve(m, stoneEvolutionOptions(SPECIES[m.species])); return; } // 돌은 실제로 진화할 때 차감 (main)
+    if (item.act === 'stone') { remember(); onEvolve(m, stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null)); return; } // 돌은 실제로 진화할 때 차감 (main)
     const r = toggleSortie(game, m.species);
     if (!r.ok) { say(REASON[r.reason]); return; }
     onSave();

@@ -2,6 +2,15 @@
 import { SPECIES } from '../data/species.js';
 import { hash } from '../render/pixels.js';
 import { DEFAULT_BUILD, effectiveBase } from './dittoBuild.js';
+import { rollIvs, hashIvs, maxIvs, rollGender, hashGender } from './individual.js';
+
+// 개체값·성별: rng 가 있으면 무작위, 없으면 종 이름으로 고정. 메타몽은 개체값 31·성별 없음
+function individualOf(species, rng) {
+  if (species === 'ditto') return { ivs: maxIvs(), gender: null, genders: [] };
+  const ivs = rng ? rollIvs(rng) : hashIvs(species);
+  const gender = rng ? rollGender(species, rng) : hashGender(species);
+  return { ivs, gender, genders: gender ? [gender] : [] };
+}
 import { lineRoot } from './gacha.js';
 import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
@@ -17,7 +26,7 @@ export const defaultSlot = (species) => (SPECIES[species].abilities.length > 1 ?
 export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
   const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
-  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false, ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
+  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false, ...individualOf(species, rng), ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
 }
 
 // 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)
@@ -73,12 +82,12 @@ export function applyExp(party, expBySpecies, rng = Math.random) {
     if (to <= m.level) continue;
     const from = m.level;
     const base = m.build ? effectiveBase(m.build) : s.base; // 메타몽은 빌드 종족값
-    events.push({ type: 'level', species: m.species, from, to, before: statsAt(base, from), after: statsAt(base, to) });
+    events.push({ type: 'level', species: m.species, from, to, before: statsAt(base, from, m.ivs), after: statsAt(base, to, m.ivs) });
     m.level = to;
     events.push(...learnEvents(m, movesLearnedBetween(s.learnset, from, to, MOVES)));
     // 진화: 갈래 1개면 그대로, 원작이 무작위면 rng, 그 외는 플레이어가 고름 (UI 가 options 로 선택 창)
-    const pick = pickEvolution(levelEvolutionOptions(s, to), s, rng);
-    if (pick) events.push({ type: 'evolve', species: m.species, options: pick.auto ? [pick.auto] : pick.choose, random: !!pick.auto && levelEvolutionOptions(s, to).length > 1 });
+    const pick = pickEvolution(levelEvolutionOptions(s, to, m.gender ?? null), s, rng); // 성별 진화
+    if (pick) events.push({ type: 'evolve', species: m.species, options: pick.auto ? [pick.auto] : pick.choose, random: !!pick.auto && levelEvolutionOptions(s, to, m.gender ?? null).length > 1 });
   }
   return events;
 }
@@ -97,4 +106,4 @@ export function evolveMember(member, to) {
   return learnEvents(member, moves);
 }
 
-export const stoneTargets = (party) => party.filter((m) => stoneEvolutionOptions(SPECIES[m.species]).length > 0);
+export const stoneTargets = (party) => party.filter((m) => stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null).length > 0);
