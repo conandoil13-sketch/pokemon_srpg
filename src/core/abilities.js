@@ -38,6 +38,7 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   let m = 1;
   const pinch = PINCH[attacker.ability];
   if (pinch && type === pinch && attacker.hp <= attacker.maxHp / 3) m *= 1.5;
+  if (attacker.ability === 'rivalry' && attacker.gender && defender.gender) m *= attacker.gender === defender.gender ? 1.25 : 0.75; // 투쟁심
   if (has(attacker, 'technician') && move.power <= 60) m *= 1.5;
   if (has(attacker, 'tinted-lens') && typeMult > 0 && typeMult < 1) m *= 2;
   if ((has(attacker, 'huge-power') || has(attacker, 'pure-power')) && physical) m *= 2;

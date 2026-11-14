@@ -3,6 +3,9 @@ import POKEDEX from './generated/pokedex.js';
 
 // SRPG 로 다시 해석한 특성 (스펙 §4-③) — 설명은 게임 규칙 그대로
 export const SRPG_ABILITY_TEXT = {
+  rivalry: '성별이 같은 상대에게는 위력이 1.25배, 다른 상대에게는 0.75배가 된다.',
+  'cute-charm': '접촉 공격을 받으면 30% 확률로 상대(다른 성별)를 헤롱헤롱하게 만든다.',
+  oblivious: '헤롱헤롱 상태가 되지 않는다.',
   intimidate: '이동을 마쳤을 때 옆의 상대 공격을 1랭크 낮춘다. 같은 상대에게 연달아서는 안 된다.',
   drizzle: '층을 시작할 때 비를 내린다. 날씨 특성이 여럿이면 느린 쪽이 나중에 덮는다.',
   drought: '층을 시작할 때 햇살을 강하게 한다. 날씨 특성이 여럿이면 느린 쪽이 나중에 덮는다.',
@@ -34,7 +37,7 @@ export const SRPG_ABILITY_TEXT = {
 
 // 지금 게임에 해당 시스템이 없어 효과가 없는 특성 (스펙 §4-②)
 export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk', 'multitype', 'run-away', 'suction-cups', 'natural-cure',
-  'pressure', 'rivalry', 'cute-charm', 'oblivious', 'inner-focus', 'steadfast', 'stench', 'rock-head', 'reckless', 'skill-link', 'illuminate', 'liquid-ooze'];
+  'pressure', 'inner-focus', 'steadfast', 'stench', 'rock-head', 'reckless', 'skill-link', 'illuminate', 'liquid-ooze'];
 
 export const ABILITIES = Object.fromEntries(Object.values(POKEDEX.abilities).map((a) => [a.id, {
   ...a,

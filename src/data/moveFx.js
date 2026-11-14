@@ -85,4 +85,5 @@ const AILMENT_FX = {
   freeze: { inflict: spec('ice/frost-nova', { reach: AREA_REACH / 2 }, 2, 'back', { life: 0.8 }), loop: spec('status/frozen') },
   confusion: { loop: spec('status/confused') },
 };
+AILMENT_FX.infatuation = AILMENT_FX.confusion; // 헤롱헤롱: 혼란 연출을 같이 쓴다 (분홍 계열)
 export const fxForAilment = (ailment) => AILMENT_FX[ailment] ?? { loop: null };

@@ -556,3 +556,34 @@ test('review: clicks outside the build list do nothing; town shows a second mess
   town.handle({ type: 'confirm' });
   assert.equal(town.message, null);
 });
+
+// ---- 성별 전환 · 뽑기 중복 대사 ----
+test('summary: gender switch needs the other gender unlocked, then saves', async () => {
+  const { newMember } = await import('../src/core/progress.js');
+  const game = newGame();
+  const p = newMember('pikachu', 10);
+  p.gender = 'male'; p.genders = ['male'];
+  game.party.push(p);
+  const { box, calls } = await boxScene(0, { game });
+  while (box.cursorMember.species !== 'pikachu') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  box.handle({ type: 'confirm' }); box.handle({ type: 'dir', dx: 0, dy: 1 }); box.handle({ type: 'confirm' }); // 자세히 보기
+  const sm = box.summary;
+  assert.equal(sm.page, 0);
+  box.handle({ type: 'confirm' });
+  assert.equal(sm.mode, 'msg');
+  assert.match(sm.message.join(' '), /다른 성별/);
+  for (let i = 0; i < 5; i++) box.update(0.1);
+  box.handle({ type: 'confirm' });
+  p.genders.push('female');
+  box.handle({ type: 'confirm' });
+  assert.equal(p.gender, 'female');
+  assert.equal(calls.save, 1);
+});
+
+test('gacha duplicate lines mention IVs and a new gender', async () => {
+  const { duplicateLines } = await import('../src/game/gacha.js');
+  const lines = duplicateLines({ species: 'eevee', duplicate: true, ivUp: ['atk', 'spe'], newGender: 'female' });
+  assert.match(lines.join(' '), /결정/);
+  assert.match(lines.join(' '), /공격·스피드 개체값이 올랐다/);
+  assert.match(lines.join(' '), /♀/);
+});

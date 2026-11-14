@@ -1,0 +1,50 @@
+// 개체 차이 (순수): 개체값 · 성별 · 몸무게
+import { SPECIES } from '../data/species.js';
+
+// 안다리걸기·풀묶기: 상대 몸무게(kg)로 위력 (4세대)
+export function weightPower(kg) {
+  return kg < 10 ? 20 : kg < 25 ? 40 : kg < 50 ? 60 : kg < 100 ? 80 : kg < 200 ? 100 : 120;
+}
+export const weightOf = (unit) => unit.weight ?? SPECIES[unit.species]?.weight ?? 50;
+
+import { hash } from '../render/pixels.js';
+
+// ---- 개체값 ----
+export const IV_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
+export const IV_MAX = 31;
+export const maxIvs = () => Object.fromEntries(IV_KEYS.map((k) => [k, IV_MAX]));
+export const rollIvs = (rng) => Object.fromEntries(IV_KEYS.map((k) => [k, Math.min(IV_MAX, Math.floor(rng() * (IV_MAX + 1)))]));
+export const hashIvs = (...seed) => Object.fromEntries(IV_KEYS.map((k) => [k, Math.min(IV_MAX, Math.floor(hash(...seed, 'iv', k) * (IV_MAX + 1)))]));
+// 능력치마다 큰 값 (뽑기 중복). up = 오른 능력치
+export function mergeIvs(have, add) {
+  const ivs = {}, up = [];
+  for (const k of IV_KEYS) { ivs[k] = Math.max(have[k] ?? 0, add[k] ?? 0); if (ivs[k] > (have[k] ?? 0)) up.push(k); }
+  return { ivs, up };
+}
+export const ivGrade = (v) => (v >= 31 ? '최고' : v >= 26 ? '훌륭함' : v >= 16 ? '꽤 좋음' : v >= 1 ? '그럭저럭' : '별로');
+
+// ---- 성별 ---- (genderRate: -1 없음, 0 ♂만, 8 ♀만, 그 외 ♀ 확률 rate/8)
+export const GENDER_COLOR = { male: '#4878f0', female: '#f05878' };
+const rateOf = (species) => SPECIES[species]?.genderRate ?? -1;
+const fromRoll = (rate, r) => (rate < 0 ? null : rate === 0 ? 'male' : rate >= 8 ? 'female' : r < rate / 8 ? 'female' : 'male');
+export const rollGender = (species, rng) => { const rate = rateOf(species); return rate > 0 && rate < 8 ? fromRoll(rate, rng()) : fromRoll(rate, 0); };
+export const hashGender = (species, ...seed) => fromRoll(rateOf(species), hash(species, ...seed, 'gender'));
+export const genderFixed = (species) => { const r = rateOf(species); return r <= 0 || r >= 8; };
+export const genderFits = (species, g) => { const r = rateOf(species); return r < 0 ? g === null : r === 0 ? g === 'male' : r >= 8 ? g === 'female' : g === 'male' || g === 'female'; };
+
+// 성별 전환: 얻은 적 있는 성별(genders)로만, 비용 없음
+export function setGender(game, species, g) {
+  const m = game.party.find((x) => x.species === species);
+  if (!m) return { ok: false, reason: 'missing' };
+  if (genderFixed(species)) return { ok: false, reason: 'fixed' };
+  if (!(m.genders ?? []).includes(g)) return { ok: false, reason: 'locked' };
+  m.gender = g;
+  return { ok: true };
+}
+
+// 이름 옆 기호 (니드런처럼 이름에 기호가 있으면 생략)
+export function genderSymbol(species, g) {
+  if (!g) return '';
+  if (/[♂♀]/.test(SPECIES[species]?.name ?? '')) return '';
+  return g === 'male' ? '♂' : '♀';
+}

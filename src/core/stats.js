@@ -3,15 +3,17 @@ import { BALANCE } from '../data/balance.js';
 const IV = 31;
 export const MAX_LEVEL = 100;
 
-export function statsAt(base, level) {
-  const core = (b) => Math.floor((2 * b + IV) * level / 100);
+export function statsAt(base, level, ivs = null) {
+  // ivs: 개체값 (없으면 31 — 지금까지와 같음)
+  const iv = (k) => ivs?.[k] ?? IV;
+  const core = (b, k) => Math.floor((2 * b + iv(k)) * level / 100);
   return {
-    hp: Math.floor((core(base.hp) + level + 10) * BALANCE.hpScale(level)),
-    atk: core(base.atk) + 5,
-    def: core(base.def) + 5,
-    spa: core(base.spa) + 5,
-    spd: core(base.spd) + 5,
-    spe: core(base.spe) + 5,
+    hp: Math.floor((core(base.hp, 'hp') + level + 10) * BALANCE.hpScale(level)),
+    atk: core(base.atk, 'atk') + 5,
+    def: core(base.def, 'def') + 5,
+    spa: core(base.spa, 'spa') + 5,
+    spd: core(base.spd, 'spd') + 5,
+    spe: core(base.spe, 'spe') + 5,
   };
 }
 

@@ -1,4 +1,5 @@
 // 데미지 / 명중 계산 (순수 함수, spec §4.4)
+import { weightPower, weightOf } from './individual.js';
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
@@ -21,6 +22,7 @@ export function hitChance(attacker, defender, move, defTile, weather = null) {
 
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)
 function baseDamage(attacker, defender, move, defTile, weather = null) {
+  if (move.weightPower) move = { ...move, power: weightPower(weightOf(defender)) }; // 안다리걸기·풀묶기: 상대 몸무게
   const physical = move.category === 'physical';
   // 천진: 상대 랭크를 무시 (틀깨기면 천진도 무시)
   const aKey = physical ? 'atk' : 'spa', dKey = physical ? 'def' : 'spd';

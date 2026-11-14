@@ -193,3 +193,64 @@ test('every ability has a Korean name and description; SRPG ones use our rules t
   assert.equal(ABILITIES.intimidate.desc, SRPG_ABILITY_TEXT.intimidate);
   assert.ok(ABILITIES.intimidate.desc.includes('이동'));
 });
+
+// ---- 성별 비율 · 몸무게 · 성별 진화 ----
+import POKEDEX from '../src/data/generated/pokedex.js';
+import { createHash } from 'node:crypto';
+
+test('every species has a gender rate and a weight', () => {
+  for (const s of Object.values(SPECIES)) {
+    assert.ok(Number.isInteger(s.genderRate) && s.genderRate >= -1 && s.genderRate <= 8, s.key);
+    assert.ok(s.weight > 0, s.key);
+  }
+  assert.equal(SPECIES.ditto.genderRate, -1);
+  assert.equal(SPECIES.ditto.weight, 4);
+  assert.equal(SPECIES['nidoran-f'].genderRate, 8);
+  assert.equal(SPECIES['nidoran-m'].genderRate, 0);
+  assert.equal(SPECIES.eevee.genderRate, 1);
+  assert.equal(SPECIES.snorlax.weight, 460);
+});
+
+test('gendered evolutions keep their gender condition', () => {
+  const rule = (from, to) => SPECIES[from].evolutions.find((e) => e.to === to).rule;
+  assert.equal(rule('kirlia', 'gallade').gender, 'male');
+  assert.equal(rule('kirlia', 'gardevoir').gender, undefined);
+  assert.equal(rule('snorunt', 'froslass').gender, 'female');
+  assert.equal(rule('burmy', 'wormadam').gender, 'female');
+  assert.equal(rule('burmy', 'mothim').gender, 'male');
+  assert.equal(rule('combee', 'vespiquen').gender, 'female');
+});
+
+test('regenerated data keeps every existing value (only new fields added)', () => {
+  const strip = (evos) => evos.map((e) => ({ ...e, rule: Object.fromEntries(Object.entries(e.rule).filter(([k]) => k !== 'gender')) }));
+  const keep = Object.fromEntries(Object.entries(POKEDEX.species).map(([k, s]) => [k, { base: s.base, types: s.types, learnset: s.learnset, evolutions: strip(s.evolutions), abilities: s.abilities, stage: s.stage, bst: s.bst, dex: s.dex, name: s.name, growth: s.growth, baseExp: s.baseExp, legendary: s.legendary }]));
+  const sha = (o) => createHash('sha1').update(JSON.stringify(o)).digest('hex');
+  assert.equal(sha(keep), '6bbb9325dd6bb975499e89900f09691e551e8a58');
+  const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
+  assert.equal(sha(oldMoves), 'd8bfe8cd8abd8d1a6eab82e276ba6203092ea7fb');
+  assert.equal(sha(POKEDEX.abilities), '4354c097e52659f6d0ee4dbe1193f2e036b37815');
+  assert.ok(gk);
+});
+
+test('weight-power moves are learnable and flagged', () => {
+  for (const id of ['low-kick', 'grass-knot']) {
+    assert.equal(MOVES[id].weightPower, true, id);
+    assert.equal(MOVES[id].learnable, true, id);
+  }
+  assert.equal(MOVES.attract.ailment, 'infatuation');
+  assert.equal(MOVES.attract.learnable, true);
+});
+
+import { makeUnit } from '../src/core/battle.js';
+import { expectedDamage } from '../src/core/damage.js';
+import { weightPower } from '../src/core/individual.js';
+
+test('low kick power follows the target weight', () => {
+  assert.deepEqual([9.9, 10, 24.9, 25, 49.9, 50, 99.9, 100, 199.9, 200].map(weightPower), [20, 40, 40, 60, 60, 80, 80, 100, 100, 120]);
+  const a = makeUnit({ species: 'machop', side: 'ally', x: 0, y: 0, level: 30 });
+  const light = makeUnit({ species: 'ditto', side: 'enemy', x: 1, y: 0, level: 30 });
+  const heavy = makeUnit({ species: 'ditto', side: 'enemy', x: 1, y: 0, level: 30 });
+  heavy.weight = 460;
+  const r = expectedDamage(a, heavy, MOVES['low-kick'], '.') / expectedDamage(a, light, MOVES['low-kick'], '.');
+  assert.ok(r > 4 && r < 7, String(r)); // 위력 120 / 20
+});

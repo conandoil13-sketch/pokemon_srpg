@@ -17,7 +17,7 @@ test('createBattle builds level-based units from the party and the map', () => {
   assert.deepEqual(find(s, 'ally-ditto').moves, ['tackle']);
   for (const u of allies) {
     assert.equal(u.level, BALANCE.startLevel);
-    assert.deepEqual(u.stats, statsAt(SPECIES[u.species].base, u.level));
+    assert.deepEqual(u.stats, statsAt(SPECIES[u.species].base, u.level, u.ivs)); // 개체값 반영
     assert.equal(u.hp, u.stats.hp);
     assert.ok(u.moves.length >= 1 && u.moves.length <= 4);
   }

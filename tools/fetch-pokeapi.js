@@ -8,7 +8,7 @@ import { classifyBranches } from '../src/core/evolution.js';
 import { TARGET_KIND } from '../src/data/moveTargets.js';
 
 const MAX_DEX = 493;
-const EXTRA_MOVES = ['tackle']; // 기술이 하나도 없을 때의 대체 기술
+const EXTRA_MOVES = ['tackle', 'grass-knot']; // tackle: 기술이 없을 때 대체 / grass-knot: 몸무게 기술(기술머신 전용, 나중 획득)
 const VERSION_GROUPS = ['platinum', 'heartgold-soulsilver', 'diamond-pearl']; // 습득표 우선순위
 const GENERATION = 4;
 const CONCURRENCY = 8;
@@ -80,7 +80,10 @@ const toDetail = (x) => ({
   minHappiness: x.min_happiness ?? null,
   item: x.item?.name ?? null,
   extra: EXTRA_KEYS.some((k) => x[k] !== null && x[k] !== undefined) || x.needs_overworld_rain === true || x.turn_upside_down === true || !['level-up', 'use-item', 'trade'].includes(x.trigger.name),
+  gender: x.gender === 1 ? 'female' : x.gender === 2 ? 'male' : null, // 성별 진화 (분류에는 쓰지 않고 규칙에 덧붙임)
 });
+// 분류 결과 규칙에 성별 조건을 덧붙인다 (레벨·종류 분류는 그대로)
+const withGender = (branch, details) => { const g = details.find((d) => d.gender)?.gender; return g ? { ...branch, rule: { ...branch.rule, gender: g } } : branch; };
 
 // 진화 사슬 전체를 훑어 종족별 { stage, evolutions[] } 계산 (494 이후 종족은 버림)
 function walkChain(chain) {
@@ -100,6 +103,7 @@ function walkChain(chain) {
         evolutions[i] = { ...one, rule: { ...one.rule, ...(evolutions[i].rule.random ? { random: true } : {}) } };
       });
     }
+    kids.forEach((k, i) => { evolutions[i] = withGender(evolutions[i], k.evolution_details.map(toDetail)); }); // 성별 진화
     info[node.species.name] = { stage: depth, evolutions };
     kids.forEach((k, i) => visit(k, depth + 1, evolutions[i].rule.kind === 'level' ? evolutions[i].rule.level : null));
   };
@@ -139,6 +143,7 @@ async function main() {
       stage: evo.stage, bst: Object.values(base).reduce((a, b) => a + b, 0),
       legendary: !!(sp.is_legendary || sp.is_mythical), evolutions: evo.evolutions,
       abilities: gen4AbilityCandidates(pk), // 아래에서 4세대 이하 특성만 남긴다
+      genderRate: sp.gender_rate, weight: pk.weight / 10, // 성별 비율(-1 없음, ♀ = rate/8), 몸무게 kg
     };
   }));
 
