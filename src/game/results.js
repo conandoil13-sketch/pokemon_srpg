@@ -13,10 +13,10 @@ export { CHOICE_LOCK };
 const BAR_TIME = 1.2;
 
 // members: 결산할 멤버 (기본 = 파티 전체, 탐험에선 출전 멤버). coins: 이번 층에서 얻은 코인 표시
-export function createResults({ game, result, log, firstClear, onDone, members = game.party, coins = 0 }) {
+export function createResults({ game, result, log, firstClear, onDone, members = game.party, coins = 0, cap: capIn = null }) {
   const party = members;
   const before = party.map((m) => ({ species: m.species, exp: m.exp }));
-  const cap = levelCapFor(game); // 레벨 상한: 넘친 경험치는 버림
+  const cap = capIn ?? levelCapFor(game); // 레벨 상한: 넘친 경험치는 버림
   const events = applyExp(party, log.exp ?? {}, Math.random, cap);
   const cappedSet = new Set(events.filter((e) => e.capped).map((e) => e.species));
   const gotStone = result === 'win' && firstClear;

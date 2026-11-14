@@ -27,7 +27,7 @@ const SHAPE = {
   normal: { half: null, dl: [-1, 1], max: 6 },
   elite: { half: 'high', dl: [2, 2], max: 3 },
 };
-export const BUDGET_SLACK = 1.15, MIN_ENEMIES = 2, EARLY_MAX = 4;
+export const MIN_ENEMIES = 2, EARLY_MAX = 4;
 
 // 깊을수록 예산이 무작위로 더 커질 수 있다 (사용자 결정): 1~2층 0, 그 뒤 층마다 +5%p, 뒤 던전일수록 +5%p, 최대 +25%
 export const BONUS_STEP = 0.05, BONUS_MAX = 0.25;

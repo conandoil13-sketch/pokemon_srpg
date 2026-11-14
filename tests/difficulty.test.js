@@ -140,3 +140,22 @@ test('budget bonus: none on floors 1-2, grows with depth and later dungeons, cap
   for (let seed = 1; seed <= 500; seed++) if (total(rollEnemies(cave, 6, seed)) > cave.budget[5]) over++;
   assert.ok(over > 0);
 });
+
+import { placeEnemies } from '../src/core/floorgen.js';
+
+test('review: enemies fall back to the left area when the right side runs out; never crash', () => {
+  const rolled = [{ species: 'pidgey', level: 6 }, { species: 'rattata', level: 6 }, { species: 'caterpie', level: 6 }];
+  const out = placeEnemies(rolled, [{ x: 9, y: 1 }], [{ x: 10, y: 2 }], [{ x: 7, y: 5 }, { x: 6, y: 5 }]);
+  assert.deepEqual(out.map((e) => [e.x, e.y]), [[9, 1], [10, 2], [7, 5]]);
+  assert.equal(placeEnemies(rolled, [], [{ x: 9, y: 1 }], []).length, 1);
+  assert.equal(placeEnemies(rolled, [], [], []).length, 0);
+});
+
+test('review: capped event comes after level events and only below the max level', () => {
+  const m = newMember('pidgey', 14);
+  const ev = applyExp([m], { pidgey: 999999 }, Math.random, 15);
+  assert.equal(ev[0].type, 'level');
+  assert.equal(ev.at(-1).type, 'capped');
+  const free = newMember('pidgey', 99);
+  assert.ok(!applyExp([free], { pidgey: 1e9 }).some((e) => e.capped));
+});

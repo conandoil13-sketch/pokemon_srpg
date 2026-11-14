@@ -17,6 +17,7 @@ import { dungeonById } from './data/dungeons.js';
 import { josa } from './data/text.js';
 import { pickupLoot } from './core/abilities.js';
 import { rollCapsules } from './core/dittoBuild.js';
+import { levelCapFor } from './core/difficulty.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
 import { createEvolutionChoice } from './game/evolutionChoice.js';
@@ -117,6 +118,7 @@ function endRun(outcome, reached = game.run.floor) {
   let loot = `코인 ${run.loot.coins} · 진화의돌 ${run.loot.evoStone} · 사탕 ${run.loot.candy.length}` + (capsules || powders ? ` · 캡슐 ${capsules} · 파우더 ${powders}` : '');
   const before = [...game.unlocked];
   const reward = outcome === 'wiped' ? { exp: {} } : settleLoot(game, run);
+  const capThisRun = levelCapFor(game); // 사탕 경험치는 이번 탐험의 상한으로 (돌파로 열린 상한은 다음부터)
   finishRun(game, run, outcome);
   save();
   const opened = game.unlocked.filter((id) => !before.includes(id)).map((id) => dungeonById(id).name);
@@ -132,7 +134,7 @@ function endRun(outcome, reached = game.run.floor) {
   const out = deployed(game);
   const exp = Object.fromEntries(Object.entries(reward.exp).filter(([sp]) => out.some((m) => m.species === sp)));
   if (!Object.keys(exp).length) { toTown(); return; }
-  scene = createResults({ game, result: 'loot', log: { exp }, firstClear: false, members: out, onDone: (evos) => evolveChain(evos, () => { save(); toTown(); }) });
+  scene = createResults({ game, result: 'loot', log: { exp }, firstClear: false, members: out, cap: capThisRun, onDone: (evos) => evolveChain(evos, () => { save(); toTown(); }) });
   save(); // 사탕 경험치는 createResults 생성 시 이미 적용됨 → 바로 저장 (결산 중 새로고침해도 유지)
 }
 
