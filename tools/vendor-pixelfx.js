@@ -17,7 +17,7 @@ export const FX_FILES = [
   'pickups/collect-burst',
   // 기술 이펙트 다양화 (2026-11-15): 특수 탄 · 물리 타격 · 흡수 · 회복 · 헤롱헤롱
   'fire/fireball', 'ice/ice-lance', // 크기 옵션이 있어 칸(16px)에 맞출 수 있는 탄만
-  'melee/claw-swipe', 'melee/double-slash', 'melee/thrust', 'melee/hammer-smash',
+  'melee/claw-swipe', 'melee/thrust',
   'shadow/life-steal', 'holy/heal', 'status/charmed',
 ];
 

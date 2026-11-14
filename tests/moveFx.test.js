@@ -37,7 +37,8 @@ test('every spec points at a vendored effect and runs at most 2x', () => {
   const specs = [];
   for (const m of Object.values(MOVES)) if (m.learnable && m.category !== 'status') for (const d of [1, 2]) specs.push(...Object.values(fxForMove(m, { distance: d })));
   specs.push(fxForStage(1), fxForStage(-1));
-  for (const a of ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze', 'confusion']) specs.push(...Object.values(fxForAilment(a)));
+  for (const a of ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze', 'confusion', 'infatuation']) specs.push(...Object.values(fxForAilment(a)));
+  specs.push({ id: 'holy/heal', timeScale: 1.5 }, { id: 'shadow/life-steal', timeScale: 1.5 }); // mapAttack 의 회복·흡수 연출
   for (const s of specs.filter(Boolean)) { assert.ok(FX[s.id], s.id); assert.ok(s.timeScale <= 2, s.id); }
 });
 
@@ -72,4 +73,9 @@ test('melee families and special shots look different', () => {
   assert.equal(fxForMove({ ...MOVES.ember, type: 'ice' }, { distance: 1 }).travel.id, 'ice/ice-lance');
   const ids = new Set(['scratch', 'bite', 'fire-punch', 'ember', 'hyper-voice', 'double-kick'].map((m) => JSON.stringify(f(m, 1))));
   assert.equal(ids.size, 6);
+});
+
+test('every move in a family exists and is learnable', async () => {
+  const { BITE, KICK, SLASH, STAB } = await import('../src/data/moveFamilies.js');
+  for (const id of [...BITE, ...KICK, ...SLASH, ...STAB]) assert.ok(MOVES[id]?.learnable, id);
 });

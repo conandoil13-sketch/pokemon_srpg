@@ -18,7 +18,6 @@ const IMPACT = 0.1, HOLD = 0.26, GONE = 0.38;
 
 // a foot (sole + a row of toes) pointing right, outlined dark, filled with the hot ramp. scale k shrinks it away
 function foot(p, x, y, C, k, heat) {
-  const fill = (dx, dy, r) => r;
   const sole = (cx, cy, rx, ry, col) => p.shade(cx - rx - 1, cy - ry - 1, cx + rx + 1, cy + ry + 1, (px, py) => {
     const u = (px - cx) / rx, v = (py - cy) / ry, d = u * u + v * v;
     if (d <= 1) return col(u, v, d);

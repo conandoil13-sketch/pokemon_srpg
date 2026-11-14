@@ -1,5 +1,5 @@
 // Sound wave: arcs of sound pulse out from the mouth one after another. Original design for 포켓몬 택틱스 (MIT, same as pixelfx).
-import { Particles, Lights, P, Rng, fit, WHITE, ease, clamp } from "../../vendor/pixelfx/core/index.js";
+import { Lights, Rng, fit, WHITE, ease } from "../../vendor/pixelfx/core/index.js";
 
 export const meta = {
   name: "Sound wave",
@@ -18,15 +18,14 @@ export const meta = {
 const WAVES = [0.0, 0.12, 0.24], LIFE = 0.48;
 
 export function create(o) {
-  const C = fit(o.palette, 7), R = new Rng(o.seed), Y = -o.height, floor = () => 0;
-  const ps = new Particles({ rng: R, ground: floor, sparks: [WHITE, C[5], C[4], C[3]] });
+  const C = fit(o.palette, 7), R = new Rng(o.seed), Y = -o.height;
   const lights = new Lights();
   lights.add(4, Y, 18, C[4], 0.35, 0.12);
   // glints that ride along each wave front
   const glints = WAVES.map(() => Array.from({ length: 3 }, () => ({ a: R.range(-o.spread, o.spread) * 0.85, d: R.range(0, 0.25) })));
   let t = 0;
   return {
-    update(dt) { t += dt; ps.update(dt); lights.update(dt); },
+    update(dt) { t += dt; lights.update(dt); },
     draw(p) {
       // mouth burst: a short white pop with three tiny rays
       if (t < 0.08) {
@@ -56,7 +55,6 @@ export function create(o) {
           p.glow(gx, gy, 4, C[5], 0.25 * a);
         }
       });
-      ps.draw(p);
       lights.draw(p);
     },
   };

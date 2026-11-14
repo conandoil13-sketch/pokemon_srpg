@@ -1,5 +1,5 @@
 // Bite: two rows of fangs open wide around the target and snap shut. Original design for 포켓몬 택틱스 (MIT, same as pixelfx).
-import { Particles, Lights, P, Rng, fit, WHITE, ease, clamp } from "../../vendor/pixelfx/core/index.js";
+import { Particles, Lights, P, Rng, fit, WHITE, ease } from "../../vendor/pixelfx/core/index.js";
 
 export const meta = {
   name: "Bite",
@@ -60,7 +60,7 @@ export function create(o) {
         }
         for (let i = 0; i < 5; i++) {
           const a = R.range(-2.6, -0.5), v = R.range(50, 120);
-          ps.spawn(P.GRIT, R.range(-W, W) * 0.5, Y, Math.cos(a) * v, Math.sin(a) * v, R.range(0.3, 0.4), R.pick([C[5], C[4], C[3]]), 1);
+          ps.spawn(P.GRIT, R.range(-W, W) * 0.5, Y, Math.cos(a) * v, Math.sin(a) * v, R.range(0.3, 0.36), R.pick([C[5], C[4], C[3]]), 1); // 0.6 초 안에 끝나게
         }
       }
       ps.update(dt);

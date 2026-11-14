@@ -69,9 +69,9 @@ function rule2(move, distance, p, type, T, spark, thud) {
       if (move.category === 'special') return { cast: spec('arcane/spell-charge', { palette: p }, 2, 'front', { life: 0.3 }), travel: shotFor(move.type, p), hit: thud };
       if (distance >= 2) return { travel: spec('projectiles/energy-disc', { palette: p }, 1, 'front', { life: 0.3 }), hit: spark };
       // 물리 근접: 기술 모양별 (물기·킥은 이 게임 전용 이펙트, 나머지는 pixelfx 근접 이펙트를 사용자 쪽에서)
-      if (fam === 'bite') return { hit: spec('pokemon/bite', { palette: p }, 1, 'front') };
-      if (fam === 'kick') return { hit: spec('pokemon/kick', { palette: p }, 1, 'front') };
-      if (fam === 'punch') return { hit: spec('impacts/crit-hit', { palette: p, light: T.light }, 1.2, 'front') }; // 펀치: 별 모양 강타 (어퍼컷 이펙트는 몸 위로 크게 그려져 칸에 안 맞음)
+      if (fam === 'bite') return { hit: spec('pokemon/bite', { palette: p }, 1, 'front', { noEcho: true }) };
+      if (fam === 'kick') return { hit: spec('pokemon/kick', { palette: p }, 1, 'front', { noEcho: true }) };
+      if (fam === 'punch') return { hit: spec('impacts/crit-hit', { palette: p, light: T.light }, 1.2, 'front', { noEcho: true }) }; // 펀치: 별 모양 강타 (어퍼컷 이펙트는 몸 위로 크게 그려져 칸에 안 맞음)
       if (fam === 'slash') return { cast: spec('melee/claw-swipe', { palette: p, sparks: bright(p) }, 1.2, 'front'), hit: spark };
       if (fam === 'stab') return { cast: spec('melee/thrust', { palette: p, sparks: bright(p), reach: 26 }, 1.2, 'front'), hit: spark };
       return { hit: spark };

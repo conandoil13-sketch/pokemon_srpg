@@ -132,5 +132,7 @@ test('custom effects (bite, kick, sound wave) run, take a palette and end empty'
     let drew = 0;
     for (let i = 0; i < 40; i++) { m.update(1 / 30); const f = m.draw(null, 'front', { x: 0, y: 0 }); drew += f.color.some((c) => c) ? 1 : 0; }
     assert.ok(drew > 3, `${id} drew ${drew} frames`);
+    for (let i = 0; i < 30; i++) m.update(1 / 30); // 충분히 지난 뒤에는 아무것도 안 남음
+    assert.ok(!m.draw(null, 'front', { x: 0, y: 0 }).color.some((c) => c), `${id} ends empty`);
   }
 });

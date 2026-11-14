@@ -11,6 +11,7 @@ const W = 112, H = 64, FRAMES = [0.1, 0.2, 0.3, 0.38, 0.45, 0.55, 0.65, 0.8], S 
 const [out, ...ids] = process.argv.slice(2);
 const rows = ids.map((arg) => {
   const [id, d = '1'] = arg.split(':'), dist = Number(d), mv = MOVES[id];
+  if (!mv) { console.error(`없는 기술: ${id}`); process.exit(1); }
   const A = { x: 24, y: 48 }, T = { x: 24 + 16 * dist, y: 48 };
   const spec = fxForMove(mv, { distance: dist });
   const m = createFxManager({ w: W, h: H }), actor = actorFor('pikachu', null);

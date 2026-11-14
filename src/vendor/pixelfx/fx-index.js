@@ -27,9 +27,7 @@ import * as pickups_collect_burst from './fx/pickups/collect-burst.js';
 import * as fire_fireball from './fx/fire/fireball.js';
 import * as ice_ice_lance from './fx/ice/ice-lance.js';
 import * as melee_claw_swipe from './fx/melee/claw-swipe.js';
-import * as melee_double_slash from './fx/melee/double-slash.js';
 import * as melee_thrust from './fx/melee/thrust.js';
-import * as melee_hammer_smash from './fx/melee/hammer-smash.js';
 import * as shadow_life_steal from './fx/shadow/life-steal.js';
 import * as holy_heal from './fx/holy/heal.js';
 import * as status_charmed from './fx/status/charmed.js';
@@ -62,9 +60,7 @@ export const FX = {
   'fire/fireball': fire_fireball,
   'ice/ice-lance': ice_ice_lance,
   'melee/claw-swipe': melee_claw_swipe,
-  'melee/double-slash': melee_double_slash,
   'melee/thrust': melee_thrust,
-  'melee/hammer-smash': melee_hammer_smash,
   'shadow/life-steal': shadow_life_steal,
   'holy/heal': holy_heal,
   'status/charmed': status_charmed,

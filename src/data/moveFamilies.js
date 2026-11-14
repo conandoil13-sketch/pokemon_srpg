@@ -1,10 +1,10 @@
 // 기술 모양 계열 (이펙트 고르기용). 철주먹·방음 특성의 PUNCH·SOUND 목록을 그대로 쓰고, 나머지는 여기서
 import { PUNCH, SOUND } from '../core/abilities.js';
 
-export const BITE = ['bite', 'crunch', 'hyper-fang', 'super-fang', 'fire-fang', 'thunder-fang', 'ice-fang', 'poison-fang'];
-export const KICK = ['double-kick', 'low-kick', 'rolling-kick', 'jump-kick', 'hi-jump-kick', 'mega-kick', 'triple-kick', 'blaze-kick', 'brick-break', 'stomp', 'trop-kick'];
-export const SLASH = ['scratch', 'slash', 'fury-swipes', 'cut', 'x-scissor', 'night-slash', 'leaf-blade', 'false-swipe', 'crush-claw', 'shadow-claw', 'dragon-claw', 'metal-claw', 'aerial-ace', 'air-cutter', 'psycho-cut', 'razor-leaf', 'fury-cutter'];
-export const STAB = ['peck', 'drill-peck', 'horn-attack', 'fury-attack', 'horn-drill', 'poison-sting', 'pin-missile', 'twineedle', 'pluck', 'megahorn', 'poison-jab', 'drill-run'];
+export const BITE = ['bite', 'crunch', 'hyper-fang', 'fire-fang', 'thunder-fang', 'ice-fang', 'poison-fang'];
+export const KICK = ['double-kick', 'low-kick', 'rolling-kick', 'jump-kick', 'high-jump-kick', 'mega-kick', 'triple-kick', 'blaze-kick', 'brick-break', 'stomp'];
+export const SLASH = ['scratch', 'slash', 'fury-swipes', 'x-scissor', 'night-slash', 'leaf-blade', 'false-swipe', 'crush-claw', 'shadow-claw', 'dragon-claw', 'metal-claw', 'aerial-ace', 'psycho-cut', 'fury-cutter'];
+export const STAB = ['peck', 'drill-peck', 'horn-attack', 'fury-attack', 'poison-sting', 'pin-missile', 'twineedle', 'pluck', 'megahorn', 'poison-jab'];
 
 export function familyOf(move) {
   const id = move.id;
