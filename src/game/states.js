@@ -38,9 +38,11 @@ export function forecastFor(a, d, mv, tile, weather = null, spread = 1) {
 
 import { josa } from '../data/text.js';
 import { ABILITIES } from '../data/abilities.js';
+import { POWDER_KO } from '../core/dittoBuild.js';
 import { has as hasAbility, typeEffect } from '../core/abilities.js';
 
-const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕', coins: '코인 주머니' };
+const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕', coins: '코인 주머니', ...Object.fromEntries(Object.entries(POWDER_KO).map(([k, v]) => [`powder-${k}`, v])) };
+export const itemName = (id) => ITEM_NAME[id] ?? '아이템';
 const TARGET_LABEL = { self: '자신', enemy: '적 하나', enemies: '주변 적 전체', ally: '아군 하나', allies: '주변 아군' };
 const isAttack = (mv) => mv.category !== 'status';
 const DIR_OF = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');

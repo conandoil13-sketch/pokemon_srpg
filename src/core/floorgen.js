@@ -1,5 +1,6 @@
 // 층 맵 생성 (순수, 시드 고정이면 같은 결과). 탁 트인 필드에 지형 덩어리를 뿌리고 연결성을 보장한다.
 import { createRng } from './rng.js';
+import { STATS } from './dittoBuild.js';
 import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
 
@@ -121,8 +122,10 @@ export function generateFloor(dungeon, floor, seed) {
   const chests = [];
   for (let i = 0; i < nChests && floorCells.length; i++) {
     const p = take(floorCells.pop());
-    const roll = rng(); // 진화의돌 15% · 경험 사탕 55% · 코인 주머니 30%
-    chests.push({ x: p.x, y: p.y, item: roll < 0.15 ? 'evoStone' : roll < 0.7 ? 'candy' : 'coins' });
+    const roll = rng(); // 진화의돌 15% · 메타몽 파우더 10% · 경험 사탕 45% · 코인 주머니 30%
+    // 파우더 종류는 별도 난수 — 상자 위치·수·나머지 굴림은 파우더 도입 전과 같다
+    const powder = () => `powder-${STATS[Math.floor(createRng(hashSeed(seed, 1000 + i))() * STATS.length)]}`;
+    chests.push({ x: p.x, y: p.y, item: roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder() : roll < 0.7 ? 'candy' : 'coins' });
   }
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, weather: rollWeather(dungeon, seed) };

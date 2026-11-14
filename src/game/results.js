@@ -49,7 +49,8 @@ export function createResults({ game, result, log, firstClear, onDone, members =
       ctx.fillRect(0, 0, W, H);
       const TITLE = { win: '승리!', stairs: '층 돌파!', loot: '탐험 보상', lose: '패배...' };
       ui.bigText(ctx, TITLE[result] ?? '결과', W / 2, 4, result === 'lose' ? '#f08080' : '#f8d050', '#202838');
-      if (log.pickup?.length) drawText(ctx, `픽업 +${log.pickup.length}`, 8, 4, '#90d890', null, 'small'); // 픽업·꿀모으기
+      const extra = [log.pickup?.length ? `픽업 +${log.pickup.length}` : '', log.capsules?.length ? `캡슐 +${log.capsules.length}` : ''].filter(Boolean).join(' '); // 픽업·메타몽 캡슐
+      if (extra) drawText(ctx, extra, 8, 4, '#90d890', null, 'small');
       if (coins) { const c = `코인 +${coins}`; drawText(ctx, c, W - 8 - textWidth(c, 'small'), 4, '#f8d050', null, 'small'); }
       party.forEach((m, k) => {
         const y = 32 + k * 27;

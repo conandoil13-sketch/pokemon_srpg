@@ -39,7 +39,7 @@ test('property check: 300 seeds × first/boss floors of both dungeons', () => {
       assert.equal(m.allySlots.length, 5, tag);
       for (const s of m.allySlots) assert.ok(s.x <= 2 && reach.has(key(s)), tag);
       for (const e of m.enemies) assert.ok(e.x >= 8 && reach.has(key(e)), tag);
-      for (const c of m.chests) { assert.ok(reach.has(key(c)) && ['evoStone', 'candy', 'coins'].includes(c.item), tag); seenItems.add(c.item); }
+      for (const c of m.chests) { assert.ok(reach.has(key(c)) && (['evoStone', 'candy', 'coins'].includes(c.item) || /^powder-(hp|atk|def|spa|spd|spe)$/.test(c.item)), tag); seenItems.add(c.item); }
       assert.ok(m.chests.length <= 2, tag);
       const spots = [...m.allySlots, ...m.enemies, ...m.chests, ...(m.stairs ? [m.stairs] : [])].map(key);
       assert.equal(new Set(spots).size, spots.length, `${tag}: overlapping positions`);
@@ -62,5 +62,23 @@ test('property check: 300 seeds × first/boss floors of both dungeons', () => {
       }
     }
   }
-  assert.deepEqual([...seenItems].sort(), ['candy', 'coins', 'evoStone']);
+  assert.deepEqual([...seenItems].map((i) => (i.startsWith('powder-') ? 'powder' : i)).filter((v, i, a) => a.indexOf(v) === i).sort(), ['candy', 'coins', 'evoStone', 'powder']);
+});
+
+// 파우더 도입 전 상자 (x, y, 아이템 첫 글자: e 진화의돌 · c 사탕 · c(oins) 코인 — 사탕 일부가 파우더가 될 수 있음)
+const CHEST_SNAPSHOT = [["sinnoh-field",1,1,"2,0,c"],["sinnoh-field",2,1,"2,0,c"],["sinnoh-field",1,7,"11,1,c,0,1,e"],["sinnoh-field",2,7,"11,1,c,0,1,e"],["sinnoh-field",1,42,"4,8,c"],["sinnoh-field",2,42,"4,8,c"],["sinnoh-field",3,42,"4,1,c"],["sinnoh-field",1,99,"3,4,c"],["sinnoh-field",2,99,"3,4,c"],["sinnoh-field",3,99,"8,6,c"],["sinnoh-field",1,1234,"13,2,c,6,4,c"],["sinnoh-field",2,1234,"13,2,c,6,4,c"],["sinnoh-cave",1,1,"13,8,c"],["sinnoh-cave",2,1,"13,8,c"],["sinnoh-cave",3,1,"7,10,c"],["sinnoh-cave",3,42,"15,4,c"],["sinnoh-cave",1,99,"9,0,c"],["sinnoh-cave",2,99,"9,0,c"],["sinnoh-cave",1,1234,"0,2,c,8,5,e"],["sinnoh-cave",2,1234,"0,2,c,8,5,e"]];
+
+test('powders in chests: same seeds keep chest spots and counts; only some candy became powder', () => {
+  for (const [id, floor, seed, flat] of CHEST_SNAPSHOT) {
+    const m = generateFloor(dungeonById(id), floor, seed);
+    const old = flat.split(',');
+    assert.equal(m.chests.length * 3, old.length, `${id} ${floor} ${seed}`);
+    m.chests.forEach((c, i) => {
+      assert.deepEqual([c.x, c.y], [Number(old[i * 3]), Number(old[i * 3 + 1])]);
+      if (c.item.startsWith('powder-')) assert.equal(old[i * 3 + 2], 'c'); // 사탕 몫에서
+    });
+  }
+  let n = 0, powders = 0;
+  for (let seed = 1; seed <= 1500; seed++) for (const c of generateFloor(DUNGEONS[0], 2, seed).chests) { n++; if (c.item.startsWith('powder-')) powders++; }
+  assert.ok(Math.abs(powders / n - 0.1) <= 0.03, `${powders}/${n}`);
 });
