@@ -24,6 +24,13 @@ import * as status_frozen from './fx/status/frozen.js';
 import * as status_confused from './fx/status/confused.js';
 import * as nature_acid_splash from './fx/nature/acid-splash.js';
 import * as pickups_collect_burst from './fx/pickups/collect-burst.js';
+import * as fire_fireball from './fx/fire/fireball.js';
+import * as ice_ice_lance from './fx/ice/ice-lance.js';
+import * as melee_claw_swipe from './fx/melee/claw-swipe.js';
+import * as melee_thrust from './fx/melee/thrust.js';
+import * as shadow_life_steal from './fx/shadow/life-steal.js';
+import * as holy_heal from './fx/holy/heal.js';
+import * as status_charmed from './fx/status/charmed.js';
 export const FX = {
   'impacts/hit-spark': impacts_hit_spark,
   'impacts/blunt-hit': impacts_blunt_hit,
@@ -50,4 +57,11 @@ export const FX = {
   'status/confused': status_confused,
   'nature/acid-splash': nature_acid_splash,
   'pickups/collect-burst': pickups_collect_burst,
+  'fire/fireball': fire_fireball,
+  'ice/ice-lance': ice_ice_lance,
+  'melee/claw-swipe': melee_claw_swipe,
+  'melee/thrust': melee_thrust,
+  'shadow/life-steal': shadow_life_steal,
+  'holy/heal': holy_heal,
+  'status/charmed': status_charmed,
 };

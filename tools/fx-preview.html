@@ -28,6 +28,11 @@
   <button class="primary" id="play">재생</button>
 </div>
 <div class="row">
+  <label>기술 <select id="move"></select></label>
+  <label>거리 <select id="dist"><option value="1" selected>1칸 (근접)</option><option value="2">2칸</option><option value="3">3칸</option></select></label>
+  <button class="primary" id="playMove">기술 재생</button>
+</div>
+<div class="row">
   <label>상태이상 <select id="ailment"></select></label>
   <button id="playAil">상태이상 재생</button>
   <label><input type="checkbox" id="loop"> 반복</label>
@@ -38,6 +43,8 @@
 import { createFxManager } from '../src/render/fx.js';
 import { fxForMove, fxForAilment, TYPE_PALETTE } from '../src/data/moveFx.js';
 import { actorFor } from '../src/render/fxActor.js';
+import { MOVES } from '../src/data/moves.js';
+import { familyOf } from '../src/data/moveFamilies.js';
 
 const $ = (id) => document.getElementById(id);
 const TYPES = [...new Set([...Object.keys(TYPE_PALETTE), 'dark'])];
@@ -74,23 +81,49 @@ function playAil() {
   if (s.loop) setTimeout(() => fx.follow('loop', s.loop, () => D, actor), 300);
   $('info').textContent = `${$('ailment').value} → ${Object.keys(s).join(', ')}`;
 }
-$('play').onclick = play;
+// 실제 기술: 게임과 같은 순서 (사용자 쪽 cast → 탄이 0.25초 날아감 → 대상에 hit)
+const attacks = Object.values(MOVES).filter((m) => m.learnable && m.category !== 'status').sort((a, b) => (familyOf(a) ?? 'z').localeCompare(familyOf(b) ?? 'z') || a.name.localeCompare(b.name));
+$('move').innerHTML = attacks.map((m) => `<option value="${m.id}" ${m.id === 'bite' ? 'selected' : ''}>${m.name} · ${m.type} · ${m.category === 'physical' ? '물리' : '특수'}${familyOf(m) ? ' · ' + familyOf(m) : ''}</option>`).join('');
+let flying = null, timers = [], lastPlay = null;
+const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+function reset() { for (const t of timers) clearTimeout(t); timers = []; flying = null; fx.clear(); }
+function playMove() {
+  lastPlay = playMove;
+  reset();
+  const mv = MOVES[$('move').value], dist = Number($('dist').value);
+  const T = { x: A.x + 16 * dist, y: A.y };
+  D.x = T.x; // 대상 표시도 옮김
+  const spec = fxForMove(mv, { distance: dist });
+  if (spec.cast) fx.spawn(spec.cast, A, { dir: 'right' });
+  if (spec.travel) later(() => {
+    const e = fx.spawn(spec.travel, { x: A.x, y: A.y - 6 }, { dir: 'right', ...(spec.travel.clip ? { clipTo: T.x - A.x } : {}) });
+    if (e && !spec.travel.clip) flying = { e, t: 0, from: { x: A.x, y: A.y - 6 }, to: { x: T.x, y: T.y - 6 } };
+  }, 300);
+  const hitAt = spec.travel ? 560 : 320;
+  if (spec.hit) later(() => fx.spawn(spec.hit, T, { dir: 'right', actor }), hitAt);
+  if (spec.hit2) later(() => fx.spawn(spec.hit2, T, { dir: 'right', actor }), hitAt + 80);
+  if (spec.burst) later(() => fx.spawn(spec.burst, T, { dir: 'right' }), hitAt);
+  $('info').textContent = `${mv.name} (${mv.id}) · ${mv.type} · 위력 ${mv.power ?? '-'} · 계열 ${familyOf(mv) ?? '-'} → ${Object.entries(spec).map(([k, v]) => `${k}: ${v.id}`).join(', ')}`;
+}
+$('playMove').onclick = playMove;
+$('play').onclick = () => { reset(); lastPlay = () => { reset(); D.x = 176; play(); }; lastPlay(); };
 $('playAil').onclick = playAil;
 
 let last = performance.now(), again = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
   fx.update(dt);
+  if (flying) { flying.t += dt; const k = Math.min(1, flying.t / 0.25); flying.e.fx.options.x = flying.from.x + (flying.to.x - flying.from.x) * k; flying.e.fx.options.y = flying.from.y + (flying.to.y - flying.from.y) * k; if (k >= 1) flying = null; }
   ctx.fillStyle = '#3a5a3a'; ctx.fillRect(0, 0, 256, 192);
   ctx.fillStyle = '#e8d070'; ctx.fillRect(A.x - 6, A.y - 6, 12, 12);   // 사용자 자리
   ctx.fillStyle = '#e0e0f0'; ctx.fillRect(D.x - 6, D.y - 6, 12, 12);   // 대상 자리
   fx.draw(ctx, 'back', { x: 0, y: 0 });
   fx.draw(ctx, 'front', { x: 0, y: 0 });
-  if ($('loop').checked && (again += dt) > 1.6) { again = 0; play(); }
+  if ($('loop').checked && (again += dt) > 1.6) { again = 0; (lastPlay ?? playMove)(); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-play();
+playMove();
 </script>
 </body>
 </html>

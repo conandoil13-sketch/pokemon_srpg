@@ -1,5 +1,8 @@
 // pixelfx 이펙트 관리자: 재생·위치 따라가기·두 층(뒤/앞) 그리기. 이펙트 하나가 실패해도 게임은 계속.
-import { FX } from '../vendor/pixelfx/fx-index.js';
+import { FX as VENDOR_FX } from '../vendor/pixelfx/fx-index.js';
+import { CUSTOM_FX } from '../fx-custom/index.js';
+
+const FX = { ...VENDOR_FX, ...CUSTOM_FX }; // pixelfx 라이브러리 + 이 게임 전용(물기·킥·소리 파동)
 import { createFrame, clearFrame, createFx, composite } from '../vendor/pixelfx/core/index.js';
 
 const ORIENT = { right: { flip: false, angle: 0 }, left: { flip: true, angle: 0 }, up: { flip: false, angle: -Math.PI / 2 }, down: { flip: false, angle: Math.PI / 2 } };

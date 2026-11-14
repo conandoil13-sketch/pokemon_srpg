@@ -11,3 +11,6 @@ SpriteCollab-master/
 
 # PokeAPI 응답 캐시
 tools/.cache/
+
+# 기술 연출 시트 (tools/move-fx-sheet.js 결과물)
+move-fx-sheet.png

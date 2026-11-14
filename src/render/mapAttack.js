@@ -204,7 +204,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
-  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'pickups/collect-burst', opts: { palette: PAL.leaf }, timeScale: 1, layer: 'front' }, attacker); spawnChangeFx(fx, s, result, get); }; // 회복: 초록 반짝임
+  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'holy/heal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); spawnChangeFx(fx, s, result, get); }; // 회복: 초록 반짝임
   return {
     defender: target,
     get done() { return i >= steps.length; },
@@ -279,7 +279,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   }
   // 흡수·반동·풀죽음 대사
   const after = [];
-  if (result.drained > 0) after.push({ text: `${josa(label(attacker), '은/는')} 체력을 흡수했다!`, who: attacker, emo: 'Happy' });
+  if (result.drained > 0) after.push({ text: `${josa(label(attacker), '은/는')} 체력을 흡수했다!`, who: attacker, emo: 'Happy', drain: true });
   if (result.drained < 0) after.push({ text: `${josa(label(attacker), '은/는')} 해감액을 흡수해 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   if (result.recoil > 0) after.push({ text: `${josa(label(attacker), '은/는')} 반동으로 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   for (const id of result.flinched ?? []) { const u = get(id); if (u) after.push({ text: `${josa(label(u), '은/는')} 풀이 죽었다!`, who: u, emo: 'Pain' }); }
@@ -291,7 +291,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
-    ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo })),
+    ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain })),
     ...(result.selfKO || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
@@ -307,6 +307,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   function enter(s) {
     if (!s || !spec) return;
     if (s.k === 'act' && spec.cast) spawnSafe(fx, spec.cast, feet(attacker), { dir });
+    if (s.drain) onBody(fx, { id: 'shadow/life-steal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); // 흡수: 생명 흡수 연출
     if (s.k === 'travel' && spec.travel) {
       if (spec.travel.clip) {
         const len = (Math.abs(endPt.x - attacker.x) + Math.abs(endPt.y - attacker.y)) * TILE + TILE / 2;
@@ -328,9 +329,10 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
         const strong = h.typeMult > 1;
         const base = strong ? { ...spec.hit, opts: { ...spec.hit.opts, light: 1.5 } } : spec.hit;
         ok = !!spawnSafe(fx, base, feet(d), { dir }) && ok;
-        if (strong) spawnSafe(fx, { ...base, opts: { ...base.opts, seed: 99 } }, feet(d), { dir, delay: 0.08 });
+        // 효과 굉장: 한 겹 더 (이빨·발·별 같은 모양 이펙트는 두 번 나오면 어색해서 반짝임으로)
+        if (strong) spawnSafe(fx, spec.hit.noEcho ? { id: 'impacts/hit-spark', opts: { palette: spec.hit.opts.palette, light: 1.5, seed: 99 }, timeScale: 1, layer: 'front' } : { ...base, opts: { ...base.opts, seed: 99 } }, feet(d), { dir, delay: 0.08 });
         if (spec.hit2) spawnSafe(fx, spec.hit2, feet(d), { dir, delay: 0.05 }); // 강한 기술: 충격 한 겹 더
-        if (h.crit) spawnSafe(fx, { id: 'impacts/crit-hit', opts: {}, timeScale: 1.5, layer: 'front' }, feet(d), { dir });
+        if (h.crit && spec.hit.id !== 'impacts/crit-hit') spawnSafe(fx, { id: 'impacts/crit-hit', opts: {}, timeScale: 1.5, layer: 'front' }, feet(d), { dir }); // 펀치는 이미 별 강타
       }
       fallbackHit = !ok;
     }

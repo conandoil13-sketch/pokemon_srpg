@@ -2,6 +2,7 @@
 // FxSpec = { id, opts, timeScale, layer: 'back'|'front', life? (초, 루프를 그만큼만) }
 import { PAL } from '../vendor/pixelfx/core/index.js';
 import OVERRIDES from './moveFx.json' with { type: 'json' };
+import { familyOf } from './moveFamilies.js';
 
 export const TYPE_PALETTE = {
   normal: 'bone', fire: 'fire', water: 'water', electric: 'volt', grass: 'leaf', ice: 'ice', fighting: 'ember',
@@ -37,12 +38,22 @@ function rule(move, distance) {
   const spark = tier === 'weak' ? cute : spec('impacts/hit-spark', { palette: p, light: T.light }, 1);
   const thud = tier === 'weak' ? cute : spec('impacts/blunt-hit', { palette: p, light: T.light }, 1.5);
   const out = rule2(move, distance, p, type, T, spark, thud);
-  if (tier === 'strong' && out.hit) out.hit2 = spec('impacts/blunt-hit', { palette: p, light: T.light }, 1.5); // 강: 묵직한 충격 겹침
+  if (tier === 'strong' && out.hit && !out.noHit2) out.hit2 = spec('impacts/blunt-hit', { palette: p, light: T.light }, 1.5); // 강: 묵직한 충격 겹침
+  delete out.noHit2;
   return out;
+}
+
+// 특수 탄: 크기를 칸(16px)에 맞출 수 있는 것만 타입별로, 나머지는 타입 색 플라스마탄
+function shotFor(type, p) {
+  if (type === 'fire') return spec('fire/fireball', { palette: p, radius: 3 }, 1, 'front', { life: 0.35 });
+  if (type === 'ice') return spec('ice/ice-lance', { palette: p, length: 16 }, 1, 'front', { life: 0.35 });
+  return spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 });
 }
 
 function rule2(move, distance, p, type, T, spark, thud) {
   const AREA_REACH = T.reach, L = (s) => s * T.life;
+  // 소리 기술은 범위 모양(부채꼴·주변 포함)과 상관없이 음파
+  if (familyOf(move) === 'sound' && type !== 'line' && type !== 'blast') return { cast: spec('pokemon/sound-wave', { palette: p }, 1, 'front'), hit: spark, noHit2: true }; // 음파는 묵직한 겹타 없이
   switch (type) {
     case 'line': return { travel: spec('arcane/arcane-beam', { palette: p, light: T.light }, 1.5, 'front', { life: L(0.45), clip: true }), hit: spark };
     case 'cone': return { cast: spec(move.type === 'ice' ? 'ice/frost-breath' : 'fire/fire-breath', { palette: p, light: T.light }, 1, 'front', { life: L(0.6) }), hit: spark };
@@ -50,12 +61,21 @@ function rule2(move, distance, p, type, T, spark, thud) {
       if (move.type === 'ground' || move.type === 'rock') return { cast: spec('impacts/ground-slam', { palette: p, reach: AREA_REACH }, 2, 'back'), hit: thud };
       return { cast: spec('lightning/thunderclap', { palette: p, sparks: bright(p), reach: AREA_REACH }, 2, 'back'), hit: thud };
     case 'blast': return { travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), burst: spec('impacts/blunt-hit', { palette: p, light: 1.3 * T.light }, 1.5) }; // 착탄 십자 5칸에 하나씩 (plasma-explosion 은 화면에 너무 큼)
-    default:
-      if (distance >= 2) {
-        if (move.category === 'special') return { cast: spec('arcane/spell-charge', { palette: p }, 2, 'front', { life: 0.3 }), travel: spec('projectiles/plasma-shot', { palette: p }, 1, 'front', { life: 0.3 }), hit: thud };
-        return { travel: spec('projectiles/energy-disc', { palette: p }, 1, 'front', { life: 0.3 }), hit: spark };
-      }
+    default: {
+      const fam = familyOf(move);
+      // 소리 기술: 입에서 음파가 퍼진다 (거리 무관)
+      if (fam === 'sound') return { cast: spec('pokemon/sound-wave', { palette: p }, 1, 'front'), hit: spark, noHit2: true };
+      // 특수: 붙어 있든 떨어져 있든 손끝에서 모았다가 타입 탄이 날아간다 (사용자 결정)
+      if (move.category === 'special') return { cast: spec('arcane/spell-charge', { palette: p }, 2, 'front', { life: 0.3 }), travel: shotFor(move.type, p), hit: thud };
+      if (distance >= 2) return { travel: spec('projectiles/energy-disc', { palette: p }, 1, 'front', { life: 0.3 }), hit: spark };
+      // 물리 근접: 기술 모양별 (물기·킥은 이 게임 전용 이펙트, 나머지는 pixelfx 근접 이펙트를 사용자 쪽에서)
+      if (fam === 'bite') return { hit: spec('pokemon/bite', { palette: p }, 1, 'front', { noEcho: true }) };
+      if (fam === 'kick') return { hit: spec('pokemon/kick', { palette: p }, 1, 'front', { noEcho: true }) };
+      if (fam === 'punch') return { hit: spec('impacts/crit-hit', { palette: p, light: T.light }, 1.2, 'front', { noEcho: true }) }; // 펀치: 별 모양 강타 (어퍼컷 이펙트는 몸 위로 크게 그려져 칸에 안 맞음)
+      if (fam === 'slash') return { cast: spec('melee/claw-swipe', { palette: p, sparks: bright(p) }, 1.2, 'front'), hit: spark };
+      if (fam === 'stab') return { cast: spec('melee/thrust', { palette: p, sparks: bright(p), reach: 26 }, 1.2, 'front'), hit: spark };
       return { hit: spark };
+    }
   }
 }
 
@@ -87,5 +107,5 @@ const AILMENT_FX = {
   freeze: { inflict: spec('ice/frost-nova', { reach: AREA_REACH / 2 }, 2, 'back', { life: 0.8 }), loop: spec('status/frozen') },
   confusion: { loop: spec('status/confused') },
 };
-AILMENT_FX.infatuation = AILMENT_FX.confusion; // 헤롱헤롱: 혼란 연출을 같이 쓴다 (분홍 계열)
+AILMENT_FX.infatuation = { inflict: spec('status/charmed', {}, 1, 'front', { life: 1.2 }), loop: AILMENT_FX.confusion.loop }; // 헤롱헤롱: 하트
 export const fxForAilment = (ailment) => AILMENT_FX[ailment] ?? { loop: null };
