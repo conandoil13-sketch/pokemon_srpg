@@ -18,7 +18,7 @@ const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg
 
 // GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
 export const newGame = () => {
-  const party = newParty();
+  const party = newParty().map((m, i) => ({ uid: i + 1, ...m })); // uid 1..5
   return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {}, nextUid: party.length + 1 };
 };
 

@@ -10,7 +10,8 @@ import { createTown } from './game/town.js';
 import { createDungeonSelect } from './game/dungeonSelect.js';
 import { createFloorMenu } from './game/floorMenu.js';
 import { generateFloor } from './core/floorgen.js';
-import { deployed, renameSortie } from './core/roster.js';
+import { deployed } from './core/roster.js';
+import { memberKey, memberByKey } from './core/members.js';
 import { createGachaScene } from './game/gacha.js';
 import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun, addBattleCoins, addFloorCoins } from './core/run.js';
 import { dungeonById } from './data/dungeons.js';
@@ -46,15 +47,14 @@ let scene;
 function evolveChain(list, done) {
   const [first, ...rest] = list;
   if (!first) { done(); return; }
-  const member = game.party.find((m) => m.species === first.species);
+  const member = memberByKey(game, first.key ?? first.species); // 같은 종 두 마리여도 그 동료
   if (!member) { evolveChain(rest, done); return; }
   const options = first.options ?? [first.to];
   const evolveTo = (to) => {
     if (!to) { evolveChain(rest, done); return; }
     if (first.stone) game.items.evoStone -= 1; // 진화의돌은 실제로 진화할 때만 소모
     requestSprites([to]);
-    const from = member.species;
-    scene = createEvolution({ member, to, onDone: () => { renameSortie(game, from, to); evolveChain(rest, done); } }); // 출전 중이었다면 같은 자리 유지
+    scene = createEvolution({ member, to, onDone: () => evolveChain(rest, done) }); // 출전 목록은 uid 라 진화해도 같은 자리
   };
   if (options.length === 1) { evolveTo(options[0]); return; }
   requestSprites(options);
@@ -132,7 +132,7 @@ function endRun(outcome, reached = game.run.floor) {
   // 경험 사탕: 탐험 보상 결산
   // 사탕 경험치는 출전 멤버만
   const out = deployed(game);
-  const exp = Object.fromEntries(Object.entries(reward.exp).filter(([sp]) => out.some((m) => m.species === sp)));
+  const exp = Object.fromEntries(Object.entries(reward.exp).filter(([k]) => out.some((m) => String(memberKey(m)) === k)));
   if (!Object.keys(exp).length) { toTown(); return; }
   scene = createResults({ game, result: 'loot', log: { exp }, firstClear: false, members: out, cap: capThisRun, onDone: (evos) => evolveChain(evos, () => { save(); toTown(); }) });
   save(); // 사탕 경험치는 createResults 생성 시 이미 적용됨 → 바로 저장 (결산 중 새로고침해도 유지)
@@ -191,7 +191,7 @@ const go = {
       game,
       onBack: () => go.town(null, TOWN.partySpot),
       onSave: () => save(),
-      onEvolve: (member, options) => evolveChain([{ species: member.species, options, stone: true }], () => { save(); go.party(); }),
+      onEvolve: (member, options) => evolveChain([{ key: memberKey(member), species: member.species, options, stone: true }], () => { save(); go.party(); }),
     });
   },
 };

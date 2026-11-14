@@ -76,3 +76,14 @@ test('coins: battle + floor + chest coins settle; wipe keeps old coins only', ()
   finishRun(h, r2, 'wiped');
   assert.equal(h.coins, 50);
 });
+
+test('candy exp is keyed per member (uid), so two of a species both get it', async () => {
+  const { newGame } = await import('../src/core/save.js');
+  const { newMember } = await import('../src/core/progress.js');
+  const g = newGame();
+  g.party.push({ uid: 6, ...newMember('chimchar', 5) });
+  const r = startRun('sinnoh-field', 1);
+  addLoot(r, 'candy', 1);
+  const s = settleLoot(g, r);
+  assert.deepEqual(Object.keys(s.exp).map(Number).sort((x, y) => x - y), [1, 2, 3, 4, 5, 6]);
+});

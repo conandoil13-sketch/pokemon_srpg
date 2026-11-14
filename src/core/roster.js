@@ -12,12 +12,6 @@ export function deployed(game) {
   return ditto ? [ditto, ...rest] : rest;
 }
 
-// 진화: 출전 목록의 같은 자리를 새 이름으로
-export function renameSortie(game, from, to) {
-  const i = game.sortie.indexOf(from);
-  if (i >= 0) game.sortie[i] = to;
-}
-
 // 출전 ↔ 대기 전환. 꽉 찼으면 추가 불가, 마지막 1마리는 뺄 수 없음, 메타몽은 항상 출전
 export function toggleSortie(game, key) {
   const m = memberByKey(game, key);

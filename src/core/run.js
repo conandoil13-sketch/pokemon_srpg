@@ -11,8 +11,8 @@ export const FLOOR_COINS = 10, CHEST_COINS = 20, PICKUP_COINS = 10;
 
 export const floorSeed = (run) => hashSeed(run.seed, run.floor);
 
-// 직전 층에서 기절한 포켓몬만 50% (누적되지 않음)
-export const floorStartHp = (run) => Object.fromEntries(run.faintedLast.map((sp) => [sp, FAINTED_HP_RATIO]));
+// 직전 층에서 기절한 포켓몬만 50% (누적되지 않음). faintedLast = 동료 열쇠(uid)
+export const floorStartHp = (run) => Object.fromEntries(run.faintedLast.map((k) => [k, FAINTED_HP_RATIO]));
 
 // result: 'stairs' | 'win' | 'lose'. 원본 run 은 바꾸지 않는다
 export function afterFloor(run, result, fainted) {
@@ -40,7 +40,7 @@ export function settleLoot(game, run) {
   const coins = run.loot.coins ?? 0;
   game.coins = (game.coins ?? 0) + coins;
   const each = run.loot.candy.reduce((s, f) => s + f * CANDY_EXP_PER_FLOOR, 0);
-  const exp = each ? Object.fromEntries(game.party.map((m) => [m.species, each])) : {};
+  const exp = each ? Object.fromEntries(game.party.map((m) => [m.uid ?? m.species, each])) : {}; // 동료 열쇠별
   game.items.powders ??= emptyPowders();
   for (const [k, n] of Object.entries(run.loot.powders ?? {})) game.items.powders[k] = (game.items.powders[k] ?? 0) + n;
   const capsules = run.loot.capsules ?? [];

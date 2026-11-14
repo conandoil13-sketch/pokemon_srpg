@@ -58,7 +58,7 @@ export function setAbilitySlot(game, species, slot) {
   return { ok: true };
 }
 
-export const newParty = () => STARTERS.map((sp, i) => ({ uid: i + 1, ...newMember(sp) })); // uid 1..5
+export const newParty = () => STARTERS.map((sp) => newMember(sp));
 
 // 기술 목록을 멤버에게 적용: 4개 미만이면 바로 배움, 이미 알면 skip, 꽉 차면 choose(UI 가 resolveChoice)
 function learnEvents(member, moves) {
@@ -70,20 +70,22 @@ function learnEvents(member, moves) {
   });
 }
 
-// expBySpecies: 전투 로그 { [species]: exp }. 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
+// expByKey: 전투 로그 { [memberKey]: exp } (열쇠 = uid, 없으면 종 이름). 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
+// 이벤트마다 key 를 붙여 같은 종 두 마리를 구분한다
 // cap: 레벨 상한 (던전 돌파로 열림). 상한을 넘는 경험치는 버린다, 이미 넘은 멤버는 그대로
-export function applyExp(party, expBySpecies, rng = Math.random, cap = MAX_LEVEL) {
+export function applyExp(party, expByKey, rng = Math.random, cap = MAX_LEVEL) {
   const events = [];
   for (const m of party) {
-    const gain = expBySpecies[m.species];
+    const gain = expByKey[m.uid ?? m.species];
     if (!gain) continue;
+    const start = events.length;
     const s = SPECIES[m.species];
     const ceiling = Math.max(m.exp, expForLevel(s.growth, Math.min(cap, MAX_LEVEL)));
     const capped = cap < MAX_LEVEL && m.exp + gain > ceiling;
     m.exp = Math.min(m.exp + gain, ceiling);
     const cappedEvent = capped ? { type: 'capped', species: m.species, capped: true, cap } : null; // 레벨 상한: 넘친 경험치 버림
     const to = levelForExp(s.growth, m.exp);
-    if (to <= m.level) { if (cappedEvent) events.push(cappedEvent); continue; }
+    if (to <= m.level) { if (cappedEvent) events.push({ ...cappedEvent, key: m.uid ?? m.species }); continue; }
     const from = m.level;
     const base = m.build ? effectiveBase(m.build) : s.base; // 메타몽은 빌드 종족값
     events.push({ type: 'level', species: m.species, from, to, before: statsAt(base, from, m.ivs), after: statsAt(base, to, m.ivs) });
@@ -93,6 +95,7 @@ export function applyExp(party, expBySpecies, rng = Math.random, cap = MAX_LEVEL
     const pick = pickEvolution(levelEvolutionOptions(s, to, m.gender ?? null), s, rng); // 성별 진화
     if (pick) events.push({ type: 'evolve', species: m.species, options: pick.auto ? [pick.auto] : pick.choose, random: !!pick.auto && levelEvolutionOptions(s, to, m.gender ?? null).length > 1 });
     if (cappedEvent) events.push(cappedEvent);
+    for (let i = start; i < events.length; i++) events[i].key = m.uid ?? m.species;
   }
   return events;
 }
