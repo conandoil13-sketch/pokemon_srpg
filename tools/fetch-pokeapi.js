@@ -175,6 +175,9 @@ async function main() {
     moves[name] = {
       api: name, name: ko(mv.names) ?? name, type, category, power, accuracy: accuracy ?? 100, learnable,
       target, statChanges, statChance: mv.meta?.stat_chance ?? 0, effectKind, ailment, ailmentChance: mv.meta?.ailment_chance ?? 0,
+      // 특수 효과 메타: 흡수(+)·반동(−) %, 회복 %, 연속 타수, 급소 단계, 풀죽음 %, 우선도
+      drain: mv.meta?.drain ?? 0, healing: mv.meta?.healing ?? 0, minHits: mv.meta?.min_hits ?? null, maxHits: mv.meta?.max_hits ?? null,
+      critRate: mv.meta?.crit_rate ?? 0, flinchChance: mv.meta?.flinch_chance ?? 0, priority: mv.priority ?? 0,
     };
   }));
 
