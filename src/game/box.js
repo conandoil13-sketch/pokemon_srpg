@@ -4,7 +4,7 @@ import { ABILITIES } from '../data/abilities.js';
 import { abilityOf, typesOfMember } from '../core/progress.js';
 import { stoneEvolutionOptions } from '../core/evolution.js';
 import { deployed, toggleSortie } from '../core/roster.js';
-import { memberKey, copyMember, COPY_COST } from '../core/members.js';
+import { memberKey, copyMember, COPY_COST, lineMembers, lineLimit } from '../core/members.js';
 import { josa } from '../data/text.js';
 import { SORTIE_SIZE } from '../core/save.js';
 import { sortMembers, boxesOf, SORT_KEYS, SORT_KO, BOX_SIZE } from '../core/box.js';
@@ -51,6 +51,13 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   const say = (lines) => { msg = lines; mode = 'msg'; };
   const back = () => { mode = area; menu = null; };
 
+  // 한 마리 더: 수 제한·결정 부족이면 회색 (누르면 이유)
+  function copyItem(m) {
+    const root = lineRoot(m.species);
+    const why = lineMembers(game, root).length >= lineLimit(root) ? COPY_REASON.limit : (game.shards?.[root] ?? 0) < COPY_COST ? COPY_REASON.shards : null;
+    return { label: `한 마리 더 (결정 ${COPY_COST})`, enabled: !why, act: 'copy', why };
+  }
+
   function openMenu() {
     const m = current();
     if (!m) return;
@@ -59,7 +66,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       { label: isOut(m) ? '출전에서 빼기' : '출전에 넣기', enabled: true, act: 'sortie' },
       { label: '자세히 보기', enabled: true, act: 'summary' },
       { label: `진화의돌 (${game.items.evoStone}개)`, enabled: canStone, act: 'stone' },
-      ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }, { label: `한 마리 더 (결정 ${COPY_COST})`, enabled: true, act: 'copy' }]),
+      ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }, copyItem(m)]),
       { label: '그만둔다', enabled: true, act: 'close' },
     ];
     menuSel = 0; mode = 'menu';
@@ -81,7 +88,8 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
 
   function act(item) {
     const m = current();
-    if (!item.enabled || !m) return;
+    if (!m) return;
+    if (!item.enabled) { if (item.why) say(item.why); return; } // 회색 항목: 이유만 알려 준다
     if (item.act === 'close') { back(); return; }
     if (item.act === 'summary') { openSummary(0); return; }
     if (item.act === 'ability') { openSummary(3); return; }
@@ -90,7 +98,12 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       mode = 'summary';
       return;
     }
-    if (item.act === 'copy') { // 같은 계열 한 마리 더 (결정 4)
+    if (item.act === 'copy') { // 결정을 쓰기 전에 한 번 더 묻는다 (되돌릴 수 없음)
+      menu = [{ label: `데려온다 (결정 ${COPY_COST}개 사용)`, enabled: true, act: 'copyYes' }, { label: '그만둔다', enabled: true, act: 'close' }];
+      menuSel = 0;
+      return;
+    }
+    if (item.act === 'copyYes') { // 같은 계열 한 마리 더 (결정 4)
       const r = copyMember(game, memberKey(m), Math.random);
       if (!r.ok) { say(COPY_REASON[r.reason] ?? ['데려올 수 없다.']); return; }
       onSave();
@@ -166,6 +179,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     get summary() { return summary; },
     get message() { return msg; },
     get menuLabels() { return menu?.map((i) => i.label) ?? []; },
+    get menuEnabled() { return menu?.map((i) => i.enabled) ?? []; },
     handle(ev) {
       if (mode === 'summary') { summary.handle(ev); return; }
       const pick = ev.type === 'confirm' || ev.type === 'click';
