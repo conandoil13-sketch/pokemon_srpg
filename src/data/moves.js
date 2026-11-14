@@ -23,3 +23,7 @@ export const MOVES = Object.fromEntries(
     return [m.api, { ...m, id: m.api, kind, area: kind === 'enemies' || kind === 'allies', range, shape: null, friendlyFire: false, aimRange: null }];
   }),
 );
+
+// 몸무게로 위력이 정해지는 기술 (위력은 데미지 계산 때 상대 몸무게로) · 헤롱헤롱 기술
+for (const id of ['low-kick', 'grass-knot']) if (MOVES[id]) Object.assign(MOVES[id], { weightPower: true, learnable: true });
+if (MOVES.attract) Object.assign(MOVES.attract, { ailment: 'infatuation', learnable: true });

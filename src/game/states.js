@@ -733,7 +733,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       return;
     }
     drawText(ctx, mv.category === 'physical' ? '물리' : '특수', x + 44, y + 4);
-    drawText(ctx, `위력 ${mv.power}`, x + 6, y + 19);
+    drawText(ctx, mv.weightPower ? '위력 몸무게' : `위력 ${mv.power ?? '-'}`, x + 6, y + 19);
     drawText(ctx, `명중 ${mv.accuracy}`, x + 60, y + 19);
     drawText(ctx, ui.shapeLabel(mv), x + 6, y + 33);
     if (mv.ailment) { // 부가효과 상태이상: "화상 10%"
