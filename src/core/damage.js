@@ -53,7 +53,8 @@ export const avgHits = (move) => (!move.minHits || !move.maxHits || move.maxHits
 // 고정 데미지 (지구던지기·나이트헤드 = 레벨, 용의분노 40, 소닉붐 20): 상성 무효만 적용
 export function fixedDamage(attacker, defender, move, weather = null) {
   if (!move.fixedDamage) return null;
-  if (typeEffect(attacker, defender, move, weather) === 0 || immunity(attacker, defender, move, 1)) return 0;
+  const tm = typeEffect(attacker, defender, move, weather);
+  if (tm === 0 || immunity(attacker, defender, move, tm)) return 0; // 불가사의부적은 실제 상성으로 판정
   return move.fixedDamage === 'level' ? attacker.level : move.fixedDamage;
 }
 

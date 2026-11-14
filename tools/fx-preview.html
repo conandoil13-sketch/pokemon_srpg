@@ -40,7 +40,7 @@ import { fxForMove, fxForAilment, TYPE_PALETTE } from '../src/data/moveFx.js';
 import { actorFor } from '../src/render/fxActor.js';
 
 const $ = (id) => document.getElementById(id);
-const TYPES = [...Object.keys(TYPE_PALETTE), 'dark'];
+const TYPES = [...new Set([...Object.keys(TYPE_PALETTE), 'dark'])];
 $('type').innerHTML = TYPES.map((t) => `<option ${t === 'poison' ? 'selected' : ''}>${t}</option>`).join('');
 const AILS = ['poison', 'toxic', 'burn', 'paralysis', 'sleep', 'freeze', 'confusion', 'infatuation'];
 $('ailment').innerHTML = AILS.map((a) => `<option>${a}</option>`).join('');

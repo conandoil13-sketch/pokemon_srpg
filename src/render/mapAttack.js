@@ -266,7 +266,8 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   for (const d of defenders) {
     const h = hitOf(d); if (!h) continue;
     const name = label(d);
-    if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
+    if (h.failed) mid.push({ text: '그러나 실패하고 말았다!', who: d }); // 꿈먹기: 깨어 있음
+    else if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
     else if (!h.hit) mid.push({ text: `${name}에게는 맞지 않았다!`, who: d });
     else {
       if (h.crit) mid.push({ text: many ? `${name}의 급소에 맞았다!` : '급소에 맞았다!', who: d });
@@ -291,7 +292,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
     ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo })),
-    ...(result.selfKO ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []),
+    ...(result.selfKO || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';

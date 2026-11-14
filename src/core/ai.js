@@ -44,7 +44,8 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   if (move.drain) {
     const dealt = hit.filter((t) => t.side !== unit.side).reduce((s, t) => s + Math.min(t.hp, expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W)), 0);
     const amt = dealt * Math.abs(move.drain) / 100;
-    if (move.drain > 0) score += Math.min(amt, unit.maxHp - unit.hp) * 0.5;
+    if (move.drain > 0 && hit.some((t) => t.ability === 'liquid-ooze')) { if (amt >= unit.hp) return null; score -= amt; } // 해감액: 흡수가 피해
+    else if (move.drain > 0) score += Math.min(amt, unit.maxHp - unit.hp) * 0.5;
     else if (unit.ability !== 'rock-head' && unit.ability !== 'magic-guard') { if (amt >= unit.hp) return null; score -= amt; }
   }
   if (SELF_KO.includes(move.id)) {
@@ -112,7 +113,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
     const p = parse(k);
     const ghost = { ...unit, x: p.x, y: p.y };
     const risk = THREAT_WEIGHT * threatAt(threats, ghost, p.x, p.y, state.grid[p.y][p.x]);
-    for (const mid of unit.moves) {
+    for (const mid of unit.sealed ? [] : unit.moves) { // 풀죽음 봉인: 기술 없이 이동만
       const move = MOVES[mid];
       if (move.heal) { // 회복기: HP 절반 이하이고 남은 횟수가 있을 때만, 안전한 칸에서
         if (unit.hp <= unit.maxHp / 2 && (unit.healUses ?? 0) > 0) {

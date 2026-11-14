@@ -209,3 +209,38 @@ test('move info tags describe the new effects', () => {
   assert.ok(moveEffectTags(MOVES.bite).includes('풀죽음 30%'));
   assert.ok(moveEffectTags(MOVES['double-edge']).includes('반동 1/3'));
 });
+
+// ---- 리뷰 수정 ----
+import { forecastFor } from '../src/game/states.js';
+
+test('review: single-hit contact moves keep the old roll order (secondary effect before Static)', () => {
+  // 불꽃·번개펀치 류: 부가효과(마비 10%) 판정이 정전기(30%) 보다 먼저 — 예전 main 과 같은 결과
+  const { s, a, f } = duel('machop', 'pikachu', { foe: { ability: 'static', hp: 999, maxHp: 999 } });
+  applyMove(s, a.id, 'thunder-punch', f.id, seq([0.01, 0.9, 0.5, 0.05, 0.5, 0.5]));
+  assert.equal(f.status, 'paralysis');
+  assert.equal(a.status, null);
+});
+
+test('review: fixed damage goes through Wonder Guard only when super-effective; forecast counts strikes', () => {
+  const sh = duel('gastly', 'shedinja');
+  assert.ok(applyMove(sh.s, sh.a.id, 'night-shade', sh.f.id, () => 0.01).damage > 0); // 고스트 → 고스트 효과 굉장
+  const nm = duel('machop', 'shedinja');
+  assert.equal(applyMove(nm.s, nm.a.id, 'seismic-toss', nm.f.id, () => 0.01).damage, 0); // 격투 → 벌레/고스트 무효
+  const { a, f } = duel('hitmonlee', 'snorlax');
+  const one = forecastFor(a, f, { ...MOVES['double-kick'], minHits: null, maxHits: null }, '.');
+  const two = forecastFor(a, f, MOVES['double-kick'], '.');
+  assert.equal(two.min, one.min * 2);
+  assert.equal(two.max, one.max * 2);
+});
+
+test('review: sealed enemies plan no attack; liquid ooze ignores mold breaker but not magic guard', () => {
+  const { s, a, f } = duel('rattata', 'rattata');
+  f.sealed = true;
+  assert.equal(planEnemyAction(s, f).attack, null);
+  const mb = duel('bulbasaur', 'tentacool', { ally: { ability: 'mold-breaker', hp: 50 }, foe: { ability: 'liquid-ooze', hp: 999, maxHp: 999 } });
+  applyMove(mb.s, mb.a.id, 'mega-drain', mb.f.id, () => 0.01);
+  assert.ok(mb.a.hp < 50);
+  const mg = duel('bulbasaur', 'tentacool', { ally: { ability: 'magic-guard', hp: 50 }, foe: { ability: 'liquid-ooze', hp: 999, maxHp: 999 } });
+  applyMove(mg.s, mg.a.id, 'mega-drain', mg.f.id, () => 0.01);
+  assert.equal(mg.a.hp, 50);
+});

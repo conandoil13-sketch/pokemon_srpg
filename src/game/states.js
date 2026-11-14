@@ -31,9 +31,12 @@ const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
 // 예상 창 숫자: 명중·최소·최대 데미지 (날씨·다수 명중 반영)
 export function forecastFor(a, d, mv, tile, weather = null, spread = 1) {
+  if (mv.dreamOnly && d.status !== 'sleep') return { hit: hitChance(a, d, mv, tile, weather), min: 0, max: 0, typeMult: 0 }; // 꿈먹기: 깨어 있으면 실패
   const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread, weather });
   const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread, weather });
-  return { hit: hitChance(a, d, mv, tile, weather), min: min.damage, max: max.damage, typeMult: min.typeMult };
+  // 연속 공격: 최소 타수 × 최소, 최대 타수 × 최대 (스킬링크면 최대 타수)
+  const lo = !mv.minHits || mv.maxHits <= 1 ? 1 : a.ability === 'skill-link' ? mv.maxHits : mv.minHits, hi = !mv.maxHits || mv.maxHits <= 1 ? 1 : mv.maxHits;
+  return { hit: hitChance(a, d, mv, tile, weather), min: min.damage * lo, max: max.damage * hi, typeMult: min.typeMult };
 }
 
 import { josa } from '../data/text.js';
@@ -789,7 +792,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (mv.category === 'status') {
       drawText(ctx, '변화', x + 44, y + 4);
       drawText(ctx, `대상 ${TARGET_LABEL[mv.kind]}`, x + 6, y + 19);
-      drawText(ctx, mv.heal ? `회복 · 남은 ${sel?.healUses ?? 0}번` : `효과 ${effectSummary(mv)}`, x + 6, y + 33, '#5848a0');
+      const healNote = !sel ? '' : (sel.healUses ?? 0) <= 0 ? '이번 층에서는 더 못 쓴다' : sel.hp >= sel.maxHp ? 'HP 가 가득 차 있다' : `회복 · 남은 ${sel.healUses}번`;
+      drawText(ctx, mv.heal ? healNote : `효과 ${effectSummary(mv)}`, x + 6, y + 33, '#5848a0');
       return;
     }
     drawText(ctx, mv.category === 'physical' ? '물리' : '특수', x + 44, y + 4);
