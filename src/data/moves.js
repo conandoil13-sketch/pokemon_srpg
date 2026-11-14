@@ -27,3 +27,10 @@ export const MOVES = Object.fromEntries(
 // 몸무게로 위력이 정해지는 기술 (위력은 데미지 계산 때 상대 몸무게로) · 헤롱헤롱 기술
 for (const id of ['low-kick', 'grass-knot']) if (MOVES[id]) Object.assign(MOVES[id], { weightPower: true, learnable: true });
 if (MOVES.attract) Object.assign(MOVES.attract, { ailment: 'infatuation', learnable: true });
+
+// 고정 데미지 · 회복기 · 꿈먹기 (덮어쓰기 표, 2026-11-15)
+const FIXED_DAMAGE = { 'seismic-toss': 'level', 'night-shade': 'level', 'dragon-rage': 40, 'sonic-boom': 20 };
+for (const [id, v] of Object.entries(FIXED_DAMAGE)) if (MOVES[id]) Object.assign(MOVES[id], { fixedDamage: v, learnable: true });
+const HEAL_MOVES = { recover: {}, 'soft-boiled': {}, 'milk-drink': {}, roost: {}, synthesis: { weather: true }, 'morning-sun': { weather: true }, moonlight: { weather: true } };
+for (const [id, v] of Object.entries(HEAL_MOVES)) if (MOVES[id]) Object.assign(MOVES[id], { heal: v, learnable: true, kind: 'self', range: [0, 0] });
+if (MOVES['dream-eater']) MOVES['dream-eater'].dreamOnly = true;

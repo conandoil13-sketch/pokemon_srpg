@@ -1,11 +1,11 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
-import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage } from '../render/mapAttack.js';
-import { reachable, tilesInRange, manhattan, pathTo } from '../core/pathfind.js';
+import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
-import { enemyTurnOrder, planEnemyAction } from '../core/ai.js';
+import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
@@ -31,9 +31,12 @@ const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
 // 예상 창 숫자: 명중·최소·최대 데미지 (날씨·다수 명중 반영)
 export function forecastFor(a, d, mv, tile, weather = null, spread = 1) {
+  if (mv.dreamOnly && d.status !== 'sleep') return { hit: hitChance(a, d, mv, tile, weather), min: 0, max: 0, typeMult: 0 }; // 꿈먹기: 깨어 있으면 실패
   const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread, weather });
   const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread, weather });
-  return { hit: hitChance(a, d, mv, tile, weather), min: min.damage, max: max.damage, typeMult: min.typeMult };
+  // 연속 공격: 최소 타수 × 최소, 최대 타수 × 최대 (스킬링크면 최대 타수)
+  const lo = !mv.minHits || mv.maxHits <= 1 ? 1 : a.ability === 'skill-link' ? mv.maxHits : mv.minHits, hi = !mv.maxHits || mv.maxHits <= 1 ? 1 : mv.maxHits;
+  return { hit: hitChance(a, d, mv, tile, weather), min: min.damage * lo, max: max.damage * hi, typeMult: min.typeMult };
 }
 
 import { josa } from '../data/text.js';
@@ -48,6 +51,19 @@ const isAttack = (mv) => mv.category !== 'status';
 const DIR_OF = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down' : 'up');
 const pickOne = (mv) => !mv.kind || mv.kind === 'enemy' || mv.kind === 'ally'; // 대상을 직접 고르는 기술
 const helpful = (mv) => mv.kind === 'self' || mv.kind === 'ally' || mv.kind === 'allies';
+// 기술 특수 효과 글자 (기술 정보·자세히 보기)
+export function moveEffectTags(mv) {
+  const tags = [];
+  if (mv.drain > 0) tags.push(`흡수 ${mv.drain}%`);
+  if (mv.drain < 0) tags.push(`반동 ${-mv.drain === 33 ? '1/3' : -mv.drain === 25 ? '1/4' : -mv.drain === 50 ? '1/2' : `${-mv.drain}%`}`);
+  if (mv.minHits && mv.maxHits > 1) tags.push(mv.minHits === mv.maxHits ? `${mv.maxHits}회` : `${mv.minHits}~${mv.maxHits}회`);
+  if (mv.critRate > 0) tags.push('급소↑');
+  if (mv.fixedDamage) tags.push(mv.fixedDamage === 'level' ? '고정 레벨' : `고정 ${mv.fixedDamage}`);
+  if (mv.priority > 0) tags.push('선제');
+  if (mv.flinchChance > 0) tags.push(`풀죽음 ${mv.flinchChance}%`);
+  if (mv.heal) tags.push('회복 (층 2번)');
+  return tags;
+}
 export const effectSummary = (mv) => [...(mv.statChanges ?? []).map((c) => `${STAT_KO[API_STAT[c.stat]]} ${c.change > 0 ? '+' : ''}${c.change}`), ...(mv.ailment ? [STATUS_KO[mv.ailment]] : [])].join(' ');
 // 상태이상 변화기 예상 창 경고: 면역 / 이미 상태이상 (없으면 null)
 export function ailmentNote(target, mv, attacker = null) {
@@ -76,6 +92,7 @@ export function phaseNotices(events, expired, get) {
     const u = get(e.unitId);
     const text = e.kind === 'confusionEnd' ? `${who(e.unitId)}의 혼란이 풀렸다!`
       : e.kind === 'infatuationEnd' ? `${who(e.unitId)}의 헤롱헤롱이 풀렸다!`
+      : e.kind === 'sealed' ? `${josa(who(e.unitId), '은/는')} 풀이 죽어 기술을 쓸 수 없다!`
       : e.kind === 'thawed' ? `${who(e.unitId)}의 얼음이 녹았다!`
       : `${josa(who(e.unitId), '은/는')} ${STATUS_LINE[e.kind]}`;
     const w = wrapMessage(text);
@@ -280,6 +297,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const u = st.units.find((o) => o.id === id);
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
     const plan = planEnemyAction(st, u, { unseen: enemyUnseen });
+    if (u.sealed) plan.attack = null; // 풀죽음: 이번 차례 기술 봉인 (이동만)
     // 안개: 이동한 뒤에도 안개 속이면 기술을 쓰지 않는다 (대사로 정체가 드러나지 않게)
     if (st.weather === 'fog' && plan.attack && isHidden(plan.moveTo, allyUnits())) plan.attack = null;
     focus = u;
@@ -289,13 +307,23 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         cursor = { ...plan.moveTo };
         if (plan.attack) {
           const target = st.units.find((o) => o.id === plan.attack.targetId);
-          pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, nextEnemy, plan.attack.aim) };
+          pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, () => enemyRetreat(u), plan.attack.aim) };
         } else {
           u.acted = true;
           pause = { t: 0.2, fn: nextEnemy };
         }
       });
     } };
+  }
+
+  // 적 치고 빠지기: 아군에게서 가장 먼 칸으로
+  function enemyRetreat(u) {
+    const left = canRetreat(st, u);
+    if (!left) { nextEnemy(); return; }
+    const t = retreatSpot(st, u, left);
+    u.retreatReady = false; u.retreated = true;
+    if (!t || (t.x === u.x && t.y === u.y)) { nextEnemy(); return; }
+    pause = { t: 0.15, fn: () => startWalk(u, pathTo(st.grid, st.units, u, t.x, t.y), nextEnemy) };
   }
 
   function startWalk(unit, path, onDone) {
@@ -379,7 +407,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function openAction() {
     menu = sel.moves.map((m) => ({
       label: MOVES[m].name, moveId: m,
-      enabled: isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MOVES[m].kind === 'self' || targetsFor(sel, m).length > 0,
+      enabled: !sel.sealed && (MOVES[m].heal ? sel.hp < sel.maxHp && (sel.healUses ?? 0) > 0 : true) && (isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MOVES[m].kind === 'self' || targetsFor(sel, m).length > 0), // 풀죽음 봉인
       ...(MOVES[m].category === 'status' ? { tag: '변화' } : {}),
     }));
     menu.push({ label: '대기', enabled: true });
@@ -390,11 +418,20 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function finishAllyAction() {
+    if (sel && !st.result && canRetreat(st, sel) > 0) { openRetreat(); return; } // 선제기: 치고 빠지기
     sel = null;
     if (st.result) { mode = 'result'; return; }
     if (allyUnits().every((u) => u.acted)) enemyPhase();
     else mode = 'idle';
   }
+
+  // 치고 빠지기: 남은 이동력으로 다시 이동 (취소하면 제자리에서 끝)
+  function openRetreat() {
+    reach = reachable(st.grid, st.units, sel, canRetreat(st, sel));
+    cursor = { x: sel.x, y: sel.y };
+    mode = 'retreat';
+  }
+  function endRetreat() { sel.retreatReady = false; sel.retreated = true; finishAllyAction(); }
 
   function openEndMenu() {
     menu = [{ label: '턴 종료', enabled: true }, { label: '취소', enabled: true }];
@@ -448,6 +485,23 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       case 'anim':
         if ((ev.type === 'confirm' || ev.type === 'click') && anim) anim.advance();
         return;
+      case 'retreat': {
+        if (tile && (ev.type === 'cursor' || ev.type === 'click') && inMap(tile.x, tile.y)) cursor = tile;
+        if (ev.type === 'dir' && inMap(cursor.x + ev.dx, cursor.y + ev.dy)) cursor = { x: cursor.x + ev.dx, y: cursor.y + ev.dy };
+        if (ev.type === 'cancel') { endRetreat(); return; }
+        const pick = ev.type === 'confirm' || ev.type === 'click';
+        if (pick && reach.has(`${cursor.x},${cursor.y}`)) {
+          const unit = sel;
+          startWalk(unit, pathTo(st.grid, st.units, unit, cursor.x, cursor.y), () => {
+            unit.retreatReady = false; unit.retreated = true;
+            const a = arrive(st, unit.id); // 상자·계단은 보통 이동과 같게
+            if (a.stairs) { showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; }); return; }
+            if (a.item) { showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item] ?? '아이템', '을/를')} 얻었다!`], finishAllyAction); return; }
+            finishAllyAction();
+          });
+        }
+        return;
+      }
       case 'idle': case 'selected': {
         if (tile && (ev.type === 'cursor' || ev.type === 'click') && inMap(tile.x, tile.y)) cursor = tile;
         if (ev.type === 'dir' && inMap(cursor.x + ev.dx, cursor.y + ev.dy)) cursor = { x: cursor.x + ev.dx, y: cursor.y + ev.dy };
@@ -482,7 +536,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         if (ev.type === 'cancel') {
           if (mode === 'endMenu') { mode = 'idle'; return; }
           if (moveLocked) return;
-          sel.x = origin.x; sel.y = origin.y; sel.moved = false;
+          sel.x = origin.x; sel.y = origin.y; sel.moved = false; sel.spent = 0;
           facing[sel.id] = origin.facing;
           cursor = { x: origin.x, y: origin.y };
           mode = 'selected';
@@ -566,7 +620,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
-        moveUnit(st, unit.id, end.x, end.y);
+        const cost = path.slice(1).reduce((c, p) => c + (TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용
+        moveUnit(st, unit.id, end.x, end.y, cost);
         const arriveLines = abilityNotices(st.log.arriveAbilityEvents, (id) => everyone.get(id));
         if (arriveLines.length && unit.side === 'ally') moveLocked = true; // 위협을 건 이동은 취소할 수 없다
         noticeChain(arriveLines, () => { mode = prevMode; onDone(); });
@@ -737,17 +792,16 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (mv.category === 'status') {
       drawText(ctx, '변화', x + 44, y + 4);
       drawText(ctx, `대상 ${TARGET_LABEL[mv.kind]}`, x + 6, y + 19);
-      drawText(ctx, `효과 ${effectSummary(mv)}`, x + 6, y + 33, '#5848a0');
+      const healNote = !sel ? '' : (sel.healUses ?? 0) <= 0 ? '이번 층에서는 더 못 쓴다' : sel.hp >= sel.maxHp ? 'HP 가 가득 차 있다' : `회복 · 남은 ${sel.healUses}번`;
+      drawText(ctx, mv.heal ? healNote : `효과 ${effectSummary(mv)}`, x + 6, y + 33, '#5848a0');
       return;
     }
     drawText(ctx, mv.category === 'physical' ? '물리' : '특수', x + 44, y + 4);
-    drawText(ctx, mv.weightPower ? '위력 몸무게' : `위력 ${mv.power ?? '-'}`, x + 6, y + 19);
+    drawText(ctx, mv.weightPower ? '위력 몸무게' : mv.fixedDamage ? '위력 고정' : `위력 ${mv.power ?? '-'}`, x + 6, y + 19);
     drawText(ctx, `명중 ${mv.accuracy}`, x + 60, y + 19);
     drawText(ctx, ui.shapeLabel(mv), x + 6, y + 33);
-    if (mv.ailment) { // 부가효과 상태이상: "화상 10%"
-      const t = `${STATUS_KO[mv.ailment]} ${mv.ailmentChance || 100}%`;
-      drawText(ctx, t, x + w - 8 - textWidth(t, 'small'), y + 35, '#5848a0', null, 'small');
-    }
+    const extra = [...(mv.ailment ? [`${STATUS_KO[mv.ailment]} ${mv.ailmentChance || 100}%`] : []), ...moveEffectTags(mv)].slice(0, 2).join(' · '); // "화상 10% · 흡수 50%"
+    if (extra) drawText(ctx, extra, x + w - 8 - textWidth(extra, 'small'), y + 35, '#5848a0', null, 'small');
   }
 
   // 상태 데미지 알림: 유닛 위 데미지 숫자 + 줄어드는 HP 바 (월드 좌표)
@@ -776,6 +830,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       ui.drawHighlights(ctx, toPts(reach), BLUE);
       ui.drawHighlights(ctx, atkTiles, RED);
     }
+    if (mode === 'retreat') ui.drawHighlights(ctx, toPts(reach), BLUE); // 치고 빠지기
     const area = (mv) => {
       if (isAttack(mv)) { // 공격기: 가능한 조준들의 맞는 칸 합집합
         const seen = new Map();
@@ -795,7 +850,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawUnits(ctx);
     fxm.draw(ctx, 'front', { x: cx, y: cy });
     ctx.save(); ctx.translate(cx, cy); drawWeather(ctx, st.weather, time); ctx.restore(); // 날씨: 유닛·이펙트 위, 커서·HP 바·숫자·UI 아래
-    if (['idle', 'selected', 'target'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
+    if (['idle', 'selected', 'target', 'retreat'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
     if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);
     ctx.restore();

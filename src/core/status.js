@@ -14,7 +14,7 @@ const PARALYSIS_FAIL = 0.25;
 const CONFUSION_HIT = 0.5;
 const TOXIC_MAX = 15;
 
-export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0, infatuation: 0, infatuatedBy: null });
+export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0, infatuation: 0, infatuatedBy: null, flinch: false, sealed: false, fakedOut: false });
 
 // 헤롱헤롱: 서로 성별이 있고 반대일 때만, 둔감 면역(틀깨기면 무시), 이미 걸렸으면 실패
 export const INFATUATION_TURNS = 3, INFATUATION_FAIL = 0.5;

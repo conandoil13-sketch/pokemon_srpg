@@ -13,6 +13,7 @@ import { drawText, textWidth } from '../render/font.js';
 import { drawPortrait } from '../render/sprites.js';
 import { W, H } from '../render/screen.js';
 import { evolutionHint, fitLines } from './memberText.js';
+import { moveEffectTags } from './states.js';
 import { CHOICE_LOCK } from './learnFlow.js';
 
 export const PAGES = ['정보', '능력치', '기술', '특성'];
@@ -114,7 +115,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
           drawText(ctx, mv.name, 10, y);
           ui.drawTypeBadge(ctx, mv.type, 120, y + 1);
           small(CATEGORY_KO[mv.category] ?? '', 158, y + 2);
-          small([mv.weightPower ? '위력 몸무게' : `위력 ${mv.power ?? '-'}`, `명중 ${mv.accuracy ?? '-'}`, ui.shapeLabel(mv)].filter(Boolean).join(' · '), 10, y + 13, '#606060');
+          small([mv.weightPower ? '위력 몸무게' : mv.fixedDamage ? '위력 고정' : `위력 ${mv.power ?? '-'}`, `명중 ${mv.accuracy ?? '-'}`, ui.shapeLabel(mv), ...moveEffectTags(mv)].filter(Boolean).join(' · '), 10, y + 13, '#606060'); // 흡수·반동·연속 등
         });
       } else {
         const cur = ABILITIES[abilityOf(m)], slots = s.abilities;

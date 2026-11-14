@@ -226,8 +226,10 @@ test('regenerated data keeps every existing value (only new fields added)', () =
   const keep = Object.fromEntries(Object.entries(POKEDEX.species).map(([k, s]) => [k, { base: s.base, types: s.types, learnset: s.learnset, evolutions: strip(s.evolutions), abilities: s.abilities, stage: s.stage, bst: s.bst, dex: s.dex, name: s.name, growth: s.growth, baseExp: s.baseExp, legendary: s.legendary }]));
   const sha = (o) => createHash('sha1').update(JSON.stringify(o)).digest('hex');
   assert.equal(sha(keep), '6bbb9325dd6bb975499e89900f09691e551e8a58');
+  const NEW = ['drain', 'healing', 'minHits', 'maxHits', 'critRate', 'flinchChance', 'priority']; // 기술 효과 메타 (2026-11-15 추가)
   const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
-  assert.equal(sha(oldMoves), 'd8bfe8cd8abd8d1a6eab82e276ba6203092ea7fb');
+  const oldOnly = Object.fromEntries(Object.entries(oldMoves).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).filter(([f]) => !NEW.includes(f)))]));
+  assert.equal(sha(oldOnly), 'd8bfe8cd8abd8d1a6eab82e276ba6203092ea7fb');
   assert.equal(sha(POKEDEX.abilities), '4354c097e52659f6d0ee4dbe1193f2e036b37815');
   assert.ok(gk);
 });
@@ -253,4 +255,20 @@ test('low kick power follows the target weight', () => {
   heavy.weight = 460;
   const r = expectedDamage(a, heavy, MOVES['low-kick'], '.') / expectedDamage(a, light, MOVES['low-kick'], '.');
   assert.ok(r > 4 && r < 7, String(r)); // 위력 120 / 20
+});
+
+test('move effect meta and newly learnable moves', () => {
+  assert.equal(MOVES['giga-drain'].drain, 50);
+  assert.equal(MOVES['double-edge'].drain, -33);
+  assert.deepEqual([MOVES['pin-missile'].minHits, MOVES['pin-missile'].maxHits], [2, 5]);
+  assert.equal(MOVES['slash'].critRate, 1);
+  assert.equal(MOVES.bite.flinchChance, 30);
+  assert.equal(MOVES['quick-attack'].priority, 1);
+  assert.equal(MOVES['fake-out'].priority, 3);
+  assert.equal(MOVES['fake-out'].flinchChance, 100);
+  for (const id of ['seismic-toss', 'night-shade', 'dragon-rage', 'sonic-boom', 'recover', 'soft-boiled', 'milk-drink', 'roost', 'synthesis', 'morning-sun', 'moonlight']) assert.equal(MOVES[id].learnable, true, id);
+  assert.equal(MOVES['seismic-toss'].fixedDamage, 'level');
+  assert.equal(MOVES['dragon-rage'].fixedDamage, 40);
+  assert.equal(MOVES.synthesis.heal.weather, true);
+  assert.equal(MOVES['dream-eater'].dreamOnly, true);
 });

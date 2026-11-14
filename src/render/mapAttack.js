@@ -1,4 +1,5 @@
 // 맵 위 공격 연출 (PMD식). 로직 결과(result)를 재생만 한다.
+import { PAL } from '../vendor/pixelfx/core/index.js';
 import { SPECIES } from '../data/species.js';
 import { TYPE_COLORS } from '../data/types.js';
 import { josa } from '../data/text.js';
@@ -133,6 +134,8 @@ function createBlockedAnim({ attacker, result, fx }) {
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 몸이 저려서 움직일 수 없다!`), emo: 'Pain' }]
     : result.blocked === 'infatuation'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 헤롱헤롱해서 기술을 쓸 수 없었다!`), emo: 'Normal' }]
+    : result.blocked === 'sealed'
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 풀이 죽어 기술을 쓸 수 없다!`), emo: 'Pain' }]
     : result.blocked === 'damp'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage('습기 때문에 폭발할 수 없다!'), emo: 'Normal' }]
     : [
@@ -193,13 +196,15 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const target = defender ?? attacker;
   const dir = target === attacker ? null : dirFromDelta(target.x - attacker.x, target.y - attacker.y);
   const missed = (result.missed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}에게는 맞지 않았다!`), who: get(id), emo: 'Normal' }));
-  const nothing = !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...missed, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const healed = result.healed ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(attacker), '은/는')} 체력을 회복했다!`), who: attacker, emo: 'Happy', heal: true }]
+    : result.healFailed ? [{ k: 'msg', d: AUTO, text: wrapMessage(result.healFailed === 'full' ? '그러나 HP 가 가득 차 있다!' : '이번 층에서는 더 쓸 수 없다!'), who: attacker, emo: 'Normal' }] : [];
+  const nothing = !healed.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
+  const steps = [{ k: 'act', d: 0.45 }, ...healed, ...missed, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
-  const enter = (s) => { if (s) spawnChangeFx(fx, s, result, get); };
+  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'pickups/collect-burst', opts: { palette: PAL.leaf }, timeScale: 1, layer: 'front' }, attacker); spawnChangeFx(fx, s, result, get); }; // 회복: 초록 반짝임
   return {
     defender: target,
     get done() { return i >= steps.length; },
@@ -234,7 +239,12 @@ const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 function createAttack({ attacker, defender, defenders: ds, move, result, hpBefore, lookup, aim, endPt: givenEnd, fx }) {
   const defenders = ds ?? (defender ? [defender] : []);
   const hits = result.hits ?? (defender ? [{ unitId: defender.id, ...result, hpBefore }] : []);
-  const hitOf = (u) => hits.find((h) => h.unitId === u.id);
+  // 연속 공격: 같은 대상의 타를 합쳐서 (데미지 합 · 급소는 하나라도 · 기절은 마지막 타)
+  const hitOf = (u) => {
+    const mine = hits.filter((h) => h.unitId === u.id);
+    if (mine.length <= 1) return mine[0];
+    return { ...mine[0], damage: mine.reduce((t, h) => t + h.damage, 0), crit: mine.some((h) => h.crit), fainted: mine.at(-1).fainted, strikes: mine.length };
+  };
   const get = lookup ?? ((id) => [attacker, ...defenders].find((u) => u.id === id));
   const special = move.category === 'special';
   const animName = special ? 'Shoot' : 'Attack';
@@ -256,15 +266,23 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   for (const d of defenders) {
     const h = hitOf(d); if (!h) continue;
     const name = label(d);
-    if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
+    if (h.failed) mid.push({ text: '그러나 실패하고 말았다!', who: d }); // 꿈먹기: 깨어 있음
+    else if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
     else if (!h.hit) mid.push({ text: `${name}에게는 맞지 않았다!`, who: d });
     else {
       if (h.crit) mid.push({ text: many ? `${name}의 급소에 맞았다!` : '급소에 맞았다!', who: d });
       if (h.typeMult > 1) mid.push({ text: many ? `${name}에게 효과가 굉장했다!` : '효과가 굉장했다!', who: d });
       else if (h.typeMult < 1) mid.push({ text: many ? `${name}에게는 효과가 별로인 듯하다...` : '효과가 별로인 듯하다...', who: d });
     }
+    if (h.strikes > 1) mid.push({ text: `${h.strikes}번 맞았다!`, who: d }); // 연속 공격
     if (h.fainted) faints.push({ text: `${josa(name, '은/는')} 쓰러졌다!`, who: d });
   }
+  // 흡수·반동·풀죽음 대사
+  const after = [];
+  if (result.drained > 0) after.push({ text: `${josa(label(attacker), '은/는')} 체력을 흡수했다!`, who: attacker, emo: 'Happy' });
+  if (result.drained < 0) after.push({ text: `${josa(label(attacker), '은/는')} 해감액을 흡수해 데미지를 입었다!`, who: attacker, emo: 'Pain' });
+  if (result.recoil > 0) after.push({ text: `${josa(label(attacker), '은/는')} 반동으로 데미지를 입었다!`, who: attacker, emo: 'Pain' });
+  for (const id of result.flinched ?? []) { const u = get(id); if (u) after.push({ text: `${josa(label(u), '은/는')} 풀이 죽었다!`, who: u, emo: 'Pain' }); }
   const steps = [
     { k: 'act', d: actLen },
     ...(travel ? [{ k: 'travel', d: 0.25 }] : []),
@@ -273,7 +291,8 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
-    ...(result.selfKO ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []),
+    ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo })),
+    ...(result.selfKO || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
