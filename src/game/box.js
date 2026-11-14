@@ -15,6 +15,7 @@ import { createSummary } from './summary.js';
 import { fitLines } from './memberText.js';
 
 const COLS = 6, CELL = 24, GX = 108, GY = 16, PANEL_W = 104, DY = 140, SLOT_X = 38, SLOT_W = 43;
+const NEXT_X = GX + 50, SORT_X = GX + 68; // 머리줄: ◀ 1/2 ▶ (고정 위치) · 정렬
 const REASON = { full: ['출전 자리가 꽉 찼다.', '먼저 다른 동료를 빼자.'], last: ['최소 1마리는', '출전해야 한다.'], ditto: ['메타몽은 항상 출전한다.'] };
 
 // 실행 중 기억 (저장하지 않음): 정렬, 박스 번호, 커서 동료 — 진화 뒤 다시 열어도 그대로
@@ -60,10 +61,15 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   }
 
   function openSummary(page) {
-    const l = list(), m = current();
+    const l = list(), m = current(), from = area;
     summary = createSummary({
       game, list: l, index: Math.max(0, l.indexOf(m)), page, onSave,
-      onClose: (last) => { summary = null; focusOn(last.species); remember(); mode = 'grid'; },
+      onClose: (last) => { // 연 곳으로 돌아감 (출전 줄에서 열었고 그 동료가 출전 중이면 출전 줄)
+        summary = null;
+        const k = team().findIndex((x) => x.species === last.species);
+        if (from === 'deploy' && k >= 0) { area = 'deploy'; slot = k; } else focusOn(last.species);
+        remember(); mode = area;
+      },
     });
     mode = 'summary';
   }
@@ -93,6 +99,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       else if (box < last) { box += 1; cell = Math.min(boxes()[box].length - 1, row * COLS); }
     } else if (dy > 0) {
       if (cell + COLS < len) cell += COLS;
+      else if (row < Math.floor((len - 1) / COLS)) cell = len - 1; // 아래 줄이 짧으면 마지막 동료로
       else { area = 'deploy'; mode = 'deploy'; slot = Math.min(team().length - 1, Math.round(col * (SORTIE_SIZE) / (COLS - 1))); }
     } else if (dy < 0 && cell - COLS >= 0) cell -= COLS;
   }
@@ -109,8 +116,8 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   function cycleSort() {
     const keep = current()?.species;
     sort = SORT_KEYS[(SORT_KEYS.indexOf(sort) + 1) % SORT_KEYS.length];
-    if (keep) focusOn(keep);
-    if (area === 'deploy') { area = 'deploy'; mode = 'deploy'; }
+    if (area === 'grid' && keep) focusOn(keep); // 출전 줄 순서는 정렬과 무관 → 그대로
+    mode = area;
   }
 
   // 마우스: 화면 좌표 → 격자 칸 / 출전 자리 / 머리줄
@@ -125,8 +132,8 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     }
     if (py < GY && px >= GX) {
       if (px < GX + 12) return { area: 'prev' };
-      if (px >= GX + 60 && px < GX + 72) return { area: 'next' };
-      if (px >= GX + 76) return { area: 'sort' };
+      if (px >= NEXT_X - 2 && px < NEXT_X + 12) return { area: 'next' };
+      if (px >= SORT_X) return { area: 'sort' };
     }
     return null;
   }
@@ -179,8 +186,11 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       drawPanel(ctx, current(), isOut);
       // 머리줄
       const b = boxes();
-      drawText(ctx, `◀ ${box + 1}/${b.length} ▶`, GX, 2, '#f8f8f8', '#384868', 'small');
-      drawText(ctx, `정렬: ${SORT_KO[sort]}`, GX + 76, 2, '#a8b8d8', null, 'small');
+      const count = `${box + 1}/${b.length}`;
+      drawText(ctx, '◀', GX, 2, box > 0 ? '#f8f8f8' : '#58607a', '#384868', 'small');
+      drawText(ctx, count, GX + 12 + Math.round((NEXT_X - GX - 12 - textWidth(count, 'small')) / 2), 2, '#f8f8f8', '#384868', 'small');
+      drawText(ctx, '▶', NEXT_X, 2, box < b.length - 1 ? '#f8f8f8' : '#58607a', '#384868', 'small');
+      drawText(ctx, `정렬: ${SORT_KO[sort]}`, SORT_X, 2, '#a8b8d8', null, 'small');
       // 격자
       for (let k = 0; k < BOX_SIZE; k++) {
         const x = GX + (k % COLS) * CELL, y = GY + Math.floor(k / COLS) * CELL, m = b[box][k];

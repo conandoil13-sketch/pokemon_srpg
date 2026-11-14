@@ -365,7 +365,7 @@ test('box: sortie toggle from the member menu, refusals and saves', async () => 
   assert.equal(calls.save, 0);
   box.handle({ type: 'confirm' });
   // 출전 줄에서 불꽃숭이 빼기
-  box.handle({ type: 'dir', dx: 0, dy: 1 });
+  for (let i = 0; i < 3 && box.mode !== 'deploy'; i++) box.handle({ type: 'dir', dx: 0, dy: 1 });
   assert.equal(box.mode, 'deploy');
   while (box.cursorMember.species !== 'chimchar') box.handle({ type: 'dir', dx: box.cursorMember.species === 'ditto' ? 1 : -1, dy: 0 });
   box.handle({ type: 'confirm' }); box.handle({ type: 'confirm' });
@@ -436,4 +436,36 @@ test('box: reopening after an evolution keeps sort/box and the cursor on the evo
   const again = createBox({ game, onBack() {}, onEvolve() {} });
   assert.equal(again.sort, 'level');
   assert.equal(again.cursorMember.species, 'prinplup');
+});
+
+test('box review fixes: S on the deploy row keeps it; ▶ click; short next row; summary returns to deploy', async () => {
+  const { box } = await boxScene(5); // 10마리: 둘째 줄 4칸
+  box.handle({ type: 'dir', dx: 0, dy: 1 }); // 첫 줄 → 둘째 줄
+  box.handle({ type: 'dir', dx: 0, dy: 1 }); // → 출전 줄
+  assert.equal(box.mode, 'deploy');
+  const on = box.cursorMember.species;
+  box.handle({ type: 'sort' }); box.handle({ type: 'sort' });
+  assert.equal(box.mode, 'deploy');
+  assert.equal(box.cursorMember.species, on);
+  // 출전 줄에서 자세히 보기 → 닫으면 출전 줄
+  box.handle({ type: 'confirm' });
+  box.handle({ type: 'dir', dx: 0, dy: 1 }); box.handle({ type: 'confirm' });
+  assert.equal(box.mode, 'summary');
+  box.handle({ type: 'cancel' });
+  assert.equal(box.mode, 'deploy');
+  // 첫 줄 끝(6번째)에서 아래 → 둘째 줄이 짧으면 마지막 동료
+  box.handle({ type: 'dir', dx: 0, dy: -1 });
+  box.handle({ type: 'sort' }); // joined 로 (3번째)
+  while (box.mode === 'grid' && box.cursorMember) { const before = box.cursorMember; box.handle({ type: 'dir', dx: 0, dy: -1 }); if (box.cursorMember === before) break; }
+  for (let i = 0; i < 6; i++) box.handle({ type: 'dir', dx: 1, dy: 0 });
+  box.handle({ type: 'dir', dx: 0, dy: 1 });
+  assert.equal(box.mode, 'grid');
+});
+
+test('box: clicking the drawn ▶ goes to the next box', async () => {
+  const { box } = await boxScene(26);
+  box.handle({ type: 'click', px: 108 + 52, py: 6 });
+  assert.equal(box.box, 1);
+  box.handle({ type: 'click', px: 110, py: 6 });
+  assert.equal(box.box, 0);
 });
