@@ -132,7 +132,7 @@ export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false, warn = nul
   drawText(ctx, s.name, x + 52, y + 4);
   if (unit.boss) drawText(ctx, '보스', x + 56 + textWidth(s.name), y + 6, '#e03030', '#f8d0d0', 'small');
   if (unit.status) drawStatusBadge(ctx, unit.status, x + w - 6 - textWidth(STATUS_KO[unit.status], 'small') - 6, y + 5);
-  s.types.forEach((t, i) => drawTypeBadge(ctx, t, x + 52 + i * 34, y + 20));
+  (unit.types ?? s.types).forEach((t, i) => drawTypeBadge(ctx, t, x + 52 + i * 34, y + 20)); // 유닛 타입 (메타몽 빌드)
   drawText(ctx, 'HP', x + 52, y + 35, '#f8a000', '#d8d8d0', 'small');
   drawHpBar(ctx, x + 66, y + 37, 34, unit.hp, unit.maxHp);
   const hpTxt = `${unit.hp}/${unit.maxHp}`;

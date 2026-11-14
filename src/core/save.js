@@ -1,4 +1,5 @@
 // 저장 / 불러오기 (순수 + 주입한 storage). storage = { getItem(key), setItem(key, value) }
+import { cleanBuild, cleanCapsule, cleanPowders, emptyPowders, CAPSULE_BAG_MAX } from './dittoBuild.js';
 import { SPECIES } from '../data/species.js';
 import { defaultSlot } from './progress.js';
 import { MOVES } from '../data/moves.js';
@@ -8,7 +9,7 @@ import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 6;
+const VERSION = 7;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -16,7 +17,7 @@ const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg
 // GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
 export const newGame = () => {
   const party = newParty();
-  return { version: VERSION, party, items: { evoStone: 0 }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {} };
+  return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {} };
 };
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
@@ -34,7 +35,9 @@ function cleanMember(m) {
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES, m.species);
   const slot = Number.isInteger(m.abilitySlot) && m.abilitySlot >= 0 && m.abilitySlot < s.abilities.length ? m.abilitySlot : m.abilitySlot === undefined ? defaultSlot(m.species) : 0;
   const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
-  return { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
+  const out = { species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
+  if (m.species === 'ditto') out.build = cleanBuild(m.build, level); // 메타몽만 빌드
+  return out;
 }
 
 const isDungeon = (id) => typeof id === 'string' && DUNGEONS.some((d) => d.id === id);
@@ -53,6 +56,8 @@ function cleanRun(r) {
       evoStone: clampInt(r.loot?.evoStone, 0, 99),
       candy: (Array.isArray(r.loot?.candy) ? r.loot.candy : []).map((f) => clampInt(f, 1, d.floors)),
       coins: clampInt(r.loot?.coins, 0, 9999999),
+      capsules: (Array.isArray(r.loot?.capsules) ? r.loot.capsules : []).map(cleanCapsule).filter(Boolean).slice(-CAPSULE_BAG_MAX),
+      powders: cleanPowders(r.loot?.powders),
     },
   };
 }
@@ -92,6 +97,7 @@ export function loadGame(storage) {
   if (data?.version === 3) data = { ...data, version: 4, coins: 0, shards: {}, sortie: [] }; // v3 → v4: 출전은 아래에서 파티 앞으로 채움
   if (data?.version === 4) data = { ...data, version: 5 }; // v4 → v5: 특성 슬롯은 cleanMember 가 채운다
   if (data?.version === 5) data = { ...data, version: 6 }; // v5 → v6: 특성 해금(없으면 잠김)은 cleanMember 가 채운다
+  if (data?.version === 6) data = { ...data, version: 7 }; // v6 → v7: 메타몽 빌드·가방은 아래 정리에서 기본값
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   try {
     const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
@@ -100,7 +106,11 @@ export function loadGame(storage) {
     return {
       version: VERSION,
       party,
-      items: { evoStone: clampInt(data.items?.evoStone, 0, 999) },
+      items: {
+        evoStone: clampInt(data.items?.evoStone, 0, 999),
+        powders: cleanPowders(data.items?.powders),
+        capsules: (Array.isArray(data.items?.capsules) ? data.items.capsules : []).map(cleanCapsule).filter(Boolean).slice(-CAPSULE_BAG_MAX),
+      },
       unlocked: [...new Set([FIRST_DUNGEON, ...dungeonIds(data.unlocked)])],
       best: Object.fromEntries(Object.entries(data.best && typeof data.best === 'object' ? data.best : {})
         .filter(([id]) => isDungeon(id)).map(([id, f]) => [id, clampInt(f, 0, dungeonById(id).floors)])),

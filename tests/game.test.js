@@ -505,3 +505,21 @@ test('anticipation warns when an enemy has a super-effective move against the ho
   assert.equal(dangerWarning({ ...foe, moves: ['tackle'] }, [ally, foe]), null);
   assert.equal(dangerWarning(foe, [{ ...ally, ability: 'dry-skin' }, foe]), null);
 });
+
+import { itemName } from '../src/game/states.js';
+import { settleLoot, startRun, addLoot } from '../src/core/run.js';
+import { newGame } from '../src/core/save.js';
+
+test('chest powder names and run loot reaching the bag', () => {
+  assert.equal(itemName('powder-atk'), '공격파우더');
+  assert.equal(itemName('mystery'), '아이템');
+  const g = newGame();
+  const run = startRun('sinnoh-field', 1);
+  addLoot(run, 'powder-spe', 1);
+  addLoot(run, { kind: 'type', value: 'fire', from: 'charmander' }, 1);
+  const r = settleLoot(g, run);
+  assert.equal(g.items.powders.spe, 1);
+  assert.deepEqual(g.items.capsules, [{ kind: 'type', value: 'fire', from: 'charmander' }]);
+  assert.equal(r.capsules, 1);
+  assert.equal(r.dropped, 0);
+});

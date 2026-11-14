@@ -1,11 +1,12 @@
 // 탐험(런) 상태 (순수). Run = { dungeonId, floor, seed, faintedLast, loot: { evoStone, candy: [얻은 층…] } }
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 import { hashSeed } from './floorgen.js';
+import { emptyPowders, addCapsules } from './dittoBuild.js';
 
 export const CANDY_EXP_PER_FLOOR = 30;
 export const FAINTED_HP_RATIO = 0.5;
 
-export const startRun = (dungeonId, seed) => ({ dungeonId, floor: 1, seed, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 0 } });
+export const startRun = (dungeonId, seed) => ({ dungeonId, floor: 1, seed, faintedLast: [], loot: { evoStone: 0, candy: [], coins: 0, capsules: [], powders: emptyPowders() } });
 export const FLOOR_COINS = 10, CHEST_COINS = 20, PICKUP_COINS = 10;
 
 export const floorSeed = (run) => hashSeed(run.seed, run.floor);
@@ -26,6 +27,8 @@ export function addLoot(run, item, floor) {
   else if (item === 'candy') run.loot.candy.push(floor);
   else if (item === 'coins') run.loot.coins = (run.loot.coins ?? 0) + CHEST_COINS * floor;
   else if (item === 'pickupCoins') run.loot.coins = (run.loot.coins ?? 0) + PICKUP_COINS * floor; // 픽업·꿀모으기
+  else if (typeof item === 'string' && item.startsWith('powder-')) { run.loot.powders ??= emptyPowders(); run.loot.powders[item.slice(7)] = (run.loot.powders[item.slice(7)] ?? 0) + 1; } // 메타몽 파우더
+  else if (item && typeof item === 'object' && item.kind) (run.loot.capsules ??= []).push(item); // 메타몽 캡슐
 }
 
 export const addBattleCoins = (run, n) => { run.loot.coins = (run.loot.coins ?? 0) + n; };
@@ -38,7 +41,11 @@ export function settleLoot(game, run) {
   game.coins = (game.coins ?? 0) + coins;
   const each = run.loot.candy.reduce((s, f) => s + f * CANDY_EXP_PER_FLOOR, 0);
   const exp = each ? Object.fromEntries(game.party.map((m) => [m.species, each])) : {};
-  return { evoStone: run.loot.evoStone, coins, exp };
+  game.items.powders ??= emptyPowders();
+  for (const [k, n] of Object.entries(run.loot.powders ?? {})) game.items.powders[k] = (game.items.powders[k] ?? 0) + n;
+  const capsules = run.loot.capsules ?? [];
+  const dropped = addCapsules(game, capsules); // 가방이 넘치면 오래된 것부터
+  return { evoStone: run.loot.evoStone, coins, exp, capsules: capsules.length, dropped };
 }
 
 // outcome: 'cleared' | 'retreat' | 'wiped'. 보물 지급은 호출 측(settleLoot)

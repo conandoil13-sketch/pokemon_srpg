@@ -261,7 +261,7 @@ function walkDistanceFromFoes(state, unit, foes) {
       const x = cur.x + dx, y = cur.y + dy;
       if (x < 0 || y < 0 || x >= state.width || y >= state.height) continue;
       const tile = state.grid[y][x];
-      if (!canEnter(tile, unit.species)) continue;
+      if (!canEnter(tile, unit)) continue;
       const c = cur.c + TILE_COST[tile];
       const k = `${x},${y}`;
       if (dist.has(k) && dist.get(k) <= c) continue;

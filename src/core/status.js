@@ -16,7 +16,7 @@ const TOXIC_MAX = 15;
 
 export const newStatus = () => ({ status: null, statusTurns: 0, confusion: 0 });
 
-const types = (unit) => SPECIES[unit.species].types;
+const types = (unit) => unit.types ?? SPECIES[unit.species].types; // 메타몽 빌드 타입
 
 // move: 거는 기술 (전기자석파처럼 기술 타입 상성으로 무효가 되는 경우)
 export function canInflict(unit, ailment, move, weather = null, { breaker = false } = {}) {

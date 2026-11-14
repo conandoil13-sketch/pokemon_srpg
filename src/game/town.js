@@ -27,7 +27,9 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, s
   let held = null; // 누르고 있는 방향 [dx, dy]
   let route = [];  // 클릭 이동 경로
   let afterRoute = null;
-  let msg = message ? { lines: [].concat(message), who: null, then: null } : null;
+  // message: 줄 배열, 또는 여러 쪽([[줄…], [줄…]]) — 확인마다 다음 쪽
+  const pageMsg = (pages) => (pages.length ? { lines: pages[0], who: null, then: pages.length > 1 ? () => { msg = pageMsg(pages.slice(1)); } : null } : null);
+  let msg = !message ? null : Array.isArray(message[0]) ? pageMsg(message) : { lines: [].concat(message), who: null, then: null };
   let clock = 0;
 
   const objectAt = (x, y) => objects.find((o) => o.x === x && o.y === y);

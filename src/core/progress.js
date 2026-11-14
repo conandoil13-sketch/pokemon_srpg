@@ -1,6 +1,7 @@
 // 파티 진행 (순수): 새 파티, 경험치 적용 → 레벨업·기술·진화 이벤트
 import { SPECIES } from '../data/species.js';
 import { hash } from '../render/pixels.js';
+import { DEFAULT_BUILD, effectiveBase } from './dittoBuild.js';
 import { lineRoot } from './gacha.js';
 import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
@@ -16,11 +17,12 @@ export const defaultSlot = (species) => (SPECIES[species].abilities.length > 1 ?
 export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
   const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
-  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false };
+  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false, ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
 }
 
 // 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)
-export const abilityOf = (m) => { const a = SPECIES[m.species].abilities; return a[m.abilitySlot ?? 0] ?? a[0]; };
+export const abilityOf = (m) => { if (m.build) return m.build.ability; const a = SPECIES[m.species].abilities; return a[m.abilitySlot ?? 0] ?? a[0]; }; // 메타몽은 빌드
+export const typesOfMember = (m) => m.build?.types ?? SPECIES[m.species].types;
 
 // 특성 해금: 계열 뿌리 결정 3개를 한 번 쓰면 다른 특성이 열리고 바로 바뀐다. 그 뒤 전환은 공짜
 export const ABILITY_UNLOCK_COST = 3;
@@ -70,7 +72,8 @@ export function applyExp(party, expBySpecies, rng = Math.random) {
     const to = levelForExp(s.growth, m.exp);
     if (to <= m.level) continue;
     const from = m.level;
-    events.push({ type: 'level', species: m.species, from, to, before: statsAt(s.base, from), after: statsAt(s.base, to) });
+    const base = m.build ? effectiveBase(m.build) : s.base; // 메타몽은 빌드 종족값
+    events.push({ type: 'level', species: m.species, from, to, before: statsAt(base, from), after: statsAt(base, to) });
     m.level = to;
     events.push(...learnEvents(m, movesLearnedBetween(s.learnset, from, to, MOVES)));
     // 진화: 갈래 1개면 그대로, 원작이 무작위면 rng, 그 외는 플레이어가 고름 (UI 가 options 로 선택 창)

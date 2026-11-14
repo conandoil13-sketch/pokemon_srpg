@@ -16,6 +16,7 @@ import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, fin
 import { dungeonById } from './data/dungeons.js';
 import { josa } from './data/text.js';
 import { pickupLoot } from './core/abilities.js';
+import { rollCapsules } from './core/dittoBuild.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
 import { createEvolutionChoice } from './game/evolutionChoice.js';
@@ -81,6 +82,10 @@ function afterBattle(result, log) {
     log.pickup = pickupLoot(deployed(game), Math.random);
     log.loot.push(...log.pickup);
   }
+  if (result !== 'lose') { // 메타몽 캡슐: 쓰러뜨린 적에게서 (보스 확정)
+    log.capsules = rollCapsules(log.defeated ?? [], Math.random);
+    log.loot.push(...log.capsules);
+  }
   for (const item of log.loot) addLoot(run, item, run.floor);
   const before = run.loot.coins;
   addBattleCoins(run, log.coins);
@@ -98,7 +103,7 @@ function afterResults(result, log) {
   game.run = run;
   save();
   scene = createFloorMenu({
-    lines: [`B${prevFloor}F 돌파!  (이번 탐험 코인 ${run.loot.coins})`, '어떻게 할까?'],
+    lines: [`B${prevFloor}F 돌파!  (코인 ${run.loot.coins}${run.loot.capsules?.length ? ` · 캡슐 ${run.loot.capsules.length}` : ''})`, '어떻게 할까?'],
     options: ['다음 층으로', '마을로 돌아가기'],
     onPick: (i) => (i === 0 ? startFloor() : endRun('retreat', prevFloor)), // 다음 층엔 아직 안 들어감
   });
@@ -108,7 +113,8 @@ function afterResults(result, log) {
 function endRun(outcome, reached = game.run.floor) {
   const run = { ...game.run, floor: reached };
   const d = dungeonById(run.dungeonId);
-  const loot = `코인 ${run.loot.coins} · 진화의돌 ${run.loot.evoStone} · 사탕 ${run.loot.candy.length}`;
+  const powders = Object.values(run.loot.powders ?? {}).reduce((a, n) => a + n, 0), capsules = (run.loot.capsules ?? []).length;
+  let loot = `코인 ${run.loot.coins} · 진화의돌 ${run.loot.evoStone} · 사탕 ${run.loot.candy.length}` + (capsules || powders ? ` · 캡슐 ${capsules} · 파우더 ${powders}` : '');
   const before = [...game.unlocked];
   const reward = outcome === 'wiped' ? { exp: {} } : settleLoot(game, run);
   finishRun(game, run, outcome);
@@ -118,7 +124,8 @@ function endRun(outcome, reached = game.run.floor) {
     ? [`${josa(d.name, '을/를')} 돌파했다!`, opened.length ? `${josa(opened[0], '이/가')} 열렸다!` : loot]
     : outcome === 'retreat' ? ['마을로 돌아왔다.', loot]
     : ['눈앞이 캄캄해졌다...', '모은 보물을 잃고 마을로 돌아왔다.'];
-  const toTown = () => go.town(lines, TOWN.returnSpot);
+  const pages = reward.dropped ? [lines, ['가방이 가득 차서', `오래된 캡슐 ${reward.dropped}개를 버렸다.`]] : lines; // 조용히 버리지 않는다
+  const toTown = () => go.town(pages, TOWN.returnSpot);
   if (!Object.keys(reward.exp).length) { toTown(); return; }
   // 경험 사탕: 탐험 보상 결산
   // 사탕 경험치는 출전 멤버만

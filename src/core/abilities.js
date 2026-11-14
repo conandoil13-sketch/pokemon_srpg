@@ -14,7 +14,7 @@ const def = (attacker, defender, id) => !breaks(attacker) && has(defender, id);
 export function typesOf(unit, weather = null) {
   if (unit.typeOverride) return [unit.typeOverride];
   if (has(unit, 'forecast')) { const t = { rain: 'water', sun: 'fire', hail: 'ice' }[weather]; if (t) return [t]; }
-  return SPECIES[unit.species].types;
+  return unit.types ?? SPECIES[unit.species].types;
 }
 // 기술 타입 (노말스킨)
 export const moveTypeOf = (attacker, move) => (has(attacker, 'normalize') ? 'normal' : move.type);
@@ -169,15 +169,15 @@ export const SYNC_AILMENTS = ['poison', 'toxic', 'paralysis', 'burn'];
 // 묶기: 옆의 상대(trapper 기준)를 다음 차례 이동력 1로
 export function traps(trapper, foe) {
   if (has(trapper, 'shadow-tag')) return true;
-  if (has(trapper, 'arena-trap')) return !SPECIES[foe.species].types.includes('flying') && !has(foe, 'levitate');
-  if (has(trapper, 'magnet-pull')) return SPECIES[foe.species].types.includes('steel');
+  if (has(trapper, 'arena-trap')) return !typesOf(foe).includes('flying') && !has(foe, 'levitate');
+  if (has(trapper, 'magnet-pull')) return typesOf(foe).includes('steel');
   return false;
 }
 // 픽업·꿀모으기: 층 돌파 시 멤버마다 10% 로 코인 주머니 또는 경험 사탕
 export function pickupLoot(members, rng) {
   const out = [];
   for (const m of members) {
-    const a = SPECIES[m.species].abilities[m.abilitySlot ?? 0] ?? SPECIES[m.species].abilities[0];
+    const a = m.build?.ability ?? SPECIES[m.species].abilities[m.abilitySlot ?? 0] ?? SPECIES[m.species].abilities[0]; // 메타몽은 빌드 특성
     if ((a === 'pickup' || a === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'pickupCoins' : 'candy');
   }
   return out;

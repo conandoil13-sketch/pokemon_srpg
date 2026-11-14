@@ -1,7 +1,7 @@
 // 편성소 박스: 아이콘 격자(6×5) + 왼쪽 패널 + 아래 출전 줄. 확인 = 동료 메뉴(출전·자세히 보기·진화의돌·특성)
 import { SPECIES } from '../data/species.js';
 import { ABILITIES } from '../data/abilities.js';
-import { abilityOf } from '../core/progress.js';
+import { abilityOf, typesOfMember } from '../core/progress.js';
 import { stoneEvolutionOptions } from '../core/evolution.js';
 import { deployed, toggleSortie } from '../core/roster.js';
 import { SORTIE_SIZE } from '../core/save.js';
@@ -12,6 +12,7 @@ import { drawText, textWidth } from '../render/font.js';
 import { drawPortrait } from '../render/sprites.js';
 import { W, H } from '../render/screen.js';
 import { createSummary } from './summary.js';
+import { createDittoBuild } from './dittoBuild.js';
 import { fitLines } from './memberText.js';
 
 const COLS = 6, CELL = 24, GX = 108, GY = 16, PANEL_W = 104, DY = 140, SLOT_X = 38, SLOT_W = 43;
@@ -54,7 +55,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       { label: isOut(m) ? '출전에서 빼기' : '출전에 넣기', enabled: true, act: 'sortie' },
       { label: '자세히 보기', enabled: true, act: 'summary' },
       { label: `진화의돌 (${game.items.evoStone}개)`, enabled: canStone, act: 'stone' },
-      { label: '특성', enabled: true, act: 'ability' },
+      ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }]),
       { label: '그만둔다', enabled: true, act: 'close' },
     ];
     menuSel = 0; mode = 'menu';
@@ -80,6 +81,11 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     if (item.act === 'close') { back(); return; }
     if (item.act === 'summary') { openSummary(0); return; }
     if (item.act === 'ability') { openSummary(3); return; }
+    if (item.act === 'build') { // 메타몽 빌드 화면 (닫으면 박스로)
+      summary = createDittoBuild({ game, onSave, onClose: () => { summary = null; mode = area; } });
+      mode = 'summary';
+      return;
+    }
     if (item.act === 'stone') { remember(); onEvolve(m, stoneEvolutionOptions(SPECIES[m.species])); return; } // 돌은 실제로 진화할 때 차감 (main)
     const r = toggleSortie(game, m.species);
     if (!r.ok) { say(REASON[r.reason]); return; }
@@ -147,6 +153,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     get cursorMember() { return current(); },
     get summary() { return summary; },
     get message() { return msg; },
+    get menuLabels() { return menu?.map((i) => i.label) ?? []; },
     handle(ev) {
       if (mode === 'summary') { summary.handle(ev); return; }
       const pick = ev.type === 'confirm' || ev.type === 'click';
@@ -230,7 +237,7 @@ function drawPanel(ctx, m, isOut) {
   drawText(ctx, `Lv.${m.level}`, 56, 10, '#383838', null, 'small');
   drawText(ctx, isOut(m) ? '출전 중' : '대기', 56, 24, isOut(m) ? '#2860c8' : '#808080', null, 'small');
   drawText(ctx, s.name, 8, 56);
-  s.types.forEach((t, k) => ui.drawTypeBadge(ctx, t, 8 + k * 34, 72));
+  typesOfMember(m).forEach((t, k) => ui.drawTypeBadge(ctx, t, 8 + k * 34, 72)); // 메타몽은 빌드 타입
   const ab = ABILITIES[abilityOf(m)];
   fitLines(`특성 ${ab?.name ?? '-'}`, PANEL_W - 14).slice(0, 2).forEach((l, k) => drawText(ctx, l, 8, 90 + k * 11, ab?.inactive ? '#909090' : '#305830', null, 'small'));
   drawText(ctx, '확인: 메뉴 · S: 정렬', 8, 120, '#909090', null, 'small');
