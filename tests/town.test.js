@@ -175,26 +175,6 @@ test('town NPCs are the party companions (everyone but the leader)', () => {
   assert.equal(createTown({ onSortie() {}, companions: [] }).objects.filter((o) => o.kind === 'npc').length, 0);
 });
 
-test('party office: sortie screen toggles members and explains refusals', async () => {
-  const { createParty } = await import('../src/game/party.js');
-  const { newMember } = await import('../src/core/progress.js');
-  const game = newGame();
-  game.party.push(newMember('pidgey', 8));
-  const p = createParty({ game, onBack() {}, onEvolve() {} });
-  p.handle({ type: 'confirm' });               // 출전 멤버 바꾸기
-  assert.equal(p.mode, 'sortie');
-  for (let i = 0; i < 4; i++) p.handle({ type: 'dir', dx: 0, dy: 1 }); // pidgey (5번째 동료)
-  p.handle({ type: 'confirm' });
-  assert.equal(p.mode, 'msg');                 // 꽉 찼다
-  p.handle({ type: 'confirm' });
-  assert.equal(p.mode, 'sortie');
-  p.handle({ type: 'dir', dx: 0, dy: -1 });     // shinx
-  p.handle({ type: 'confirm' });               // 빼기
-  p.handle({ type: 'dir', dx: 0, dy: 1 });      // pidgey
-  p.handle({ type: 'confirm' });               // 넣기
-  assert.deepEqual(game.sortie, ['chimchar', 'piplup', 'turtwig', 'pidgey']);
-});
-
 test('recruit office sign opens the gacha; mashing after a pull never double-spends', async () => {
   let opened = 0;
   const town = createTown({ onSortie() {}, onGacha() { opened++; } });
@@ -225,31 +205,6 @@ test('easter egg: talking to Turtwig 5 times gives 200 coins once', () => {
   town.player.x = spot.x; town.player.y = spot.y + 1; town.player.facing = 'up';
   for (let i = 0; i < 6; i++) { town.handle({ type: 'confirm' }); tick(town, 0.1); town.handle({ type: 'confirm' }); tick(town, 0.1); }
   assert.equal(gifts, 1);
-});
-
-test('party office: swap ability costs 3 line shards, refuses when short', async () => {
-  const { createParty } = await import('../src/game/party.js');
-  const { newMember, abilityOf } = await import('../src/core/progress.js');
-  const game = newGame();
-  const geo = newMember('geodude', 8);
-  game.party.push(geo);
-  let saved = 0;
-  const p = createParty({ game, onBack() {}, onEvolve() {}, onSave() { saved++; } });
-  for (let i = 0; i < 2; i++) p.handle({ type: 'dir', dx: 0, dy: 1 });
-  p.handle({ type: 'confirm' });               // 특성 바꾸기
-  assert.equal(p.mode, 'ability');
-  p.handle({ type: 'dir', dx: 0, dy: -1 });     // 그만둔다
-  p.handle({ type: 'dir', dx: 0, dy: -1 });     // geodude (마지막 동료)
-  p.handle({ type: 'confirm' });
-  assert.equal(p.mode, 'msg');                 // 결정 부족
-  assert.equal(saved, 0);
-  p.handle({ type: 'confirm' });
-  game.shards.geodude = 3;
-  const before = abilityOf(geo);
-  p.handle({ type: 'confirm' });
-  assert.notEqual(abilityOf(geo), before);
-  assert.equal(game.shards.geodude, 0);
-  assert.equal(saved, 1);
 });
 
 const gachaSeq = (vals) => { let i = 0; return () => vals[i++] ?? 0.5; };
@@ -368,4 +323,117 @@ test('gacha: clicks only act on what was clicked', async () => {
   g.handle({ type: 'click', px: 200, py: 170 }); // 대사 창 → 지금 커서 볼
   assert.equal(g.mode, 'open');
   assert.equal(g.balls[0].chosen, true);
+});
+
+// ---- 편성소 박스 ----
+const boxScene = async (extra = 0, opts = {}) => {
+  const { createBox, resetBoxMemory } = await import('../src/game/box.js');
+  const { newMember } = await import('../src/core/progress.js');
+  const { gachaPool } = await import('../src/core/gacha.js');
+  if (!opts.keepMemory) resetBoxMemory();
+  const game = opts.game ?? newGame();
+  const pool = [...gachaPool().common, ...gachaPool().rare].filter((k) => !game.party.some((m) => m.species === k));
+  for (let i = 0; i < extra; i++) game.party.push(newMember(pool[i], 5 + (i % 7)));
+  const calls = { save: 0, evolve: [] };
+  const box = createBox({ game, onBack() {}, onEvolve(m, o) { calls.evolve.push([m.species, o]); }, onSave() { calls.save++; } });
+  return { box, game, calls, createBox };
+};
+
+test('box: arrows move over 31 members across two boxes, never onto empty cells', async () => {
+  const { box } = await boxScene(26);
+  assert.equal(box.boxCount, 2);
+  for (let i = 0; i < 5; i++) box.handle({ type: 'dir', dx: 1, dy: 0 }); // 첫 줄 오른쪽 끝
+  box.handle({ type: 'dir', dx: 1, dy: 0 });
+  assert.equal(box.box, 1);
+  for (const [dx, dy] of [[1, 0], [1, 0], [0, -1], [0, 1], [0, -1], [-1, 0]]) {
+    if (box.mode === 'grid' && box.box === 1) assert.ok(box.cursorMember, `${dx},${dy}`);
+    box.handle({ type: 'dir', dx, dy });
+  }
+  assert.ok(box.cursorMember);
+});
+
+test('box: sortie toggle from the member menu, refusals and saves', async () => {
+  const { box, game, calls } = await boxScene(2);
+  // 커서를 대기 동료(6번째 칸)로
+  while (box.cursorMember && game.sortie.includes(box.cursorMember.species) || box.cursorMember?.species === 'ditto') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  const bench = box.cursorMember.species;
+  box.handle({ type: 'confirm' });
+  assert.equal(box.mode, 'menu');
+  box.handle({ type: 'confirm' }); // 출전에 넣기 → 꽉 참
+  assert.equal(box.mode, 'msg');
+  assert.deepEqual(box.message, ['출전 자리가 꽉 찼다.', '먼저 다른 동료를 빼자.']);
+  assert.equal(calls.save, 0);
+  box.handle({ type: 'confirm' });
+  // 출전 줄에서 불꽃숭이 빼기
+  box.handle({ type: 'dir', dx: 0, dy: 1 });
+  assert.equal(box.mode, 'deploy');
+  while (box.cursorMember.species !== 'chimchar') box.handle({ type: 'dir', dx: box.cursorMember.species === 'ditto' ? 1 : -1, dy: 0 });
+  box.handle({ type: 'confirm' }); box.handle({ type: 'confirm' });
+  assert.ok(!game.sortie.includes('chimchar'));
+  assert.equal(calls.save, 1);
+  // 메타몽은 뺄 수 없음
+  while (box.cursorMember.species !== 'ditto') box.handle({ type: 'dir', dx: -1, dy: 0 });
+  box.handle({ type: 'confirm' }); box.handle({ type: 'confirm' });
+  assert.deepEqual(box.message, ['메타몽은 항상 출전한다.']);
+  assert.ok(bench);
+});
+
+test('box: S cycles sort; grid bottom row goes to the deploy row', async () => {
+  const { box } = await boxScene(0);
+  assert.equal(box.sort, 'joined');
+  const seen = [];
+  for (let i = 0; i < 3; i++) { box.handle({ type: 'sort' }); seen.push(box.sort); }
+  assert.deepEqual(seen, ['level', 'dex', 'joined']);
+  box.handle({ type: 'dir', dx: 0, dy: 1 });
+  assert.equal(box.mode, 'deploy');
+  box.handle({ type: 'dir', dx: 0, dy: -1 });
+  assert.equal(box.mode, 'grid');
+});
+
+test('summary: pages cycle, up/down changes member; ability unlock then free toggle', async () => {
+  const { newMember, abilityOf } = await import('../src/core/progress.js');
+  const game = newGame();
+  game.party.push(newMember('geodude', 8, () => 0));
+  const { box, calls } = await boxScene(0, { game });
+  while (box.cursorMember.species !== 'geodude') box.handle({ type: 'dir', dx: 1, dy: 0 }); // 6번째 칸
+  box.handle({ type: 'confirm' });
+  for (let i = 0; i < 3; i++) box.handle({ type: 'dir', dx: 0, dy: 1 }); // 특성
+  box.handle({ type: 'confirm' });
+  assert.equal(box.mode, 'summary');
+  const sm = box.summary;
+  assert.equal(sm.page, 3);
+  const geo = game.party.find((m) => m.species === 'geodude');
+  const pass = () => { for (let i = 0; i < 5; i++) box.update(0.1); };
+  box.handle({ type: 'confirm' }); // 결정 0
+  assert.equal(sm.mode, 'msg');
+  assert.equal(geo.abilityUnlocked, false);
+  assert.equal(calls.save, 0);
+  pass(); box.handle({ type: 'confirm' });
+  game.shards.geodude = 3;
+  box.handle({ type: 'confirm' }); // 해금 → 바로 바뀜
+  assert.equal(abilityOf(geo), 'sturdy');
+  assert.equal(game.shards.geodude, 0);
+  for (let i = 0; i < 6; i++) { pass(); box.handle({ type: 'confirm' }); } // 연타: 공짜 왕복만
+  assert.equal(game.shards.geodude, 0);
+  assert.ok(geo.abilityUnlocked);
+  assert.ok(calls.save >= 2);
+  pass(); if (sm.mode === 'msg') box.handle({ type: 'confirm' });
+  box.handle({ type: 'dir', dx: 1, dy: 0 });
+  assert.equal(sm.page, 0);
+  const before = sm.member.species;
+  box.handle({ type: 'dir', dx: 0, dy: 1 });
+  assert.notEqual(sm.member.species, before);
+  box.handle({ type: 'cancel' });
+  assert.equal(box.mode, 'grid');
+});
+
+test('box: reopening after an evolution keeps sort/box and the cursor on the evolved member', async () => {
+  const { evolveMember } = await import('../src/core/progress.js');
+  const { box, game, createBox } = await boxScene(0);
+  box.handle({ type: 'sort' }); // 레벨 순
+  while (box.cursorMember.species !== 'piplup') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  evolveMember(game.party.find((m) => m.species === 'piplup'), 'prinplup');
+  const again = createBox({ game, onBack() {}, onEvolve() {} });
+  assert.equal(again.sort, 'level');
+  assert.equal(again.cursorMember.species, 'prinplup');
 });
