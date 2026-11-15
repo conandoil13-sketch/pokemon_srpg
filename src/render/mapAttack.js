@@ -319,6 +319,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     if (!s) return;
     if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
     if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
+    if (s.efx?.effect === 'painSplit') pain = { at: total, targetId: s.efx.unitId }; // 아픔나누기: 구슬이 닿을 때 둘 다 아파함
     if (LINK_EFFECTS.has(s.efx?.effect)) { const u = get(s.efx.unitId); if (u) spawnSafe(fx, linkFx(s.efx.effect, (attacker.x - u.x) * TILE, (attacker.y - u.y) * TILE), feet(u)); spawnChangeFx(fx, s, result, get); return; } // 주고받는 구슬
     if (result.summoned && s.efx?.effect === 'splash') { const g = get(result.summoned); if (g) spawnSafe(fx, GYARADOS_FX, feet(g)); summonAt = total; spawnChangeFx(fx, s, result, get); return; } // 갸라도스 등장: 물기둥
     if (TOSSED.has(s.efx?.effect) && tossAt === null) { // 압정: 깔린 칸마다 하나씩 던짐
@@ -336,6 +337,8 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
        feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
   }
   let summonAt = null; // 갸라도스: 물기둥이 치솟은 뒤에 보인다
+  let pain = null;
+  const PAIN_HIT = [0.5, 0.95]; // 구슬 도착(0.2+0.3초) 뒤 아파하는 구간
   const laid = (result.trapsLaid ?? []).map((p) => ({ ...p, kind: move.effect })); // 종류까지 (같은 칸의 다른 압정은 숨기지 않음)
   let tossAt = null; // 던지기 시작 시각 (total 기준)
   const burstAt = steps.findIndex((x) => x.k === 'wburst');
@@ -363,6 +366,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     unitPose(u) {
       const s = step();
       if (!s) return null;
+      if (pain && (u === attacker || u.id === pain.targetId)) { const k = total - pain.at; if (k >= PAIN_HIT[0] && k < PAIN_HIT[1]) return { anim: 'Hurt', t: k - PAIN_HIT[0], loop: false, flash: Math.floor(k / 0.06) % 2 === 0 && k < PAIN_HIT[0] + 0.25 }; }
       if (result.summoned && u.id === result.summoned && (summonAt === null || total - summonAt < 1.0)) return { hidden: true }; // 물기둥 속에서 등장
       if (result.pushed && u.id === result.pushed.unitId) { // 밀려난 포켓몬: 원래 칸 → 새 칸
         const pi = steps.findIndex((x) => x.k === 'push'), { from, to } = result.pushed;
