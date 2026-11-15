@@ -195,6 +195,11 @@ const LINK = {
 };
 export const LINK_EFFECTS = new Set(Object.keys(LINK));
 export const linkFx = (effect, fromX, fromY) => spec('pokemon/link-orbs', { mode: LINK[effect][0], palette: LINK[effect][1], fromX, fromY, ...(LINK[effect][2] ?? {}) }, 1, 'front', { life: 1.2 });
+// 회복기: 기술마다 상징이 먼저 뜨고(then) 공통 회복 표시로 이어진다
+const HEAL_SIGN = { recover: 'cross', 'soft-boiled': 'egg', 'milk-drink': 'milk', roost: 'feather', synthesis: 'leaf', 'morning-sun': 'sun', moonlight: 'moon',
+  'slack-off': 'zzz', 'heal-order': 'bees', refresh: 'drops', aromatherapy: 'petals', 'heal-bell': 'bell', 'healing-wish': 'star', 'lunar-dance': 'crescent' };
+export const healSignFx = (moveId) => (moveId === 'swallow' ? spec('pokemon/stockpile-gulp', {}, 1, 'front', { life: 1.0, then: HEAL_FX, thenDelay: 0.6 })
+  : HEAL_SIGN[moveId] ? spec('pokemon/heal-sign', { motif: HEAL_SIGN[moveId] }, 1, 'front', { life: 0.9, then: HEAL_FX, thenDelay: 0.6 }) : null);
 export const PRESENT_FX = spec('pokemon/present-box', {}, 1, 'front', { life: 1.3 });
 export const GYARADOS_FX = spec('pokemon/gyarados-burst', {}, 1, 'front', { life: 1.9 });
 const MOVE_EFFECT_FX = {
@@ -215,7 +220,7 @@ export const bindFx = (moveId) => {
   const palette = moveId === 'magma-storm' ? PAL.lava : moveId === 'clamp' ? PAL.water : pal(type);
   return spec(COIL_MOVES.has(moveId) ? 'pokemon/bind-coil' : 'pokemon/bind-vortex', { palette }, 1, 'front', { life: 1.3 });
 };
-export const fxForEffect = (effect, moveId) => (effect === 'hide' && HIDE_FX[moveId] ? spec(HIDE_FX[moveId], {}, 1, 'front', { life: 1.1 }) : effect === 'bind' && moveId ? bindFx(moveId) : MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect]);
+export const fxForEffect = (effect, moveId) => (['refresh', 'teamCure', 'swallow', 'sacrificeHeal'].includes(effect) && healSignFx(moveId) ? healSignFx(moveId) : effect === 'hide' && HIDE_FX[moveId] ? spec(HIDE_FX[moveId], {}, 1, 'front', { life: 1.1 }) : effect === 'bind' && moveId ? bindFx(moveId) : MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect]);
 // 밀어내기: 쓴 포켓몬 → 대상 쪽. 날려버리기는 대상까지 닿는 돌풍, 울부짖기는 음파 (tiles: 대상까지 칸 수)
 export const pushFx = (moveId, tiles) => (moveId === 'whirlwind'
   ? spec('pokemon/gust-blast', { reach: Math.max(1, tiles) * 24 }, 1, 'front', { life: 0.8 })

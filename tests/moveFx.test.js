@@ -171,3 +171,12 @@ test('swap-type moves use link orbs; other recent status moves have their own ef
   assert.equal(fxForEffect('nightmare', 'nightmare').id, 'pokemon/nightmare-cloud');
   assert.equal(fxForEffect('splash', 'splash').id, 'pokemon/splash-hop');
 });
+
+import { healSignFx } from '../src/data/moveFx.js';
+test('healing moves show their own sign before the heal glow', () => {
+  for (const [id, motif] of [['healing-wish', 'star'], ['lunar-dance', 'crescent'], ['moonlight', 'moon'], ['heal-bell', 'bell'], ['soft-boiled', 'egg']]) {
+    const f = healSignFx(id); assert.equal(f.opts.motif, motif, id); assert.equal(f.then.id, 'pokemon/heal-glow');
+  }
+  assert.equal(fxForEffect('sacrificeHeal', 'lunar-dance').opts.motif, 'crescent');
+  assert.equal(fxForEffect('swallow', 'swallow').id, 'pokemon/stockpile-gulp');
+});

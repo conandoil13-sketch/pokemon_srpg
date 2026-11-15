@@ -11,7 +11,7 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx, COUNTER_PAL, PRESENT_FX, GYARADOS_FX, LINK_EFFECTS, linkFx } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx, COUNTER_PAL, PRESENT_FX, GYARADOS_FX, LINK_EFFECTS, linkFx, healSignFx } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
 import { BURST_TIME, drawBurstRing, drawBurstFlash } from './weatherFx.js';
 import { idleFrameSource } from './sprites.js';
@@ -209,8 +209,10 @@ function spawnSafe(fx, spec, at, opts) {
 }
 // 몸에 붙는 이펙트: 우리 스프라이트 모양 actor 와 그 원점
 function onBody(fx, spec, u) {
-  const actor = actorFor(u.species, idleFrameSource(u.species));
-  return spawnSafe(fx, spec, bodyAt(actor, u.x * TILE + TILE / 2, u.y * TILE + TILE / 2), { actor });
+  if (!fx || !spec) return null;
+  const actor = actorFor(u.species, idleFrameSource(u.species)), at = bodyAt(actor, u.x * TILE + TILE / 2, u.y * TILE + TILE / 2);
+  if (spec.then) spawnSafe(fx, spec.then, at, { actor, delay: spec.thenDelay ?? 0.6 }); // 상징 → 회복 표시
+  return spawnSafe(fx, spec, at, { actor });
 }
 // 랭크·상태이상 걸림 (세 연출 공통): 단계에 들어갈 때 한 번
 function spawnChangeFx(fx, s, result, get) {
@@ -318,7 +320,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
   const enter = (s) => {
     if (!s) return;
-    if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
+    if (s.heal) onBody(fx, healSignFx(move.id) ?? HEAL_FX, attacker); // 회복: 기술 상징 → 초록 반짝임
     if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
     if (s.efx?.effect === 'painSplit') pain = { at: total, targetId: s.efx.unitId }; // 아픔나누기: 구슬이 닿을 때 둘 다 아파함
     if (LINK_EFFECTS.has(s.efx?.effect)) { const u = get(s.efx.unitId); if (u) spawnSafe(fx, linkFx(s.efx.effect, (attacker.x - u.x) * TILE, (attacker.y - u.y) * TILE), feet(u)); spawnChangeFx(fx, s, result, get); return; } // 주고받는 구슬
