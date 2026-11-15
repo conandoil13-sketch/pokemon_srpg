@@ -10,7 +10,7 @@ import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage, rollHits } from './damage.js';
 import { unitsHit, canTarget, hideDouble, aimsOf } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
-import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
+import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
@@ -183,7 +183,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
     knockOut(state, by, null);
   }
   for (const u of state.units) if (u.infatuatedBy === d.id) { u.infatuation = 0; u.infatuatedBy = null; } // 건 상대가 쓰러지면 헤롱헤롱이 풀린다
-  for (const u of state.units) if (u.bound?.by === d.id) u.bound = null; // 묶은 쪽이 쓰러지면 속박이 바로 풀린다
+  for (const u of state.units) if (u.bound?.by === d.id) { (state.log.unbound ??= []).push({ unitId: u.id, moveId: u.bound.moveId }); u.bound = null; } // 묶은 쪽이 쓰러지면 속박이 바로 풀린다
   let expGained = {};
   if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
   else if (reward) awardShare(state, d);
@@ -284,7 +284,9 @@ export const RECHARGE_MOVES = new Set(['hyper-beam', 'giga-impact', 'rock-wrecke
 export const CRASH_MOVES = new Set(['jump-kick', 'high-jump-kick']); // 빗나가면 자기 HP 1/2
 export const BREAKS_PROTECT = new Set(['feint', 'shadow-force']); // 방어를 뚫고 없앰
 const SCREENS = ['reflect', 'lightScreen'];
-export const CHARGE_MOVES = new Set(['solar-beam', 'razor-wind', 'skull-bash', 'sky-attack']); // 모으고 다음 차례 돌진 발사
+export const CHARGE_MOVES = new Set(['solar-beam', 'razor-wind', 'skull-bash', 'sky-attack']); // 모으고 다음 차례 발사
+const RANGED_CHARGE = new Set(['solar-beam', 'razor-wind']); // 원거리: 그 자리에서 쏨 (사거리 밖 1칸마다 위력 −5%), 근접은 돌진
+const RANGE_FALLOFF = 0.05;
 export const HIDE_MOVES = { fly: 'sky', bounce: 'sky', dig: 'ground', dive: 'water', 'shadow-force': 'shadow' }; // 숨기: 상대 다음 페이즈 끝까지
 
 // 준비 기술 발사 경로: 이동력 무시, 대상을 맞힐 수 있는 가장 가까운 칸 (불발이면 null)
@@ -296,6 +298,7 @@ export function chargeRoute(state, unit) {
   const target = c.targetId && byId(state, c.targetId);
   if (!target) return null;
   const move = MOVES[c.moveId];
+  if (RANGED_CHARGE.has(c.moveId)) return canTarget(move, target) ? { path: [{ x: unit.x, y: unit.y }], aim: { unitId: target.id } } : null; // 숨으면 불발
   const spots = [...reachable(state.grid, state.units, unit, Infinity)].sort((p, q) => p[1] - q[1]);
   for (const [k] of spots) {
     const [x, y] = k.split(',').map(Number);
@@ -332,6 +335,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
   const abilityEvents = (state.log.abilityEvents = []); // 이번 기술에서 발동한 특성 (연출용)
+  state.log.unbound = []; // 이번 기술로 쓰러진 묶은 쪽 → 풀린 속박
   state.log.bonded = []; // 이번 기술에서 길동무로 같이 쓰러진 유닛
   const moldBreaker = has(a, 'mold-breaker'); // 틀깨기: 상대의 방어 특성(클리어바디·유연·습기 …) 무시
   // 특성 흡수 결과 적용: 회복·랭크·타오르는불꽃
@@ -422,16 +426,18 @@ export function applyMove(state, userId, moveId, aim, rng) {
     if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); selfFainted = a.id; } // 고스트 저주로 쓰러짐
     return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...out2, ...(selfFainted ? { selfFainted } : {}) };
   }
-  const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
+  const ranged = RANGED_CHARGE.has(move.id) && a.charging?.moveId === move.id ? byId(state, a.charging.targetId) : null; // 원거리 준비 기술 발사: 기억한 대상만
+  const targets = ranged ? (canTarget(move, ranged) ? [ranged] : []) : unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   // 준비 기술: 처음 쓰면 모으기만 (솔라빔은 쾌청이면 바로). 같은 기술을 모아 둔 상태면 발사
   if (CHARGE_MOVES.has(move.id) && a.charging?.moveId !== move.id && !(move.id === 'solar-beam' && W === 'sun')) {
-    const foe = targets.find((d) => d.side !== a.side) ?? (focusId ? byId(state, focusId) : null);
+    const foe = targets.filter((d) => d.side !== a.side).sort((p, q) => dist(p, a) - dist(q, a))[0] ?? (focusId ? byId(state, focusId) : null); // 가장 가까운 상대
     a.charging = { moveId: move.id, targetId: foe?.id ?? null };
     if (move.id === 'skull-bash') changeStats(a, [{ stat: 'defense', change: 1 }], stageChanges); // 로켓박치기: 모을 때 방어 +1
     return { kind: 'attack', charged: { ...a.charging }, hits: [], expGained: {}, stageChanges, statusChanges, thawed, selfKO: false, abilityEvents, drained: 0, recoil: 0, crash: 0, screensBroken: [], spun: null, flinched: [], bound: [], retreat: false, bond: [] };
   }
   if (a.charging?.moveId === move.id) a.charging = null;
-  const dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
+  let dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
+  if (ranged && dmgMove.power) dmgMove = { ...dmgMove, power: dmgMove.power * Math.max(0, 1 - RANGE_FALLOFF * Math.max(0, dist(a, ranged) - move.range[1])) }; // 사거리 밖
   a.helped = false;
   if (RECHARGE_MOVES.has(move.id)) a.recharge = true; // 파괴광선류: 기술이 나갔으면 다음 차례 반동
   const spread = targets.length >= 2 ? 0.75 : 1;
@@ -444,7 +450,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const flinched = [], bound = [], screensBroken = [];
   if (move.id === 'brick-break') { // 깨뜨리다: 피해 전에 대상을 덮는 상대 편 장벽을 부숨
     state.zones = (state.zones ?? []).filter((z) => {
-      const hitIt = SCREENS.includes(z.kind) && targets.some((d) => d.side === z.side && d.side !== a.side && dist(d, z) <= FIELD_RADIUS);
+      const hitIt = SCREENS.includes(z.kind) && targets.some((d) => d.side === z.side && d.side !== a.side && dist(d, z) <= FIELD_RADIUS && d.guard !== 'protect' && typeEffect(a, d, move, W) > 0); // 방어·무효면 안 깨짐
       if (hitIt) screensBroken.push(z.kind);
       return !hitIt;
     });
@@ -567,7 +573,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];

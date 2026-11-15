@@ -58,7 +58,7 @@ export function layTraps(state, user, effect, aim) {
     state.spikes.push({ x, y, kind: effect, side: user.side, revealed: false });
     tiles.push({ x, y });
   }
-  return { ok: true, tiles };
+  return { ok: tiles.length > 0, tiles }; // 깔 칸이 없으면 실패
 }
 
 // 상대 편이 (x, y) 칸에 들어옴: 압정 1/8 피해, 독압정 독 (독 타입은 치움). 비행·부유 면역. 아군이 밟은 적 함정은 드러남

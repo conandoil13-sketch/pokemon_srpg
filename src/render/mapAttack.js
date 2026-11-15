@@ -228,7 +228,7 @@ function createBlockedAnim({ attacker, result, fx }) {
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 풀이 죽어 기술을 쓸 수 없다!`), emo: 'Pain' }]
     : result.blocked === 'charged'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} ${result.charged.moveId === 'solar-beam' ? '빛을' : '힘을'} 모으고 있다!`), emo: 'Determined' },
-      ...(result.stageChanges?.length ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${who}의 방어가 올라갔다!`), emo: 'Determined' }] : [])]
+      ...(result.stageChanges?.some((c) => c.applied) ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${who}의 방어가 올라갔다!`), emo: 'Determined' }] : [])]
     : result.blocked === 'damp'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage('습기 때문에 폭발할 수 없다!'), emo: 'Normal' }]
     : BLOCK_TEXT[result.blocked]
@@ -321,7 +321,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     if (to) spawnSafe(fx, pushFx(move.id, Math.max(Math.abs(to.x - attacker.x), Math.abs(to.y - attacker.y))), // 대각선: 큰 축 거리 (그 축 방향으로 불어 대상과 나란히)
        feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
   }
-  const laid = result.trapsLaid ?? [];
+  const laid = (result.trapsLaid ?? []).map((p) => ({ ...p, kind: move.effect })); // 종류까지 (같은 칸의 다른 압정은 숨기지 않음)
   let tossAt = null; // 던지기 시작 시각 (total 기준)
   const burstAt = steps.findIndex((x) => x.k === 'wburst');
   const TOSS_HOLD = 0.25; // 마지막 압정이 떨어진 뒤 잠깐 (적 압정도 보이게)
@@ -426,6 +426,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   if (result.drained > 0) after.push({ text: `${josa(label(attacker), '은/는')} 체력을 흡수했다!`, who: attacker, emo: 'Happy', drain: true });
   if (result.drained < 0) after.push({ text: `${josa(label(attacker), '은/는')} 해감액을 흡수해 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   after.push(...attackExtraLines(result, attacker));
+  for (const b of result.unbound ?? []) { const u = get(b.unitId); if (u) after.push({ text: `${josa(label(u), '은/는')} ${MOVES[b.moveId].name}에서 풀려났다!`, who: u, emo: 'Happy' }); } // 묶은 쪽이 쓰러짐
   if (result.recoil > 0) after.push({ text: `${josa(label(attacker), '은/는')} 반동으로 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   for (const id of result.flinched ?? []) { const u = get(id); if (u) after.push({ text: `${josa(label(u), '은/는')} 풀이 죽었다!`, who: u, emo: 'Pain' }); }
   for (const b of result.bound ?? []) { const u = get(b.unitId); if (u) after.push({ text: bindLine(label(u), b.moveId), who: u, emo: 'Pain', effect: 'bind', moveId: b.moveId }); }

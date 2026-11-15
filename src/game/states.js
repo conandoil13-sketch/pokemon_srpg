@@ -373,6 +373,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const u = queue.shift();
       if (!u) { then(); return; }
       if (!st.units.includes(u)) { next(); return; }
+      if (u.acted && u.status !== 'sleep' && u.status !== 'freeze') { next(); return; } // 게으름 등으로 쉬면 발사도 다음으로 (잠듦·얼음은 불발)
       const route = chargeRoute(st, u);
       if (!route) {
         u.charging = null;
@@ -862,7 +863,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, `${spec(a).name} → ${spec(d).name}`, 10, y + 5);
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     drawText(ctx, mv.name, 10, y + 20);
-    const bn = bindNote(moveId) ?? (mv.sure ? '필중' : null); // 속박기 · 필중
+    const bn = (fc.typeMult === 0 || d.bound ? null : bindNote(moveId)) ?? (mv.sure ? '필중' : null); // 속박기(걸릴 수 있을 때만) · 필중
     if (bn) drawText(ctx, bn, 16 + textWidth(mv.name), y + 22, '#5848a0', null, 'small'); // 속박기
     const tm = min.typeMult;
     const eff = tm === 0 ? ['효과 없음', '#808080'] : tm > 1 ? ['효과 굉장', '#20a020'] : tm < 1 ? ['효과 별로', '#c07020'] : null;

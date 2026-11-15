@@ -43,7 +43,7 @@ const WEATHER_FOR = { water: 'rain', fire: 'sun', rock: 'sand', ground: 'sand', 
 
 // 조준 하나의 점수 (위험도 제외). 적이 하나도 안 맞으면 null
 // 속박기: 아직 안 묶인 상대를 묶으면 조금 더 (이미 묶였으면 가산 없음)
-export const bindValue = (move, t) => (BIND_MOVES.has(move.id) && !t.bound ? HINDER_SCORE / 2 : 0);
+export const bindValue = (move, t) => (BIND_MOVES.has(move.id) && !t.bound ? (HINDER_SCORE / 2) * ((move.accuracy ?? 100) / 100) : 0); // 명중률만큼
 
 function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   const sim = { ...state, units: state.units.map((u) => (u === unit ? ghost : u)) };
@@ -381,7 +381,7 @@ function hinderValue(state, user, r, move) {
     case 'identNormal': return r.identNormal || !typesOf(r).includes('ghost') || !user.moves.some((m) => ['normal', 'fighting'].includes(MOVES[m].type) && !isStatus(MOVES[m])) ? 0 : HINDER_SCORE;
     case 'identPsychic': return r.identPsychic || !typesOf(r).includes('dark') || !user.moves.some((m) => MOVES[m].type === 'psychic' && !isStatus(MOVES[m])) ? 0 : HINDER_SCORE;
     case 'abilityOff': return r.abilityOff ? 0 : HINDER_SCORE / 2;
-    case 'push': return r.boss || r.rooted || manhattan(user, r) !== 1 ? 0 : HINDER_SCORE + bestDamage(r, [user]) * 0.3; // 붙어 있는 상대를 떼어 냄
+    case 'push': return r.boss || r.rooted || r.bound?.by === user.id || manhattan(user, r) !== 1 ? 0 : HINDER_SCORE + bestDamage(r, [user]) * 0.3; // 붙어 있는 상대를 떼어 냄
     case 'worrySeed': return r.ability === 'insomnia' || r.ability === 'truant' ? 0 : HINDER_SCORE / 2;
     default: return 0;
   }
