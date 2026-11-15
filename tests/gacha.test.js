@@ -153,3 +153,15 @@ test('a duplicate pull raises the whole line and records genders the current for
   assert.equal(a.gender, 'male');
   assert.equal(g.party.length, 7, 'no new member for a duplicate');
 });
+
+import { rollBalls as rollB, GACHA_TEN_COST as TEN, claimBalls as claimTen } from '../src/core/gacha.js';
+import { newGame as fresh } from '../src/core/save.js';
+test('a ten-pull voucher pays for the 10-pull instead of coins', () => {
+  const g = fresh(); g.coins = 0; g.items.tenVoucher = 1;
+  const r = claimTen(g, rollB(createRng(3), 10), createRng(4));
+  assert.equal(r.ok, true); assert.equal(r.voucher, true);
+  assert.equal(g.items.tenVoucher, 0); assert.equal(g.coins, 0);
+  g.coins = TEN;
+  assert.equal(claimTen(g, rollB(createRng(5), 10), createRng(6)).voucher, undefined);
+  assert.equal(g.coins, 0);
+});

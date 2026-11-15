@@ -147,6 +147,13 @@ function endRun(outcome, reached = game.run.floor) {
 }
 
 // 이스터에그: 모부기에게 5번 말 걸면 200코인 (저장 하나당 한 번)
+function onWaterGift() { // 물속의 선물: 10연속 뽑기 바우처 (한 번)
+  if (game.eggs?.water) return false;
+  game.items.tenVoucher = (game.items.tenVoucher ?? 0) + 1;
+  game.eggs = { ...game.eggs, water: true };
+  save();
+  return true;
+}
 function onTurtwigGift() {
   if (game.eggs?.turtwig) return false;
   game.coins += 200;
@@ -176,7 +183,7 @@ const go = {
     // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
     const outM = deployed(game).slice(1), out = outM.map((m) => m.species);
     const rest = game.party.filter((m) => m.species !== 'ditto' && !outM.includes(m)).map((m) => m.species);
-    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onTurtwigGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
+    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onTurtwigGift, onWaterGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
     scene = createDungeonSelect({

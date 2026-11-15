@@ -34,7 +34,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const items = () => [
     { label: `뽑기 (${GACHA_COST}코인)`, enabled: true },
-    { label: `10연속 (${GACHA_TEN_COST}코인)`, enabled: true },
+    { label: (game.items?.tenVoucher ?? 0) > 0 ? `10연속 (바우처 ${game.items.tenVoucher}장)` : `10연속 (${GACHA_TEN_COST}코인)`, enabled: true },
     { label: '돌아가기', enabled: true },
   ];
   const menuBox = () => { const r = ui.menuRect(items(), 0, 0); return { x: W - r.w - 4, y: H - 54 - r.h, w: r.w, h: r.h }; };
@@ -68,7 +68,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
     mode = 'open'; t = 0;
   }
   function startTen() {
-    if ((game.coins ?? 0) < GACHA_TEN_COST) { say(['코인이 부족하다.', `(${GACHA_TEN_COST}코인 필요)`]); return; }
+    if (!((game.items?.tenVoucher ?? 0) > 0) && (game.coins ?? 0) < GACHA_TEN_COST) { say(['코인이 부족하다.', `(${GACHA_TEN_COST}코인 필요)`]); return; }
     balls = makeBalls(rollBalls(rng, 10));
     requestSprites(balls.map((b) => b.species));
     const r = claimBalls(game, balls, rng);

@@ -628,3 +628,23 @@ test('tapping a tile in town shows a destination marker until arrival', () => {
   for (let i = 0; i < 200; i++) t.update(0.05);
   assert.equal(t.fx.following, 0);
 });
+
+import { TOWN as T2, WATER_GIFT_SPOT } from '../src/data/town.js';
+test('talking to the water left of the 4th companion spot gives a ten-pull voucher once', () => {
+  let gifts = 0;
+  const town = createTown({ onWaterGift: () => { gifts++; return gifts === 1; } });
+  const spot = T2.npcSpots[3];
+  assert.deepEqual(WATER_GIFT_SPOT, { x: spot.x - 1, y: spot.y, facing: 'down' });
+  assert.equal(T2.tiles[spot.y + 1][spot.x - 1], '~');
+  town.player.x = spot.x - 1; town.player.y = spot.y; town.player.facing = 'down';
+  town.handle({ type: 'confirm' });
+  assert.equal(gifts, 1);
+  assert.match(town.message.lines.join(' '), /바우처/);
+  town.handle({ type: 'confirm' }); tick(town, 0.1);
+  town.handle({ type: 'confirm' }); // 두 번째: 이미 받음 → 물결 대사
+  assert.equal(gifts, 2);
+  assert.doesNotMatch(town.message?.lines.join(' ') ?? '', /바우처를 손에/);
+  town.handle({ type: 'confirm' });
+  town.player.facing = 'left'; town.handle({ type: 'confirm' }); // 다른 방향은 아무 일 없음
+  assert.equal(gifts, 2);
+});

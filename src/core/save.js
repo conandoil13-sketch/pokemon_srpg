@@ -147,6 +147,7 @@ export function loadGame(storage) {
       party,
       items: {
         evoStone: clampInt(data.items?.evoStone, 0, 999),
+        tenVoucher: clampInt(data.items?.tenVoucher, 0, 99), // 10연속 뽑기 바우처
         powders: cleanPowders(data.items?.powders),
         capsules: (Array.isArray(data.items?.capsules) ? data.items.capsules : []).map(cleanCapsule).filter(Boolean).slice(-CAPSULE_BAG_MAX),
       },
@@ -159,7 +160,7 @@ export function loadGame(storage) {
       shards: Object.fromEntries(Object.entries(data.shards && typeof data.shards === 'object' ? data.shards : {})
         .filter(([k]) => own(SPECIES, k)).map(([k, n]) => [k, clampInt(n, 0, 9999)]).filter(([, n]) => n > 0)),
       sortie: cleanSortie(data.sortie, party),
-      eggs: data.eggs?.turtwig === true ? { turtwig: true } : {}, // 이스터에그 받은 기록
+      eggs: Object.fromEntries(['turtwig', 'water'].filter((k) => data.eggs?.[k] === true).map((k) => [k, true])), // 이스터에그 받은 기록
       nextUid,
     };
     unifyLines(game); // 같은 계열은 개체값·얻은 성별을 같이 쓴다
