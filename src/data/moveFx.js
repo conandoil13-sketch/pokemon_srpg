@@ -187,7 +187,7 @@ export const COUNTER_PAL = {
 // 숨기: 종류별로 숨는 순간 연출
 const HIDE_FX = { fly: 'pokemon/hide-sky', bounce: 'pokemon/hide-sky', dig: 'pokemon/hide-dig', dive: 'pokemon/hide-dive', 'shadow-force': 'pokemon/hide-shadow' };
 export const PRESENT_FX = spec('pokemon/present-box', {}, 1, 'front', { life: 1.3 });
-export const GYARADOS_FX = spec('pokemon/gyarados-burst', {}, 1, 'front', { life: 1.6 });
+export const GYARADOS_FX = spec('pokemon/gyarados-burst', {}, 1, 'front', { life: 1.9 });
 const MOVE_EFFECT_FX = {
   counter: spec('pokemon/counter-stance', { palette: COUNTER_PAL.counter }, 1, 'front', { life: 1.1 }),
   'mirror-coat': spec('pokemon/counter-stance', { palette: COUNTER_PAL['mirror-coat'] }, 1, 'front', { life: 1.1 }),
