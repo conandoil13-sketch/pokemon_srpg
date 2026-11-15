@@ -42,7 +42,13 @@ const EFFECT_TEXT = {
   abilityOff: (w) => `${w}의 특성이 효과를 잃었다!`,
   worrySeed: (w) => `${w}의 특성이 불면이 됐다!`,
   bond: (w) => `${W_(w, '은/는')} 상대를 길동무로 삼으려 하고 있다!`,
+  // 2차: 오라 · 장판 · 함정 (날씨·밀어내기·흑안개는 아래에서)
+  tailwind: () => '순풍이 불기 시작했다!', safeguard: () => '신비의 베일이 주위를 감쌌다!', mist: () => '흰 안개가 주위를 감쌌다!', luckyChant: () => '주술로 급소를 막는다!',
+  reflect: () => '리플렉터로 물리 공격에 강해졌다!', lightScreen: () => '빛의장막으로 특수 공격에 강해졌다!', mudSport: () => '전기의 위력이 약해졌다!', waterSport: () => '불꽃의 위력이 약해졌다!',
+  spikes: () => '발밑에 압정이 뿌려졌다!', toxicSpikes: () => '발밑에 독압정이 뿌려졌다!',
+  haze: () => '모든 랭크 변화가 원래대로 돌아왔다!',
 };
+const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = {
   taunt: '도발당해서 변화기를 쓸 수 없다!', encore: '앙코르 때문에 다른 기술을 쓸 수 없다!',
   disable: '그 기술은 사슬묶기로 봉인됐다!', torment: '같은 기술을 연달아 쓸 수 없다!', healBlock: '회복봉인으로 회복할 수 없다!',
@@ -50,7 +56,7 @@ const BLOCK_TEXT = {
 export const blockedText = (reason) => BLOCK_TEXT[reason] ?? null;
 const FAIL_TEXT = '그러나 실패했다!';
 // 대사 + 연출 정보 (effect: 몸에 띄울 이펙트)
-function effectLines(result, get) {
+function effectLines(result, get, moveId = null) {
   const out = [];
   const say = (u, text, effect = null) => { if (u) out.push({ text, who: u, effect }); };
   for (const id of result.protectedIds ?? []) say(get(id), `${W_(label(get(id)), '은/는')} 몸을 지켰다!`, 'protect');
@@ -61,14 +67,18 @@ function effectLines(result, get) {
   let failed = false;
   for (const e of result.effects ?? []) {
     const u = get(e.unitId);
-    if (e.ok && EFFECT_TEXT[e.effect]) say(u, EFFECT_TEXT[e.effect](label(u)), e.effect);
+    if (e.ok && e.effect === 'weather') say(u, WEATHER_TEXT[moveId] ?? '날씨가 바뀌었다!', 'weather');
+    else if (e.ok && e.effect === 'push') say(u, `${W_(label(u), '은/는')} 날려가 버렸다!`, null);
+    else if (e.ok && EFFECT_TEXT[e.effect]) say(u, EFFECT_TEXT[e.effect](label(u)), e.effect);
+    else if (!e.ok && e.effect === 'push' && (e.reason === 'stuck' || e.reason === 'immune')) say(u, `${W_(label(u), '은/는')} 꿈쩍도 하지 않았다!`);
+    else if (!e.ok && e.reason === 'safeguard') say(u, `${W_(label(u), '은/는')} 신비의 베일이 지켜 주고 있다!`);
     else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
   }
   if (result.selfFainted) { const u = get(result.selfFainted); if (u) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, selfFaint: true }); } // 고스트 저주
   return out;
 }
-export const effectMessages = (result, get) => effectLines(result, get).map((l) => l.text);
-const effectSteps = (result, get, moveId = null) => effectLines(result, get).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT || l.selfFaint ? (l.selfFaint ? 'Pain' : 'Normal') : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id, moveId } : null, selfFaint: !!l.selfFaint }));
+export const effectMessages = (result, get, moveId = null) => effectLines(result, get, moveId).map((l) => l.text);
+const effectSteps = (result, get, moveId = null) => effectLines(result, get, moveId).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT || l.selfFaint ? (l.selfFaint ? 'Pain' : 'Normal') : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id, moveId } : null, selfFaint: !!l.selfFaint }));
 const spawnEffectFx = (fx, s, get) => { if (s?.efx) { const u = get(s.efx.unitId); if (u) onBody(fx, fxForEffect(s.efx.effect, s.efx.moveId), u); } };
 
 // 랭크 변화 대사 (changes: applyMove 의 stageChanges, byId: 유닛 찾기 객체/함수)
@@ -92,6 +102,7 @@ export function statusMessages(changes, byId, isStatusMove) {
   return changes.flatMap((c) => {
     const who = label(get(c.unitId));
     if (c.ok) return [`${josa(who, '은/는')} ${INFLICT[c.ailment]}`];
+    if (c.reason === 'safeguard') return [`${josa(who, '은/는')} 신비의 베일이 지켜 주고 있다!`];
     return isStatusMove ? [`${who}에게는 효과가 없는 것 같다...`] : [];
   });
 }
@@ -254,8 +265,9 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const healed = result.healed ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(attacker), '은/는')} 체력을 회복했다!`), who: attacker, emo: 'Happy', heal: true }]
     : result.healFailed ? [{ k: 'msg', d: AUTO, text: wrapMessage(result.healFailed === 'full' ? '그러나 HP 가 가득 차 있다!' : '이번 층에서는 더 쓸 수 없다!'), who: attacker, emo: 'Normal' }] : [];
   const efx = effectSteps(result, get, move.id);
+  const push = result.pushed ? [{ k: 'push', d: 0.3 }] : []; // 밀려나며 미끄러짐
   const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const steps = [{ k: 'act', d: 0.45 }, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
@@ -270,9 +282,17 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
       if (t >= step().d) { t = 0; i++; const s = step(); enter(s); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
+    get trapsShown() { return i < steps.length ? result.trapsLaid ?? [] : []; }, // 적이 깐 압정도 까는 동안은 보인다
     unitPose(u) {
       const s = step();
-      if (!s || u !== attacker) return null;
+      if (!s) return null;
+      if (result.pushed && u.id === result.pushed.unitId) { // 밀려난 포켓몬: 원래 칸 → 새 칸
+        const pi = steps.findIndex((x) => x.k === 'push'), { from, to } = result.pushed;
+        const k = i < pi ? 0 : i === pi ? Math.min(1, t / 0.3) : 1;
+        if (k >= 1) return null;
+        return { anim: 'Hurt', t, loop: false, dx: (from.x - to.x) * TILE * (1 - k), dy: (from.y - to.y) * TILE * (1 - k) };
+      }
+      if (u !== attacker) return null;
       if (steps.slice(0, i + 1).some((x) => x.selfFaint)) return { hidden: true }; // 저주로 쓰러짐
       const hop = s.k === 'act' ? -Math.round(4 * Math.sin(Math.PI * Math.min(1, t / 0.45))) : 0;
       return { anim: 'Idle', t: total, loop: true, dir: dir ?? undefined, dy: hop };

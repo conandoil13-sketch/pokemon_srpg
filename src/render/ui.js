@@ -187,6 +187,48 @@ export function drawBanner(ctx, text, sub, color, t) {
 }
 
 // 월드 좌표 (호출 측에서 카메라 translate)
+// ---- 변화기 묶음 2차: 전장 표시 (월드 좌표) ----
+const within2 = (cx, cy) => { const out = []; for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if (Math.abs(dx) + Math.abs(dy) <= 2) out.push({ x: cx + dx, y: cy + dy }); return out; };
+const AURA_TINT = { tailwind: 'rgba(120,200,255,0.16)', safeguard: 'rgba(255,140,200,0.16)', mist: 'rgba(235,235,255,0.18)', luckyChant: 'rgba(170,120,255,0.16)' };
+const ZONE_EDGE = { reflect: '#f08830', lightScreen: '#f8d040', mudSport: '#a87040', waterSport: '#4890f0' };
+// 오라: 쓴 포켓몬 주변 2칸을 종류별 옅은 색으로 (따라다님)
+export function drawAuras(ctx, state) {
+  for (const a of state.auras ?? []) {
+    const o = state.units.find((u) => u.id === a.ownerId);
+    if (!o) continue;
+    ctx.fillStyle = AURA_TINT[a.kind];
+    for (const t of within2(o.x, o.y)) ctx.fillRect(t.x * TILE + 1, t.y * TILE + 1, TILE - 2, TILE - 2);
+  }
+}
+// 장판: 덮인 칸 묶음의 바깥 테두리 (종류별 색)
+export function drawZones(ctx, state) {
+  for (const z of state.zones ?? []) {
+    const tiles = within2(z.x, z.y), inside = (x, y) => Math.abs(x - z.x) + Math.abs(y - z.y) <= 2;
+    ctx.fillStyle = ZONE_EDGE[z.kind];
+    for (const t of tiles) {
+      const px = t.x * TILE, py = t.y * TILE;
+      if (!inside(t.x, t.y - 1)) ctx.fillRect(px, py, TILE, 2);
+      if (!inside(t.x, t.y + 1)) ctx.fillRect(px, py + TILE - 2, TILE, 2);
+      if (!inside(t.x - 1, t.y)) ctx.fillRect(px, py, 2, TILE);
+      if (!inside(t.x + 1, t.y)) ctx.fillRect(px + TILE - 2, py, 2, TILE);
+    }
+  }
+}
+// 압정: 아군 것과 드러난 적 것만 (shown: 까는 연출 중이라 잠깐 보이는 칸). 그린 칸 목록을 돌려준다
+export function drawTraps(ctx, state, shown = []) {
+  const vis = (state.spikes ?? []).filter((t) => t.side === 'ally' || t.revealed || shown.some((p) => p.x === t.x && p.y === t.y));
+  for (const t of vis) {
+    const [rim, body, tip] = t.kind === 'spikes' ? ['#30303a', '#9898a8', '#e8e8f0'] : ['#2a1032', '#8a3aa8', '#e0a8f0'];
+    for (const [ox, oy] of [[6, 17], [12, 12], [17, 18]]) { // 작은 가시 셋
+      const px = t.x * TILE + ox, py = t.y * TILE + oy;
+      ctx.fillStyle = rim; ctx.fillRect(px - 2, py, 5, 2); ctx.fillRect(px - 1, py - 2, 3, 2); ctx.fillRect(px, py - 4, 1, 2);
+      ctx.fillStyle = body; ctx.fillRect(px - 1, py, 3, 1); ctx.fillRect(px, py - 2, 1, 2);
+      ctx.fillStyle = tip; ctx.fillRect(px, py - 3, 1, 1);
+    }
+  }
+  return vis;
+}
+
 export function drawHighlights(ctx, tiles, color) {
   ctx.fillStyle = color;
   for (const t of tiles) ctx.fillRect(t.x * TILE + 1, t.y * TILE + 1, TILE - 2, TILE - 2);

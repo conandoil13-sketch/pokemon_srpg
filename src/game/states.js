@@ -87,6 +87,19 @@ const STATUS_LINE = {
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
 const HEAL_EVENTS = { aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
+// 압정 밟기 알림 (이동·밀려나기 뒤). fainted 면 쓰러짐 줄을 하나 더
+const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
+export function trapNotices(events = [], get) {
+  const out = [];
+  for (const e of events) {
+    const who = unitLabel(get(e.unitId)), at = { x: e.x, y: e.y };
+    const w = wrapMessage(`${josa(who, '은/는')} ${TRAP_LINE[e.kind]}`);
+    out.push({ lines: Array.isArray(w) ? w : [w], at, hp: e.damage ? { from: e.hpBefore, to: Math.max(0, e.hpBefore - e.damage), max: e.maxHp } : null });
+    if (e.fainted) out.push({ lines: [`${josa(who, '은/는')} 쓰러졌다!`], at, hp: null });
+  }
+  return out;
+}
+const FIELD_NAME = { tailwind: '순풍', safeguard: '신비의부적', mist: '흰안개', luckyChant: '주술', reflect: '리플렉터', lightScreen: '빛의장막', mudSport: '흙놀이', waterSport: '물놀이' };
 const EFFECT_END = { taunt: '도발이 풀렸다!', noMove: '발이 풀려 다시 움직일 수 있다!', encore: '앙코르가 풀렸다!', disable: '사슬묶기가 풀렸다!', torment: '트집이 풀렸다!', healBlock: '회복봉인이 풀렸다!' };
 
 // 페이즈 전환 알림 목록 (순수). events: log.statusEvents, expired: log.expired, get: id → 유닛
@@ -105,6 +118,8 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'aquaRing' ? `${josa(who(e.unitId), '은/는')} 아쿠아링으로 체력을 회복했다!`
       : e.kind === 'ingrain' ? `${josa(who(e.unitId), '은/는')} 뿌리로 양분을 흡수했다!`
       : e.kind === 'effectEnd' ? `${who(e.unitId)}의 ${EFFECT_END[e.effect] ?? '효과'}`
+      : e.kind === 'fieldEnd' ? `${FIELD_NAME[e.what] ?? '전장'}의 효과가 사라졌다!`
+      : e.kind === 'weatherEnd' ? '날씨가 원래대로 돌아왔다!'
       : `${josa(who(e.unitId), '은/는')} ${STATUS_LINE[e.kind]}`;
     const w = wrapMessage(text);
     return {
@@ -226,6 +241,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const attackAims = (unit, mv) => aimsOf(st, unit, mv).filter((a) => unitsHit(st, unit, mv, a).some((u) => u.side !== unit.side));
   const curAim = () => (aims ? aims[aIdx] : null);
   // 조준의 대표 칸 (커서 위치)
+  // 압정(칸 조준): 사거리 1~3 의 벽 아닌 칸 / 덮는 칸 = 그 칸 + 4방
+  const trapAims = (unit) => tilesInRange(unit.x, unit.y, [1, 3], st.width, st.height).filter((t) => st.grid[t.y][t.x] !== '#').map((t) => ({ x: t.x, y: t.y }));
+  const aimsFor = (unit, mv) => (mv.aimTile ? trapAims(unit) : attackAims(unit, mv));
+  const coverOf = (unit, mv, aim) => (mv.aimTile ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: aim.x + dx, y: aim.y + dy })).filter((t) => st.grid[t.y]?.[t.x] !== undefined && st.grid[t.y][t.x] !== '#') : tilesOf(st, unit, mv, aim));
   function aimPoint(aim) {
     if (aim.unitId) { const u = st.units.find((o) => o.id === aim.unitId); return { x: u.x, y: u.y }; }
     if (aim.dir) return tilesOf(st, sel, MV(move), aim)[0] ?? { x: sel.x, y: sel.y };
@@ -273,7 +292,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 대사 뒤: 결과가 났으면 결과 화면, 아군이 전원 쉬면(잠듦·얼음) 바로 상대 턴
-  const weatherTag = () => (st.weather ? ` · ${WEATHER_KO[st.weather]}` : '');
+  const weatherTag = () => (st.weather ? ` · ${WEATHER_KO[st.weather]}${st.weatherTimer ? ` (${st.weatherTimer.turns})` : ''}` : ''); // 날씨 부르기 남은 턴
   const playerPhase = (lines = []) => showBanner('아군 턴', (floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`) + weatherTag(), '#4080f8',
     () => noticeChain(lines, () => {
       focus = null;
@@ -337,6 +356,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     u.retreatReady = false; u.retreated = true;
     if (!t || (t.x === u.x && t.y === u.y)) { nextEnemy(); return; }
     pause = { t: 0.15, fn: () => startWalk(u, pathTo(st.grid, st.units, u, t.x, t.y), nextEnemy) };
+  }
+
+  // 압정에 쓰러져 행동이 끝남: 아군은 다음 선택, 적은 다음 적
+  function afterTrapFaint(unit) {
+    if (st.result) { mode = 'result'; return; }
+    if (unit.side === 'ally') {
+      sel = null;
+      if (allyUnits().every((u) => u.acted)) enemyPhase(); else mode = 'idle';
+    } else nextEnemy();
   }
 
   function startWalk(unit, path, onDone) {
@@ -428,7 +456,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const block = moveBlock(sel, m); // 도발·앙코르·사슬묶기·트집·회복봉인
       return {
         label: MOVES[m].name, moveId: m,
-        enabled: !sel.sealed && !block && (MOVES[m].heal ? sel.hp < sel.maxHp && (sel.healUses ?? 0) > 0 : true) && (isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MV(m).kind === 'self' || targetsFor(sel, m).length > 0), // 풀죽음 봉인
+        enabled: !sel.sealed && !block && (MOVES[m].heal ? sel.hp < sel.maxHp && (sel.healUses ?? 0) > 0 : true) && (isAttack(MOVES[m]) || MOVES[m].aimTile ? aimsFor(sel, MOVES[m]).length > 0 : MV(m).kind === 'self' || targetsFor(sel, m).length > 0), // 풀죽음 봉인
         ...(block ? { why: blockedText(block) } : {}),
         ...(MOVES[m].category === 'status' ? { tag: '변화' } : {}),
       };
@@ -477,9 +505,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       return;
     }
     move = it.moveId;
-    if (isAttack(MV(move))) { // 공격기: 가장 많이 맞는 조준부터
-      aims = attackAims(sel, MV(move));
-      const b = bestAim(st, sel, MV(move));
+    if (isAttack(MV(move)) || MV(move).aimTile) { // 공격기: 가장 많이 맞는 조준부터 · 압정: 가장 가까운 적 쪽 칸부터
+      aims = aimsFor(sel, MV(move));
+      const foe = st.units.filter((u) => u.side !== sel.side).sort((p, q) => manhattan(p, sel) - manhattan(q, sel))[0];
+      const b = MV(move).aimTile ? aims.slice().sort((p, q) => (foe ? manhattan(p, foe) - manhattan(q, foe) : 0))[0] : bestAim(st, sel, MV(move));
       aIdx = Math.max(0, aims.findIndex((a) => sameAim(a, b)));
       cursor = aimPoint(curAim());
       mode = 'target';
@@ -580,7 +609,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           }
           if (tile && (ev.type === 'cursor' || ev.type === 'click')) {
             // 그 칸이 중심인 조준 → 지금 조준이 그 칸을 덮으면 유지 → 그 칸을 덮는 첫 조준
-            const covers = (a) => tilesOf(st, sel, MV(move), a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y);
+            const covers = (a) => coverOf(sel, MV(move), a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y);
             const centred = aims.findIndex((a) => { const p = aimPoint(a); return p.x === tile.x && p.y === tile.y; });
             const i = centred >= 0 ? centred : covers(curAim()) ? aIdx : aims.findIndex(covers);
             if (i < 0) return;
@@ -645,10 +674,13 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         mode = prevMode;
         const end = path.at(-1);
         const cost = path.slice(1).reduce((c, p) => c + (TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용
-        moveUnit(st, unit.id, end.x, end.y, cost);
-        const arriveLines = abilityNotices(st.log.arriveAbilityEvents, (id) => everyone.get(id));
-        if (arriveLines.length && unit.side === 'ally') moveLocked = true; // 위협을 건 이동은 취소할 수 없다
-        noticeChain(arriveLines, () => { mode = prevMode; onDone(); });
+        moveUnit(st, unit.id, end.x, end.y, cost, path);
+        const get = (id) => everyone.get(id);
+        const arriveLines = st.units.includes(unit) ? abilityNotices(st.log.arriveAbilityEvents, get) : [];
+        const trapLines = trapNotices(st.log.trapEvents, get);
+        if ((arriveLines.length || trapLines.length) && unit.side === 'ally') moveLocked = true; // 위협·압정이 걸린 이동은 취소할 수 없다
+        const dead = !st.units.includes(unit);
+        noticeChain([...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) afterTrapFaint(unit); else onDone(); });
       }
     } else if (mode === 'anim') {
       anim.update(dt);
@@ -849,6 +881,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ctx.save();
     ctx.translate(-cx, -cy);
     drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
+    ui.drawZones(ctx, st); // 장판 테두리
+    ui.drawAuras(ctx, st); // 오라 (쓴 포켓몬을 따라다님)
+    ui.drawTraps(ctx, st, anim?.trapsShown ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)
     for (const c of st.chests) drawChest(ctx, c.x, c.y);
     if (mode === 'selected') {
       ui.drawHighlights(ctx, toPts(reach), BLUE);
@@ -866,7 +901,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     };
     if (mode === 'action' && menu[menuSel]?.moveId) area(MOVES[menu[menuSel].moveId]);
     if (mode === 'target' && aims) {
-      const mv = MV(move), tiles = tilesOf(st, sel, mv, curAim());
+      const mv = MV(move), tiles = coverOf(sel, mv, curAim());
       ui.drawHighlights(ctx, tiles, RED);
       for (const u of unitsHit(st, sel, mv, curAim())) if (u.side === sel.side) ui.drawOutline(ctx, u.x, u.y, '#f89020');
     } else if (mode === 'target') area(MV(move));
