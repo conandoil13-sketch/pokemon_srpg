@@ -150,3 +150,10 @@ test('wrap-like moves coil, vortex moves swirl in their type colour', () => {
   assert.notDeepEqual(bindFx('fire-spin').opts.palette, bindFx('sand-tomb').opts.palette);
   assert.equal(fxForEffect('bind', 'fire-spin').id, 'pokemon/bind-vortex');
 });
+
+test('each OHKO move has its own finisher effect', () => {
+  for (const [id, fx] of [['sheer-cold', 'pokemon/ohko-freeze'], ['fissure', 'pokemon/ohko-fissure'], ['guillotine', 'pokemon/ohko-guillotine'], ['horn-drill', 'pokemon/ohko-drill']]) {
+    assert.equal(fxForMove(MOVES[id], { distance: 1 }).hit.id, fx, id);
+    assert.ok(CUSTOM_FX[fx], fx);
+  }
+});

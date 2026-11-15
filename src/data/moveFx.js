@@ -31,7 +31,11 @@ const TIER = {
   strong: { light: 1.4, reach: 56, life: 1.4 },
 };
 
+// 일격필살: 기술마다 전용 연출 (맞았을 때만, 대상에게)
+export const OHKO_FX = { 'sheer-cold': 'pokemon/ohko-freeze', fissure: 'pokemon/ohko-fissure', guillotine: 'pokemon/ohko-guillotine', 'horn-drill': 'pokemon/ohko-drill' };
+
 function rule(move, distance) {
+  if (OHKO_FX[move.id]) return { hit: spec(OHKO_FX[move.id], {}, 1, 'front', { noEcho: true, life: 1.7 }) };
   if (SELF_KO[move.id]) return { selfKO: spec(SELF_KO[move.id], {}, 2, 'front') }; // 원래 색, 크게
   const p = pal(move.type), type = move.shape?.type ?? 'single';
   const tier = powerTier(move.power), T = TIER[tier];

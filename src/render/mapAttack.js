@@ -428,6 +428,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     else if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
     else if (!h.hit) mid.push({ text: `${name}에게는 맞지 않았다!`, who: d });
     else {
+      if (move.fixedDamage === 'ohko' && h.damage > 0) mid.push({ text: '일격필살!', who: d }); // 일격필살
       if (h.crit) mid.push({ text: many ? `${name}의 급소에 맞았다!` : '급소에 맞았다!', who: d });
       if (h.typeMult > 1) mid.push({ text: many ? `${name}에게 효과가 굉장했다!` : '효과가 굉장했다!', who: d });
       else if (h.typeMult < 1) mid.push({ text: many ? `${name}에게는 효과가 별로인 듯하다...` : '효과가 별로인 듯하다...', who: d });
