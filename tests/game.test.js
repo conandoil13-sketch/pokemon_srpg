@@ -843,3 +843,19 @@ test('hiding a newly tossed caltrop does not hide toxic spikes on the same tile'
   const st = { spikes: [{ x: 2, y: 1, kind: 'toxicSpikes', side: 'ally' }, { x: 2, y: 1, kind: 'spikes', side: 'ally' }] };
   assert.deepEqual(drawTraps(ctx, st, [], [{ x: 2, y: 1, kind: 'spikes' }]).map((t) => t.kind), ['toxicSpikes']);
 });
+
+test('frustration slides attacker and shoved foe from their old tiles', () => {
+  const me = { id: 'a', species: 'rattata', side: 'ally', x: 2, y: 1, hp: 30, maxHp: 30 }, foe = { id: 'e', species: 'geodude', side: 'enemy', x: 3, y: 1, hp: 30, maxHp: 30 };
+  const result = { kind: 'attack', hits: [{ unitId: 'e', hit: true, typeMult: 1, damage: 5, hpBefore: 35, fainted: false, crit: false }], stageChanges: [], statusChanges: [], stepped: { unitId: 'a', from: { x: 1, y: 1 }, to: { x: 2, y: 1 } }, shoved: { unitId: 'e', from: { x: 2, y: 1 }, to: { x: 3, y: 1 } } };
+  const anim = createMapAttack({ attacker: me, defenders: [foe], move: { ...MV2.frustration, id: 'frustration' }, result, lookup: (id) => [me, foe].find((u) => u.id === id), fx: null });
+  assert.equal(anim.unitPose(me).dx, -24); // 아직 원래 칸
+  assert.equal(anim.unitPose(foe).dx, -24);
+  while (!anim.done) { anim.advance(); anim.update(0.05); }
+});
+test('the summoned gyarados stays hidden until its geyser has risen', () => {
+  const me = { id: 'a', species: 'magikarp', side: 'ally', x: 2, y: 2 }, g = { id: 'g', species: 'gyarados', side: 'ally', x: 3, y: 2 };
+  const anim = statusAnim('splash', { effects: [{ unitId: 'a', effect: 'splash', ok: true, summoned: 'g' }], summoned: 'g' }, [me, g]);
+  assert.equal(anim.unitPose(g)?.hidden, true);
+  runFor(anim, 0.45 + 1.0);
+  assert.notEqual(anim.unitPose(g)?.hidden, true);
+});

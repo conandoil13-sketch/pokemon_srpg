@@ -291,7 +291,7 @@ test('counter, mirror coat and metal burst strike back once at whoever hits them
   applyMove(c.s, c.a.id, 'counter', c.a.id, hit);
   assert.ok(c.a.counter);
   const hp = c.f.hp, r = applyMove(c.s, c.f.id, 'tackle', c.a.id, () => 0.5), dealt = r.hits[0].damage;
-  assert.deepEqual(r.countered, { unitId: c.a.id, damage: Math.min(hp, dealt * 2) });
+  assert.deepEqual(r.countered, { unitId: c.a.id, damage: Math.min(hp, dealt * 2), moveId: 'counter', mult: 2 });
   assert.equal(c.a.counter, null);
   const m = duel('machop', 'rattata', { ally: { hp: 999, maxHp: 999 } });
   applyMove(m.s, m.a.id, 'mirror-coat', m.a.id, hit);

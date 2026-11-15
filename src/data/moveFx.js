@@ -178,7 +178,20 @@ export const EFFECT_FX = {
   haze: spec('pokemon/ground-fog', { palette: FOG_DARK }, 1, 'back', { life: 1.7 }), // 바닥에 깔리는 검은 안개
 };
 // 같은 효과라도 기술마다 인상이 다른 것: 거미집 = 실로 감은 고치, 블록 = 쌓이는 장난감 벽돌 (검은눈빛은 위 손 그대로)
+// 반격 3종: 기술마다 색 (카운터 짙은 주황 · 미러코트 분홍 · 메탈버스트 금속)
+export const COUNTER_PAL = {
+  counter: ['#2a0c02', '#6a2004', '#b8420a', '#ff6a14', '#ffb070'],
+  'mirror-coat': ['#3a0a2a', '#8a1a5a', '#d83a9a', '#ff7ac8', '#ffc4ea'],
+  'metal-burst': ['#1a1c24', '#4a4e5c', '#8a90a4', '#c8ccd8', '#f4f6fc'],
+};
+// 숨기: 종류별로 숨는 순간 연출
+const HIDE_FX = { fly: 'pokemon/hide-sky', bounce: 'pokemon/hide-sky', dig: 'pokemon/hide-dig', dive: 'pokemon/hide-dive', 'shadow-force': 'pokemon/hide-shadow' };
+export const PRESENT_FX = spec('pokemon/present-box', {}, 1, 'front', { life: 1.3 });
+export const GYARADOS_FX = spec('pokemon/gyarados-burst', {}, 1, 'front', { life: 1.6 });
 const MOVE_EFFECT_FX = {
+  counter: spec('pokemon/counter-stance', { palette: COUNTER_PAL.counter }, 1, 'front', { life: 1.1 }),
+  'mirror-coat': spec('pokemon/counter-stance', { palette: COUNTER_PAL['mirror-coat'] }, 1, 'front', { life: 1.1 }),
+  'metal-burst': spec('pokemon/counter-stance', { palette: COUNTER_PAL['metal-burst'] }, 1, 'front', { life: 1.1 }),
   'spider-web': spec('pokemon/silk-wrap', {}, 1.2, 'front', { life: 1.3 }),
   block: spec('pokemon/brick-stack', {}, 1.3, 'front', { life: 1.3 }),
   'rain-dance': fxOn('arcane/spell-charge', { palette: PAL.water }, 1.5),
@@ -193,7 +206,7 @@ export const bindFx = (moveId) => {
   const palette = moveId === 'magma-storm' ? PAL.lava : moveId === 'clamp' ? PAL.water : pal(type);
   return spec(COIL_MOVES.has(moveId) ? 'pokemon/bind-coil' : 'pokemon/bind-vortex', { palette }, 1, 'front', { life: 1.3 });
 };
-export const fxForEffect = (effect, moveId) => (effect === 'bind' && moveId ? bindFx(moveId) : MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect]);
+export const fxForEffect = (effect, moveId) => (effect === 'hide' && HIDE_FX[moveId] ? spec(HIDE_FX[moveId], {}, 1, 'front', { life: 1.1 }) : effect === 'bind' && moveId ? bindFx(moveId) : MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect]);
 // 밀어내기: 쓴 포켓몬 → 대상 쪽. 날려버리기는 대상까지 닿는 돌풍, 울부짖기는 음파 (tiles: 대상까지 칸 수)
 export const pushFx = (moveId, tiles) => (moveId === 'whirlwind'
   ? spec('pokemon/gust-blast', { reach: Math.max(1, tiles) * 24 }, 1, 'front', { life: 0.8 })

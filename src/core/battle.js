@@ -581,8 +581,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
       // 반격 자세: 맞고 버텼으면 때린 상대에게 바로 돌려줌 (한 번)
       if (!fainted && d.counter && d !== a && hpBefore - d.hp > 0 && (d.counter.cat === 'both' || d.counter.cat === move.category) && state.units.includes(a)) {
         const back = Math.min(a.hp, Math.max(1, Math.floor((hpBefore - d.hp) * d.counter.mult)));
+        countered = { unitId: d.id, damage: back, moveId: d.counter.id, mult: d.counter.mult };
         a.hp -= back; d.counter = null;
-        countered = { unitId: d.id, damage: back };
         if (a.hp === 0) knockOut(state, a, null);
       }
       if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
@@ -666,7 +666,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const presentHealed = [];
   if (presentHeal) for (const d of targets) if (state.units.includes(d) && d.guard !== 'protect' && canHeal(d) && d.hp < d.maxHp) { const b = d.hp; d.hp = Math.min(d.maxHp, d.hp + Math.max(1, Math.floor(d.maxHp / 4))); presentHealed.push({ unitId: d.id, amount: d.hp - b }); }
   // 화풀이: 때리고 그쪽으로 한 칸 (상대를 한 칸 밀고 그 자리로) · 은혜갚기: 때리고 한 칸 물러남
-  let stepped = null;
+  let stepped = null, shoved = null;
   if ((move.id === 'frustration' || move.id === 'return') && anyLanded && state.units.includes(a)) {
     const d = targets.find((t) => t.side !== a.side);
     if (d) {
@@ -676,7 +676,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (move.id === 'frustration') {
         const from = { x: a.x, y: a.y };
         if (!state.units.includes(d) && free(d.x, d.y)) moveUnit(state, a.id, d.x, d.y, 0); // 쓰러졌으면 그 칸으로
-        else if (state.units.includes(d) && !d.boss && free(d.x + sx, d.y + sy) && canEnter(state.grid[d.y + sy]?.[d.x + sx], d)) { const ox = d.x, oy = d.y; moveUnit(state, d.id, d.x + sx, d.y + sy, 0); if (state.units.includes(a)) moveUnit(state, a.id, ox, oy, 0); }
+        else if (state.units.includes(d) && !d.boss && free(d.x + sx, d.y + sy) && canEnter(state.grid[d.y + sy]?.[d.x + sx], d)) { const ox = d.x, oy = d.y; moveUnit(state, d.id, d.x + sx, d.y + sy, 0); shoved = { unitId: d.id, from: { x: ox, y: oy }, to: { x: d.x, y: d.y } }; if (state.units.includes(a)) moveUnit(state, a.id, ox, oy, 0); }
         if (a.x !== from.x || a.y !== from.y) stepped = { unitId: a.id, from, to: { x: a.x, y: a.y } };
       }
     }
@@ -702,7 +702,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];

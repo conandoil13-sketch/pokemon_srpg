@@ -24,5 +24,12 @@ import * as ohkoFreeze from './pokemon/ohko-freeze.js';
 import * as ohkoFissure from './pokemon/ohko-fissure.js';
 import * as ohkoGuillotine from './pokemon/ohko-guillotine.js';
 import * as ohkoDrill from './pokemon/ohko-drill.js';
+import * as counterStance from './pokemon/counter-stance.js';
+import * as presentBox from './pokemon/present-box.js';
+import * as gyaradosBurst from './pokemon/gyarados-burst.js';
+import * as hideDig from './pokemon/hide-dig.js';
+import * as hideDive from './pokemon/hide-dive.js';
+import * as hideSky from './pokemon/hide-sky.js';
+import * as hideShadow from './pokemon/hide-shadow.js';
 
-export const CUSTOM_FX = { 'pokemon/bite': bite, 'pokemon/kick': kick, 'pokemon/sound-wave': soundWave, 'pokemon/silk-wrap': silkWrap, 'pokemon/brick-stack': brickStack, 'pokemon/aqua-ring': aquaRing, 'pokemon/seed-scatter': seedScatter, 'pokemon/anger-mark': angerMark, 'pokemon/chain-bind': chainBind, 'pokemon/small-sigil': smallSigil, 'pokemon/heal-glow': healGlow, 'pokemon/drain-orbs': drainOrbs, 'pokemon/move-marker': moveMarker, 'pokemon/tailwind-gust': tailwindGust, 'pokemon/veil-dome': veilDome, 'pokemon/ground-fog': groundFog, 'pokemon/chant-pool': chantPool, 'pokemon/caltrop-toss': caltropToss, 'pokemon/gust-blast': gustBlast, 'pokemon/bind-coil': bindCoil, 'pokemon/bind-vortex': bindVortex, 'pokemon/ohko-freeze': ohkoFreeze, 'pokemon/ohko-fissure': ohkoFissure, 'pokemon/ohko-guillotine': ohkoGuillotine, 'pokemon/ohko-drill': ohkoDrill };
+export const CUSTOM_FX = { 'pokemon/bite': bite, 'pokemon/kick': kick, 'pokemon/sound-wave': soundWave, 'pokemon/silk-wrap': silkWrap, 'pokemon/brick-stack': brickStack, 'pokemon/aqua-ring': aquaRing, 'pokemon/seed-scatter': seedScatter, 'pokemon/anger-mark': angerMark, 'pokemon/chain-bind': chainBind, 'pokemon/small-sigil': smallSigil, 'pokemon/heal-glow': healGlow, 'pokemon/drain-orbs': drainOrbs, 'pokemon/move-marker': moveMarker, 'pokemon/tailwind-gust': tailwindGust, 'pokemon/veil-dome': veilDome, 'pokemon/ground-fog': groundFog, 'pokemon/chant-pool': chantPool, 'pokemon/caltrop-toss': caltropToss, 'pokemon/gust-blast': gustBlast, 'pokemon/bind-coil': bindCoil, 'pokemon/bind-vortex': bindVortex, 'pokemon/ohko-freeze': ohkoFreeze, 'pokemon/ohko-fissure': ohkoFissure, 'pokemon/ohko-guillotine': ohkoGuillotine, 'pokemon/ohko-drill': ohkoDrill, 'pokemon/counter-stance': counterStance, 'pokemon/present-box': presentBox, 'pokemon/gyarados-burst': gyaradosBurst, 'pokemon/hide-dig': hideDig, 'pokemon/hide-dive': hideDive, 'pokemon/hide-sky': hideSky, 'pokemon/hide-shadow': hideShadow };

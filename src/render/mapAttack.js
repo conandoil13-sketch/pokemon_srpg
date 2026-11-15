@@ -11,7 +11,7 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx, COUNTER_PAL, PRESENT_FX, GYARADOS_FX } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
 import { BURST_TIME, drawBurstRing, drawBurstFlash } from './weatherFx.js';
 import { idleFrameSource } from './sprites.js';
@@ -68,7 +68,7 @@ export function attackExtraLines(result, attacker) {
   if (result.spun?.freed) out.push({ text: `${josa(label(attacker), '은/는')} 몸이 자유로워졌다!`, who: attacker, emo: 'Happy' });
   if (result.spun?.cleared) out.push({ text: '압정이 날아갔다!', who: attacker, emo: 'Happy' });
   const HIDE_LINE = { fly: '하늘 높이 날아올랐다!', bounce: '높이 뛰어올랐다!', dig: '땅속으로 파고들었다!', dive: '물속으로 잠수했다!', 'shadow-force': '모습을 감췄다!' };
-  if (attacker.burrow && HIDE_LINE[attacker.burrow.moveId]) out.push({ text: `${josa(label(attacker), '은/는')} ${HIDE_LINE[attacker.burrow.moveId]}`, who: attacker, emo: 'Determined' });
+  if (attacker.burrow && HIDE_LINE[attacker.burrow.moveId]) out.push({ text: `${josa(label(attacker), '은/는')} ${HIDE_LINE[attacker.burrow.moveId]}`, who: attacker, emo: 'Determined', effect: 'hide', moveId: attacker.burrow.moveId });
   if (result.countered) out.push({ text: `${josa(label(attacker), '은/는')} 반격을 받았다!`, who: attacker, emo: 'Pain' }); // 카운터·미러코트·메탈버스트
   if (result.crash > 0) out.push({ text: `${josa(label(attacker), '은/는')} 땅에 부딪혔다!`, who: attacker, emo: 'Pain' });
   return out;
@@ -319,6 +319,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     if (!s) return;
     if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
     if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
+    if (result.summoned && s.efx?.effect === 'splash') { const g = get(result.summoned); if (g) spawnSafe(fx, GYARADOS_FX, feet(g)); summonAt = total; spawnChangeFx(fx, s, result, get); return; } // 갸라도스 등장: 물기둥
     if (TOSSED.has(s.efx?.effect) && tossAt === null) { // 압정: 깔린 칸마다 하나씩 던짐
       tossAt = total;
       const from = feet(attacker);
@@ -333,6 +334,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     if (to) spawnSafe(fx, pushFx(move.id, Math.max(Math.abs(to.x - attacker.x), Math.abs(to.y - attacker.y))), // 대각선: 큰 축 거리 (그 축 방향으로 불어 대상과 나란히)
        feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
   }
+  let summonAt = null; // 갸라도스: 물기둥이 치솟은 뒤에 보인다
   const laid = (result.trapsLaid ?? []).map((p) => ({ ...p, kind: move.effect })); // 종류까지 (같은 칸의 다른 압정은 숨기지 않음)
   let tossAt = null; // 던지기 시작 시각 (total 기준)
   const burstAt = steps.findIndex((x) => x.k === 'wburst');
@@ -360,6 +362,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     unitPose(u) {
       const s = step();
       if (!s) return null;
+      if (result.summoned && u.id === result.summoned && (summonAt === null || total - summonAt < 0.7)) return { hidden: true }; // 물기둥 속에서 등장
       if (result.pushed && u.id === result.pushed.unitId) { // 밀려난 포켓몬: 원래 칸 → 새 칸
         const pi = steps.findIndex((x) => x.k === 'push'), { from, to } = result.pushed;
         const k = i < pi ? 0 : i === pi ? Math.min(1, t / 0.3) : 1;
@@ -452,6 +455,8 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     { k: 'act', d: actLen },
     ...(travel ? [{ k: 'travel', d: 0.25 }] : []),
     { k: 'impact', d: result.selfKO ? 1.2 : 0.6 },
+    ...(result.countered ? [{ k: 'counter', d: 0.8 }] : []), // 반격: 받은 기술을 키워서 되돌림
+    ...(result.stepped || result.shoved ? [{ k: 'slide', d: 0.25 }] : []), // 화풀이·은혜갚기 한 칸
     ...mid.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: 'Pain', efx: m.effect ? { effect: m.effect, unitId: m.who.id } : null })),
     ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
@@ -464,6 +469,10 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const step = () => steps[i];
   const passed = (k) => steps.slice(0, i).some((x) => x.k === k);
 
+  // 화풀이·은혜갚기: 미끄러지기 전엔 원래 칸에 있는 것처럼 (상태는 이미 새 칸)
+  const moved = new Map([result.stepped, result.shoved].filter(Boolean).map((m) => [m.unitId, m]));
+  const at = (u) => { const m = moved.get(u.id); return m && !passed('slide') && step()?.k !== 'slide' ? m.from : u; };
+  const slideOff = (u) => { const m = moved.get(u.id); if (!m) return null; const k = passed('slide') ? 1 : step()?.k === 'slide' ? Math.min(1, t / 0.25) : 0; return { dx: (m.from.x - m.to.x) * TILE * (1 - k), dy: (m.from.y - m.to.y) * TILE * (1 - k) }; };
   // pixelfx: 단계에 들어갈 때 한 번씩
   const dist0 = defenders[0] ? Math.abs(defenders[0].x - attacker.x) + Math.abs(defenders[0].y - attacker.y) : 1;
   const spec = fx ? fxForMove(move, { distance: dist0 }) : null;
@@ -472,7 +481,16 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   function enter(s) {
     spawnEffectFx(fx, s, get); // 방어·버티기·길동무
     if (!s || !spec) return;
-    if (s.k === 'act' && spec.cast) spawnSafe(fx, spec.cast, feet(attacker), { dir });
+    if (s.k === 'act' && spec.cast) spawnSafe(fx, spec.cast, feet(at(attacker)), { dir });
+    if (s.k === 'counter') { // 받은 기술을 반격 색으로, 위력 배수만큼 크게 겹쳐 되돌림
+      const c = result.countered, src = get(c.unitId) ?? defenders[0], pal = COUNTER_PAL[c.moveId];
+      const base = spec.hit ?? spec.cast ?? { id: 'impacts/blunt-hit', opts: {}, timeScale: 1.5, layer: 'front' };
+      const back = dirName(attacker.x - (src?.x ?? attacker.x), attacker.y - (src?.y ?? attacker.y));
+      const n = Math.max(2, Math.round(c.mult * 2));
+      for (let k = 0; k < n; k++) spawnSafe(fx, { ...base, opts: { ...base.opts, palette: pal, light: 1.6, seed: 31 + k } }, feet(at(attacker)), { dir: back, delay: k * 0.07 });
+      spawnSafe(fx, { id: 'impacts/blunt-hit', opts: { palette: pal, light: 2 }, timeScale: 1.2, layer: 'front' }, feet(at(attacker)), { dir: back, delay: 0.1 });
+      shakeT = 0.3;
+    }
     if (s.drain) { // 흡수: 대상에서 구슬이 날아오고, 도착하면 회복 표시
       const src = defenders[0] ?? attacker;
       spawnSafe(fx, drainFx((src.x - attacker.x) * TILE, (src.y - attacker.y) * TILE), feet(attacker));
@@ -496,10 +514,15 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
       let ok = true;
       for (const d of defenders) {
         const h = hitOf(d);
+        if (h?.presentHeal) { // 프레젠트 회복: 선물상자 + 회복 표시
+          spawnSafe(fx, PRESENT_FX, feet(at(d)));
+          if (result.presentHealed?.some((x) => x.unitId === d.id)) { const actor = actorFor(d.species, idleFrameSource(d.species)); spawnSafe(fx, HEAL_FX, bodyAt(actor, at(d).x * TILE + TILE / 2, at(d).y * TILE + TILE / 2), { actor, delay: 0.7 }); }
+          continue;
+        }
         if (!h || !h.hit || h.typeMult === 0 || !spec.hit) continue;
         const strong = h.typeMult > 1;
         const base = strong ? { ...spec.hit, opts: { ...spec.hit.opts, light: 1.5 } } : spec.hit;
-        ok = !!spawnSafe(fx, base, feet(d), { dir }) && ok;
+        ok = !!spawnSafe(fx, base, feet(at(d)), { dir }) && ok;
         // 효과 굉장: 한 겹 더 (이빨·발·별 같은 모양 이펙트는 두 번 나오면 어색해서 반짝임으로)
         if (strong) spawnSafe(fx, spec.hit.noEcho ? { id: 'impacts/hit-spark', opts: { palette: spec.hit.opts.palette, light: 1.5, seed: 99 }, timeScale: 1, layer: 'front' } : { ...base, opts: { ...base.opts, seed: 99 } }, feet(d), { dir, delay: 0.08 });
         if (spec.hit2) spawnSafe(fx, spec.hit2, feet(d), { dir, delay: 0.05 }); // 강한 기술: 충격 한 겹 더
@@ -515,6 +538,30 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     if (passed('impact')) return d.hp;
     if (step()?.k === 'impact') return before + (d.hp - before) * Math.min(1, t / 0.45);
     return before;
+  }
+
+  function poseOf(u) {
+    const s = step();
+    if (!s) return null;
+    if (u === attacker) {
+        if (passed('selffaint')) return { hidden: true };
+      if (s.k === 'selffaint') return { anim: 'Hurt', t: 0.1, loop: false, dir: atkDir, hidden: Math.floor(t / 0.08) % 2 === 0 };
+      if (s.k === 'counter') return { anim: 'Hurt', t, loop: false, dir: atkDir, flash: Math.floor(t / 0.06) % 2 === 0 && t < 0.35 }; // 반격 맞음
+      if (s.k === 'act') {
+        const k = Math.sin(Math.PI * Math.min(1, t / actLen));
+        const v = { x: Math.sign(focusPt.x - attacker.x), y: Math.sign(focusPt.y - attacker.y) };
+        return { anim: animName, t, loop: false, dir: atkDir, dx: lunge ? v.x * 5 * k : 0, dy: lunge ? v.y * 5 * k : 0 };
+      }
+      return { anim: 'Idle', t: total, loop: true, dir: atkDir };
+    }
+    const h = defenders.includes(u) ? hitOf(u) : null;
+    if (!h) return null;
+    const landed = h.hit && h.typeMult > 0;
+    if (h.fainted && passed('faint')) return { hidden: true };
+    if (h.fainted && s.k === 'faint') return { anim: 'Hurt', t: 0.1, loop: false, dir: defDir(u), hidden: Math.floor(t / 0.08) % 2 === 0 };
+    if (s.k === 'impact' && landed) return { anim: 'Hurt', t, loop: false, dir: defDir(u), flash: Math.floor(t / 0.06) % 2 === 0 && t < 0.3 };
+    return { anim: 'Idle', t: total, loop: true, dir: defDir(u) };
+    
   }
 
   enter(steps[0]);
@@ -533,27 +580,10 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     advance() { if (step()?.k === 'msg') t = step().d; },
 
     unitPose(u) {
-      const s = step();
-      if (!s) return null;
-      if (u === attacker) {
-        if (passed('selffaint')) return { hidden: true };
-        if (s.k === 'selffaint') return { anim: 'Hurt', t: 0.1, loop: false, dir: atkDir, hidden: Math.floor(t / 0.08) % 2 === 0 };
-        if (s.k === 'act') {
-          const k = Math.sin(Math.PI * Math.min(1, t / actLen));
-          const v = { x: Math.sign(focusPt.x - attacker.x), y: Math.sign(focusPt.y - attacker.y) };
-          return { anim: animName, t, loop: false, dir: atkDir, dx: lunge ? v.x * 5 * k : 0, dy: lunge ? v.y * 5 * k : 0 };
-        }
-        return { anim: 'Idle', t: total, loop: true, dir: atkDir };
-      }
-      const h = defenders.includes(u) ? hitOf(u) : null;
-      if (!h) return null;
-      const landed = h.hit && h.typeMult > 0;
-      if (h.fainted && passed('faint')) return { hidden: true };
-      if (h.fainted && s.k === 'faint') return { anim: 'Hurt', t: 0.1, loop: false, dir: defDir(u), hidden: Math.floor(t / 0.08) % 2 === 0 };
-      if (s.k === 'impact' && landed) return { anim: 'Hurt', t, loop: false, dir: defDir(u), flash: Math.floor(t / 0.06) % 2 === 0 && t < 0.3 };
-      return { anim: 'Idle', t: total, loop: true, dir: defDir(u) };
+      const p0 = poseOf(u), off = slideOff(u);
+      if (!off) return p0;
+      return { ...(p0 ?? { anim: 'Idle', t: total, loop: true }), dx: (p0?.dx ?? 0) + off.dx, dy: (p0?.dy ?? 0) + off.dy };
     },
-
     drawWorld(ctx) {
       const s = step();
       if (!s) return;
