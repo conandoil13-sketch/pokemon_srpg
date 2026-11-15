@@ -7,7 +7,7 @@ import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js'
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
-import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
+import { aimsOf, unitsHit, tilesOf, bestAim, canTarget } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
@@ -118,7 +118,7 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
       : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
       : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
-      : e.kind === 'recharge' ? `${josa(who(e.unitId), '은/는')} 반동으로 기술을 쓸 수 없다!`
+      : e.kind === 'recharge' ? `${josa(who(e.unitId), '은/는')} ${e.hide ? '자세를 가다듬느라 기술을 쓸 수 없다!' : '반동으로 기술을 쓸 수 없다!'}`
       : e.kind === 'bind' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}의 데미지를 입고 있다!`
       : e.kind === 'bindEnd' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}에서 풀려났다!`
       : e.kind === 'aquaRing' ? `${josa(who(e.unitId), '은/는')} 아쿠아링으로 체력을 회복했다!`
@@ -237,7 +237,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!pickOne(mv)) return targetsOf(st, unit, mv);
     const [min, max] = mv.range;
     const want = mv.kind === 'ally' ? (o) => o.side === unit.side && o !== unit : (o) => o.side !== unit.side;
-    return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max);
+    return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max && canTarget(mv, o)); // 숨은 포켓몬 제외
   }
 
   // 안개: 지금 아군 누구에게서도 FOG_SIGHT 이상 떨어진 적 (실시간)
@@ -383,7 +383,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       focus = u; cursor = { x: u.x, y: u.y };
       startWalk(u, route.path, () => {
         const target = unitsHit(st, u, mv, route.aim).find((d) => d.side !== u.side) ?? null;
-        attackWith(u, target, mv, () => { u.moved = true; u.acted = true; next(); }, route.aim);
+        attackWith(u, target, mv, () => { u.moved = true; u.acted = true; u.charging = null; next(); }, route.aim); // 막혀도 모은 힘은 씀
       }, () => next());
     };
     next();

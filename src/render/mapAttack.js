@@ -440,7 +440,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
     ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain, efx: m.effect ? { effect: m.effect, unitId: m.who.id, moveId: m.moveId ?? null } : null })),
-    ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
+    ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0 || result.crash > 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';

@@ -291,7 +291,8 @@ export const HIDE_MOVES = { fly: 'sky', bounce: 'sky', dig: 'ground', dive: 'wat
 export function chargeRoute(state, unit) {
   const c = unit.charging;
   if (!c || !state.units.includes(unit)) return null;
-  if (unit.status === 'sleep' || unit.status === 'freeze' || unit.noMove > 0 || unit.bound) return null;
+  if (unit.status === 'sleep' || unit.status === 'freeze' || unit.noMove > 0 || unit.bound || unit.rooted || unit.trapped) return null; // 못 움직이면 불발
+  if (unit.sealed || moveBlock(unit, c.moveId)) return null; // 기술을 못 쓰면 불발 (풀죽음·트집·사슬묶기 …)
   const target = c.targetId && byId(state, c.targetId);
   if (!target) return null;
   const move = MOVES[c.moveId];
@@ -320,9 +321,11 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const rod = redirectTarget(state, userId, moveId, aim);
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = moveFor(a, moveId); // 저주: 쓰는 유닛 타입에 따라
+  if (a.sealed && a.charging?.moveId === moveId) a.charging = null; // 막힌 발사는 모은 힘을 잃음
   if (a.sealed) return { kind: move.category === 'status' ? 'status' : 'attack', blocked: 'sealed', stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; // 풀죽음: 이번 차례 기술 불가
   a.acted = true;
   const restrict = moveBlock(a, moveId);
+  if (restrict && a.charging?.moveId === moveId) a.charging = null;
   if (restrict) { a.moved = true; return { kind: move.category === 'status' ? 'status' : 'attack', blocked: restrict, stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; } // 도발·앙코르 …
   if (has(a, 'truant')) a.loafNext = true; // 게으름: 다음 자기 차례는 쉰다
   a.moved = true;
@@ -542,7 +545,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   for (const d of knocked) for (const [sp, n] of Object.entries(awardExp(state, a, d))) expGained[sp] = (expGained[sp] ?? 0) + n;
   // 사용자 부가효과(인파이트류): 한 명이라도 맞으면 한 번
   // 숨기: 맞든 안 맞든 숨는다 (다음 자기 차례는 봉인)
-  if (HIDE_MOVES[move.id] && state.units.includes(a)) { a.burrow = { kind: HIDE_MOVES[move.id], moveId: move.id }; a.recharge = true; }
+  if (HIDE_MOVES[move.id] && state.units.includes(a)) { a.burrow = { kind: HIDE_MOVES[move.id], moveId: move.id }; a.recharge = 'hide'; }
   // 점프킥·무릎차기: 하나도 안 맞았으면(빗나감·방어·무효) 자기 최대 HP 1/2
   let crash = 0;
   if (CRASH_MOVES.has(move.id) && !anyLanded && state.units.includes(a) && !magicGuard(a)) {
@@ -669,7 +672,7 @@ export function endPhase(state, rng = Math.random) {
     bindCheck(state, u, events); // 속박: 묶은 쪽이 멀어졌으면 풀림
     u.spent = 0; u.retreatReady = false; u.retreated = false; // 치고 빠지기
     if (u.flinch) { u.flinch = false; u.sealed = true; events.push({ unitId: u.id, kind: 'sealed' }); } // 풀죽음 → 이번 차례 기술 봉인
-    if (u.recharge) { u.recharge = false; u.sealed = true; events.push({ unitId: u.id, kind: 'recharge' }); } // 파괴광선류 반동
+    if (u.recharge) { events.push({ unitId: u.id, kind: 'recharge', ...(u.recharge === 'hide' ? { hide: true } : {}) }); u.recharge = false; u.sealed = true; } // 파괴광선류 반동 · 숨기 뒤
     u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
     u.trapped = state.units.some((o) => o.side !== u.side && dist(o, u) === 1 && traps(o, u)); // 묶기
     if (state.result) continue;

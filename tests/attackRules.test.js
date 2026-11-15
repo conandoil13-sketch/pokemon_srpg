@@ -166,3 +166,35 @@ test('a fainted target, no path, or a sleeping charger fizzles', () => {
   w.f.x = 8; w.f.y = 6;
   assert.equal(chargeRoute(w.s, w.a), null);
 });
+
+// ---- 최종 검토 수정 ----
+import { planEnemyAction } from '../src/core/ai.js';
+test('a charger that is sealed, tormented, rooted or trapped fizzles instead of rushing', () => {
+  for (const set of [(a) => { a.sealed = true; }, (a) => { a.torment = 3; a.lastMove = 'sky-attack'; }, (a) => { a.rooted = true; }, (a) => { a.trapped = true; }]) {
+    const { s, a, f } = duel('pidgey', 'geodude');
+    applyMove(s, a.id, 'sky-attack', f.id, hit);
+    set(a);
+    assert.equal(chargeRoute(s, a), null);
+  }
+});
+test('a blocked shot clears the stored charge', () => {
+  const { s, a, f } = duel('pidgey', 'geodude');
+  applyMove(s, a.id, 'sky-attack', f.id, hit);
+  a.sealed = true;
+  applyMove(s, a.id, 'sky-attack', f.id, hit);
+  assert.equal(a.charging, null);
+});
+test('the AI does not aim a status move at a hidden unit', () => {
+  const { s, a, f } = duel('diglett', 'pikachu');
+  a.burrow = { kind: 'ground', moveId: 'dig' };
+  f.moves = ['sand-attack', 'tackle'];
+  const plan = planEnemyAction(s, f);
+  assert.ok(!plan.attack || plan.attack.targetId !== a.id && plan.attack.target?.id !== a.id, JSON.stringify(plan.attack));
+});
+test('the turn after hiding has its own line, not the recoil line', () => {
+  const { s, a, f } = duel('diglett', 'pidgey');
+  applyMove(s, a.id, 'dig', f.id, hit);
+  round(s);
+  const e = s.log.statusEvents.find((x) => x.kind === 'recharge');
+  assert.equal(e.hide, true);
+});
