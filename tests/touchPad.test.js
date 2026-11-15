@@ -45,7 +45,26 @@ test('fitScale uses whole numbers when 2x or more fits, otherwise fits exactly',
 
 import { touchToEvents } from '../src/game/input.js';
 test('touch on the screen: down picks the tile, move only moves the cursor, outside does nothing', () => {
-  assert.deepEqual(touchToEvents('down', { px: 10, py: 20 }), [{ type: 'cursor', px: 10, py: 20 }, { type: 'click', px: 10, py: 20 }]);
-  assert.deepEqual(touchToEvents('move', { px: 10, py: 20 }), [{ type: 'cursor', px: 10, py: 20 }]);
+  assert.deepEqual(touchToEvents('down', { px: 10, py: 20 }), [{ type: 'cursor', px: 10, py: 20, touch: true }, { type: 'click', px: 10, py: 20, touch: true }]);
+  assert.deepEqual(touchToEvents('move', { px: 10, py: 20 }), [{ type: 'cursor', px: 10, py: 20, touch: true }]);
   assert.deepEqual(touchToEvents('down', null), []);
+});
+
+// ---- 최종 검토 수정: 마우스 흉내 이벤트가 와도 두 번 눌리지 않는다 ----
+import { bindInput } from '../src/game/input.js';
+test('review fix: a tap is one click even if the browser also sends fake mouse events', () => {
+  const on = {};
+  const canvas = { addEventListener: (t, f) => { (on[t] ??= []).push(f); }, getBoundingClientRect: () => ({ left: 0, top: 0, width: 256, height: 192 }), setPointerCapture() {} };
+  const saved = globalThis.addEventListener;
+  globalThis.addEventListener = () => {};
+  const got = [];
+  try { bindInput(canvas, () => 1, (ev) => got.push(ev.type)); } finally { globalThis.addEventListener = saved; }
+  const fire = (t, e) => (on[t] ?? []).forEach((f) => f({ clientX: 50, clientY: 50, button: 0, pointerId: 1, preventDefault() {}, ...e }));
+  fire('pointerdown', { pointerType: 'touch' });
+  fire('pointerup', { pointerType: 'touch' });
+  fire('mousemove', {}); fire('mousedown', {}); // iOS 가 늦게 보내는 흉내 이벤트
+  assert.deepEqual(got, ['cursor', 'click']);
+  got.length = 0;
+  fire('pointerdown', { pointerType: 'mouse' }); // PC 마우스는 그대로
+  assert.deepEqual(got, ['cursor', 'click']);
 });

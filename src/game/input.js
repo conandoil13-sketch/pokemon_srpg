@@ -13,7 +13,7 @@ const KEYS = {
 // 화면 터치 (순수): 닿으면 그 칸으로 커서 + 클릭, 누른 채 끌면 커서만. 화면 밖이면 아무것도
 export function touchToEvents(kind, p) {
   if (!p) return [];
-  return kind === 'down' ? [{ type: 'cursor', ...p }, { type: 'click', ...p }] : [{ type: 'cursor', ...p }];
+  return kind === 'down' ? [{ type: 'cursor', ...p, touch: true }, { type: 'click', ...p, touch: true }] : [{ type: 'cursor', ...p, touch: true }]; // touch: 조준은 두 번 톡으로
 }
 
 // getScale 은 인터페이스 호환용 (좌표는 실제 렌더 크기로 계산)
@@ -26,7 +26,9 @@ export function bindInput(canvas, getScale, onEvent) {
     return { px, py };
   };
   let last = '';
-  canvas.addEventListener('mousemove', (e) => {
+  // 마우스(펜): 포인터 이벤트로 받는다. 터치 뒤 브라우저가 늦게 보내는 mousedown 흉내는 듣지 않으므로 두 번 눌리지 않는다
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'touch') return;
     const p = toPixel(e);
     if (!p) return;
     const k = `${p.px},${p.py}`;
@@ -34,7 +36,8 @@ export function bindInput(canvas, getScale, onEvent) {
     last = k;
     onEvent({ type: 'cursor', ...p });
   });
-  canvas.addEventListener('mousedown', (e) => {
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return;
     const p = toPixel(e);
     if (!p) return;
     if (e.button === 2) { onEvent({ type: 'cancel' }); return; }

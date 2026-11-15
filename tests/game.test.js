@@ -680,3 +680,22 @@ test('review fix: spikes stepped on during a push are announced', () => {
   const msgs = effectMessages({ effects: [{ unitId: 'e', effect: 'push', ok: true }], pushed: { unitId: 'e', fainted: true }, trapEvents: [{ unitId: 'e', kind: 'spikes', damage: 3, x: 1, y: 1, fainted: true }] }, (id) => units[id]);
   assert.deepEqual(msgs, ['상대 구구는 날려가 버렸다!', '상대 구구는 압정에 찔렸다!', '상대 구구는 쓰러졌다!']);
 });
+test('review fix: on touch, the first tap on a new aim only selects it; the second fires', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state, c = st.units.find((u) => u.id === 'ally-chimchar');
+  c.moves = ['spikes'];
+  const px = (x) => x * 24 + 12 - Math.round(game.camera.x), py = (y) => y * 24 + 12 - Math.round(game.camera.y);
+  const tap = (x, y) => { game.handle({ type: 'cursor', px: px(x), py: py(y), touch: true }); game.handle({ type: 'click', px: px(x), py: py(y), touch: true }); };
+  tap(c.x, c.y); tap(c.x, c.y);
+  assert.ok(run(game, (m) => m === 'action'));
+  game.handle({ type: 'confirm' });
+  assert.equal(game.mode, 'target');
+  const cur = game.aim;
+  const t = [[0, -2], [0, 2], [-2, 0], [2, 0], [1, 1], [-1, -1]].map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy })).find((p) => st.grid[p.y]?.[p.x] && st.grid[p.y][p.x] !== '#' && !(p.x === cur.x && p.y === cur.y));
+  tap(t.x, t.y);
+  assert.equal(st.spikes.length, 0);
+  assert.equal(game.mode, 'target');
+  tap(t.x, t.y);
+  assert.ok(st.spikes.length > 0);
+});
