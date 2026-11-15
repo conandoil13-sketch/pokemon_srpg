@@ -110,6 +110,10 @@ const AILMENT_FX = {
 AILMENT_FX.infatuation = { inflict: spec('status/charmed', {}, 1, 'front', { life: 1.2 }), loop: AILMENT_FX.confusion.loop }; // 헤롱헤롱: 하트
 export const fxForAilment = (ailment) => AILMENT_FX[ailment] ?? { loop: null };
 
+// 이동 목적지 표시 (톡·클릭으로 걸어갈 칸): 통통 튀는 화살표 + 바닥 고리, 도착할 때까지
+export const MOVE_MARKER = spec('pokemon/move-marker', {}, 1, 'back');
+export const markerAt = (x, y, tile) => ({ x: x * tile + tile / 2, y: y * tile + tile - 4 }); // 칸 → 발밑 원점
+
 // 회복 표시 (회복기·잠자기·흡수·차례 끝 회복): 짧고 분명하게 — 빛이 몸을 훑고 + 가 솟음
 export const HEAL_FX = spec('pokemon/heal-glow', {}, 1, 'front', { life: 1.1 });
 // 흡수: 대상(사용자 발밑 기준 px 위치)에서 구슬이 사용자에게 날아옴

@@ -699,3 +699,19 @@ test('review fix: on touch, the first tap on a new aim only selects it; the seco
   tap(t.x, t.y);
   assert.ok(st.spikes.length > 0);
 });
+
+test('moving an ally shows a destination marker until it arrives', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state, c = st.units.find((u) => u.id === 'ally-chimchar');
+  const at = (x, y) => [{ type: 'cursor', px: x * 24 + 12 - Math.round(game.camera.x), py: y * 24 + 12 - Math.round(game.camera.y), touch: true }, { type: 'click', px: x * 24 + 12 - Math.round(game.camera.x), py: y * 24 + 12 - Math.round(game.camera.y), touch: true }];
+  for (const e of at(c.x, c.y)) game.handle(e);
+  const free = (x, y) => st.grid[y]?.[x] === '.' && !st.units.some((u) => u.x === x && u.y === y);
+  const t = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy })).find((p) => free(p.x, p.y));
+  for (const e of at(t.x, t.y)) game.handle(e);
+  assert.equal(game.mode, 'walking');
+  assert.ok(game.fx.log.includes('pokemon/move-marker'));
+  assert.equal(game.fx.following, 1);
+  assert.ok(run(game, (m) => m === 'action'));
+  assert.equal(game.fx.following, 0);
+});

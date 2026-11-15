@@ -619,3 +619,12 @@ test('box: "한 마리 더" is grey with a reason when short, asks before spendi
   box.handle({ type: 'confirm' });
   assert.equal(box.cursorMember, game.party[5]);
 });
+
+test('tapping a tile in town shows a destination marker until arrival', () => {
+  const t = createTown({ onSortie() {}, onParty() {}, onGacha() {} });
+  t.handle({ type: 'click', px: 40, py: 70 });
+  assert.ok(t.fx.log.includes('pokemon/move-marker'));
+  assert.equal(t.fx.following, 1);
+  for (let i = 0; i < 200; i++) t.update(0.05);
+  assert.equal(t.fx.following, 0);
+});

@@ -14,7 +14,7 @@ import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
 import { drawUnitSprite, drawShadow, hasAnim, idleFrameSource, DIR } from '../render/sprites.js';
 import { actorFor, bodyAt } from '../render/fxActor.js';
-import { fxForAilment, HEAL_FX } from '../data/moveFx.js';
+import { fxForAilment, HEAL_FX, MOVE_MARKER, markerAt } from '../data/moveFx.js';
 import { dirFromDelta } from '../render/pmdData.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -370,6 +370,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function startWalk(unit, path, onDone) {
     path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
     walk = { unit, path, t: 0, onDone, prevMode: mode };
+    if (unit.side === 'ally' && path.length > 1) { // 도착할 칸 표시 (도착하면 사라짐)
+      const end = path.at(-1);
+      fxm.unfollow('moveMarker');
+      fxm.follow('moveMarker', MOVE_MARKER, () => markerAt(end.x, end.y, TILE));
+    }
     mode = 'walking';
   }
 
@@ -674,6 +679,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         facing[walk.unit.id] = dirFromDelta(b.x - a.x, b.y - a.y);
       }
       if (walk.t >= STEP * (walk.path.length - 1)) {
+        fxm.unfollow('moveMarker');
         const { onDone, prevMode, unit, path } = walk;
         walk = null;
         mode = prevMode;

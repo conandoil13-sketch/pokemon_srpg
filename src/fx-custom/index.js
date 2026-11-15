@@ -11,5 +11,6 @@ import * as chainBind from './pokemon/chain-bind.js';
 import * as smallSigil from './pokemon/small-sigil.js';
 import * as healGlow from './pokemon/heal-glow.js';
 import * as drainOrbs from './pokemon/drain-orbs.js';
+import * as moveMarker from './pokemon/move-marker.js';
 
-export const CUSTOM_FX = { 'pokemon/bite': bite, 'pokemon/kick': kick, 'pokemon/sound-wave': soundWave, 'pokemon/silk-wrap': silkWrap, 'pokemon/brick-stack': brickStack, 'pokemon/aqua-ring': aquaRing, 'pokemon/seed-scatter': seedScatter, 'pokemon/anger-mark': angerMark, 'pokemon/chain-bind': chainBind, 'pokemon/small-sigil': smallSigil, 'pokemon/heal-glow': healGlow, 'pokemon/drain-orbs': drainOrbs };
+export const CUSTOM_FX = { 'pokemon/bite': bite, 'pokemon/kick': kick, 'pokemon/sound-wave': soundWave, 'pokemon/silk-wrap': silkWrap, 'pokemon/brick-stack': brickStack, 'pokemon/aqua-ring': aquaRing, 'pokemon/seed-scatter': seedScatter, 'pokemon/anger-mark': angerMark, 'pokemon/chain-bind': chainBind, 'pokemon/small-sigil': smallSigil, 'pokemon/heal-glow': healGlow, 'pokemon/drain-orbs': drainOrbs, 'pokemon/move-marker': moveMarker };

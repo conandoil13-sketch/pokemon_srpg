@@ -6,6 +6,8 @@ import { drawUnitSprite, drawShadow, DIR } from '../render/sprites.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
 import { W, H } from '../render/screen.js';
+import { createFxManager } from '../render/fx.js';
+import { MOVE_MARKER, markerAt } from '../data/moveFx.js';
 
 const STEP = 0.16; // 한 칸 이동 시간(초)
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
@@ -14,6 +16,7 @@ const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' :
 
 export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
   let turtwigTalks = 0; // 이스터에그: 모부기에게 5번 말 걸기
+  const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null }); // 톡·클릭 목적지 표시
   const map = TOWN;
   const width = map.tiles[0].length, height = map.tiles.length;
   const player = { x: spawn.x, y: spawn.y, facing: spawn.facing ?? 'down' };
@@ -126,6 +129,9 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, s
         const r = routeTo(tx, ty);
         if (!r) return;
         route = r.path;
+        fxm.unfollow('dest');
+        const end = r.end; // 걸어서 도착할 칸 (말 걸 대상이면 그 옆 칸)
+        if (route.length) fxm.follow('dest', MOVE_MARKER, () => markerAt(end.x, end.y, TILE));
         afterRoute = r.target ? () => { player.facing = nameOf(r.target.x - player.x, r.target.y - player.y); interact(); } : null;
         if (!walk) nextRouteStep();
       }
@@ -133,6 +139,8 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, s
 
     update(dt) {
       clock += dt;
+      fxm.update(dt);
+      if (!walk && !route.length) fxm.unfollow('dest'); // 도착 (또는 방향키로 끊김)
       if (walk) {
         walk.t += dt;
         if (walk.t >= STEP) {
@@ -148,6 +156,8 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, s
       cam.y = Math.max(0, Math.min(height * TILE - H, p.y + TILE / 2 - H / 2));
     },
 
+    get fx() { return fxm; }, // 테스트·디버그용
+
     playerWorld() {
       if (!walk) return { x: player.x * TILE, y: player.y * TILE };
       const k = Math.min(1, walk.t / STEP);
@@ -161,6 +171,7 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, s
       ctx.save();
       ctx.translate(-cx, -cy);
       drawMap(ctx, map.tiles, time, cx, cy, W, H);
+      fxm.draw(ctx, 'back', { x: cx, y: cy }); // 목적지 표시
       // 그릴 것: 표지판, NPC, 플레이어 — y 순서
       const p = this.playerWorld();
       const items = [
