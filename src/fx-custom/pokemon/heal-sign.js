@@ -19,14 +19,31 @@ const MOTIF = {
   feather(p, t, b, R) { const C = H(['#8a7a6a', '#e8e0d0', '#ffffff']);
     for (let i = 0; i < 4; i++) { const u = clamp((t - i * 0.08) / 0.8, 0, 1); if (u >= 1) continue; const x = b.x + R.range(0, b.w) + Math.sin(u * 9 + i) * 5, y = b.y - 20 + u * (b.h + 10);
       p.line(x - 3, y + 1, x + 3, y - 1, C[1]); p.dot(x - 3, y + 1, C[0]); p.dot(x + 2, y - 1, C[2]); } },
-  leaf(p, t, b, R) { const C = H(['#1e6a1e', '#5ac84a', '#fff4a0']), cx = b.x + b.w / 2;
-    for (let i = 0; i < 5; i++) p.line(cx - 10 + i * 5, b.y - 34, cx - 6 + i * 3, b.y - 8, C[2], 0.35 * (1 - t));
-    for (let i = 0; i < 10; i++) { const a = R.range(0, TAU), r = 26 * (1 - clamp(t / 0.8, 0, 1)), u = t; p.dot(cx + Math.cos(a + u * 3) * r, b.y + b.h / 2 + Math.sin(a + u * 3) * r * 0.6, i % 2 ? C[1] : C[0]); } },
+  leaf(p, t, b, R) { // 광합성: 해에서 빛기둥이 비스듬히 쏟아지고 잎사귀가 빙글 돌며 빨려 듦, 몸에 초록 맥동
+    const G = H(['#0e4a1e', '#2a8a2a', '#5ac84a', '#a8f070']), Y = H(['#c08010', '#ffc030', '#fff4b0']), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+    const sx = cx - 22, sy = b.y - 38, sun = ease.outCubic(clamp(t / 0.25, 0, 1)), fade = 1 - clamp((t - 0.7) / 0.2, 0, 1);
+    p.circle(sx, sy, 5 * sun, Y[1], fade); p.circle(sx, sy, 3 * sun, Y[2], fade); p.glow(sx, sy, 14, Y[1], 0.5 * sun * fade);
+    for (let k = 0; k < 6; k++) { const a = (k / 6) * TAU + t * 2; p.line(sx + Math.cos(a) * 7, sy + Math.sin(a) * 7, sx + Math.cos(a) * 10, sy + Math.sin(a) * 10, Y[1], sun * fade); }
+    const beam = clamp((t - 0.1) / 0.25, 0, 1) * fade; // 해 → 몸으로 쏟아지는 빛기둥 (반투명 띠 여러 줄)
+    for (let k = -3; k <= 3; k++) { const ex = cx + k * 3, ey = b.y + b.h; p.line(sx + k, sy + 4, sx + (ex - sx) * beam, sy + 4 + (ey - sy - 4) * beam, k % 2 ? Y[1] : Y[2], 0.35 * beam); }
+    for (let i = 0; i < 7; i++) { const a0 = (i / 7) * TAU, u = clamp((t - 0.15 - i * 0.04) / 0.55, 0, 1); if (u <= 0 || u >= 1) continue; // 잎사귀 나선
+      const r = 28 * (1 - ease.inQuad(u)), a = a0 + u * 5, x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 0.55, fl = Math.sin(u * 20 + i) > 0;
+      p.dot(x, y, G[2]); p.dot(x + 1, y, fl ? G[3] : G[1]); p.dot(x - 1, y + 1, G[1]); p.dot(x + 1, y - 1, G[3]); p.dot(x, y + 1, G[0]); }
+    const pul = clamp((t - 0.55) / 0.35, 0, 1); if (pul > 0 && pul < 1) { const r = 4 + pul * 14; for (let s2 = 0; s2 < 40; s2++) { const a = (s2 / 40) * TAU; p.dot(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.8, s2 % 2 ? G[3] : G[2], 1 - pul); } p.glow(cx, cy, 16, G[2], 0.5 * (1 - pul)); }
+    for (let i = 0; i < 6; i++) { const u = clamp((t - 0.5 - i * 0.04) / 0.4, 0, 1); if (u <= 0 || u >= 1) continue; p.dot(b.x + R.range(0, b.w), b.y + b.h - u * b.h * 1.2, i % 2 ? WHITE : G[3], 1 - u); } },
   sun(p, t, b) { const C = H(['#e08010', '#ffc030', '#fff4b0']), cx = b.x + b.w / 2, y = b.y - 10 - ease.outCubic(clamp(t / 0.5, 0, 1)) * 14;
     p.circle(cx, y, 6, C[1]); p.circle(cx, y, 4, C[2]); for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + t * 2; p.line(cx + Math.cos(a) * 8, y + Math.sin(a) * 8, cx + Math.cos(a) * 12, y + Math.sin(a) * 12, C[1]); } p.glow(cx, y, 20, C[1], 0.5); },
-  moon(p, t, b) { const C = H(['#8a90c0', '#d8dcff', '#ffffff']), cx = b.x + b.w / 2, y = b.y - 18;
-    p.arc(cx, y, 9, 4, Math.PI * 0.55, Math.PI * 1.95, C[1]); p.arc(cx, y, 9, 1, Math.PI * 0.6, Math.PI * 1.2, C[2]); p.glow(cx, y, 18, C[1], 0.45); // 초승달
-    for (let i = 0; i < 3; i++) { const x = cx - 6 + i * 6; p.line(x, y + 8, x, b.y + b.h, C[1], 0.3 * (1 - t)); } },
+  moon(p, t, b, R) { // 달의불빛: 후광 두른 초승달이 떠오르고 은빛 달빛 기둥이 내려옴, 별 반짝 · 은빛 가루
+    const M = H(['#3a3a6a', '#7a80c0', '#c8ccff', '#eef0ff']), cx = b.x + b.w / 2, rise = ease.outCubic(clamp(t / 0.35, 0, 1)), fade = 1 - clamp((t - 0.72) / 0.18, 0, 1);
+    const my = b.y - 26 - rise * 8;
+    p.glow(cx, my, 22, M[2], 0.45 * rise * fade); for (let s2 = 0; s2 < 36; s2++) { const a = (s2 / 36) * TAU; if (s2 % 3) continue; p.dot(cx + Math.cos(a) * 13, my + Math.sin(a) * 13, M[1], 0.6 * rise * fade); } // 후광 고리
+    p.arc(cx, my, 9, 4, Math.PI * 0.55, Math.PI * 1.95, M[2], rise * fade); p.arc(cx, my, 9, 1.5, Math.PI * 0.6, Math.PI * 1.3, M[3], rise * fade); p.dot(cx - 7, my - 2, WHITE, fade);
+    const beam = clamp((t - 0.2) / 0.3, 0, 1) * fade; // 달빛 기둥 (아래로 넓어지는 반투명)
+    if (beam > 0) p.each(cx - 16, my + 8, cx + 16, b.y + b.h, (x, y, sx, sy) => { const f = (y - my - 8) / (b.y + b.h - my - 8); if (f > beam) return; const w = 5 + f * 11; if (Math.abs(x - cx) > w) return;
+      p.blendPx(sx, sy, Math.abs(x - cx) < w * 0.4 ? M[3] : M[2], (0.28 - f * 0.12) * fade); });
+    for (let i = 0; i < 5; i++) { const x = cx + R.range(-24, 24), y = my + R.range(-10, 16), tw = Math.floor(t * 10 + i * 3) % 4 === 0; if (t < 0.15 + i * 0.05) continue; // 별 반짝
+      p.dot(x, y, tw ? WHITE : M[2], fade); if (tw) { p.dot(x - 1, y, M[2], fade); p.dot(x + 1, y, M[2], fade); p.dot(x, y - 1, M[2], fade); p.dot(x, y + 1, M[2], fade); } }
+    for (let i = 0; i < 12; i++) { const u = clamp((t - 0.3 - i * 0.03) / 0.5, 0, 1); if (u <= 0 || u >= 1) continue; p.dot(cx + R.range(-8, 8) + Math.sin(u * 6 + i) * 2, my + 10 + u * (b.y + b.h - my - 10), i % 3 ? M[3] : WHITE, 1 - u); } },
   zzz(p, t, b) { const C = H(['#8aa0c8', '#e0e8ff']), x0 = b.x + b.w / 2 + 6, y0 = b.y - 4;
     for (let k = 0; k < 3; k++) { const u = clamp((t - k * 0.2) / 0.6, 0, 1); if (u <= 0 || u >= 1) continue; const s = 2 + k, x = x0 + k * 5 + u * 4, y = y0 - k * 7 - u * 6;
       p.line(x, y, x + s, y, C[1], 1 - u); p.line(x + s, y, x, y + s, C[1], 1 - u); p.line(x, y + s, x + s, y + s, C[1], 1 - u); }
