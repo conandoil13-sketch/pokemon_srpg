@@ -233,3 +233,54 @@ test('laying spikes where every tile is taken fails', () => {
   const r = applyMove(s, a.id, 'spikes', aim, hit);
   assert.equal(r.effects[0].ok, false);
 });
+
+// ---- 위력 계산 기술 ----
+import { varPower, fixedDamage } from '../src/core/damage.js';
+test('variable power moves follow HP, speed and allies left', () => {
+  const me = { hp: 1, maxHp: 100, stats: { spe: 10 }, stages: {} }, foe = { hp: 100, maxHp: 100, stats: { spe: 100 }, stages: {} };
+  assert.equal(varPower(me, foe, MOVES.flail), 200);
+  assert.equal(varPower({ ...me, hp: 100 }, foe, MOVES.reversal), 20);
+  assert.equal(varPower(me, foe, MOVES['wring-out']), 121);
+  assert.equal(varPower(me, foe, MOVES['gyro-ball']), 150);
+  assert.equal(varPower({ ...me, allMovesUsed: true }, foe, MOVES['trump-card']), 200);
+  assert.equal(varPower(me, foe, MOVES['trump-card']), 40);
+  assert.equal(MOVES.return.power, 60);
+});
+test('super fang halves, endeavor evens HP, OHKO fails on higher level or boss', () => {
+  const me = { level: 30, hp: 10, maxHp: 50, types: ['normal'] }, foe = { level: 25, hp: 80, maxHp: 100, types: ['normal'] };
+  assert.equal(fixedDamage(me, foe, MOVES['super-fang']), 40);
+  assert.equal(fixedDamage(me, foe, MOVES.endeavor), 70);
+  assert.equal(fixedDamage(me, foe, MOVES.guillotine), 80);
+  assert.equal(fixedDamage(me, { ...foe, level: 40 }, MOVES.guillotine), 0);
+  assert.equal(fixedDamage(me, { ...foe, boss: true }, MOVES.guillotine), 0);
+  assert.equal(hitChance(me, foe, MOVES.guillotine, '"'), 35);
+});
+test('magnitude and present roll a real power in battle', () => {
+  const { s, a, f } = duel('geodude', 'rattata', { foe: { hp: 999, maxHp: 999 } });
+  const r = applyMove(s, a.id, 'magnitude', { self: true }, () => 0.5).hits.find((h) => h.unitId === f.id);
+  assert.ok(r && r.damage > 0);
+  for (const id of ['flail', 'reversal', 'wring-out', 'crush-grip', 'gyro-ball', 'trump-card', 'frustration', 'return', 'magnitude', 'present', 'psywave', 'super-fang', 'endeavor', 'sheer-cold', 'fissure', 'guillotine', 'horn-drill']) assert.equal(MOVES[id].learnable, true, id);
+});
+
+test('trump card powers up once every ally used every move', () => {
+  const { s, a, f } = duel('pidgey', 'geodude', { ally: { moves: ['tackle', 'trump-card'] }, foe: { hp: 999, maxHp: 999 } });
+  applyMove(s, a.id, 'trump-card', f.id, () => 0.5); assert.equal(a.allMovesUsed, false);
+  a.acted = false; applyMove(s, a.id, 'tackle', f.id, () => 0.5);
+  a.acted = false; applyMove(s, a.id, 'trump-card', f.id, () => 0.5); assert.equal(a.allMovesUsed, true);
+});
+test('frustration shoves the foe and steps in; return hits and steps back', () => {
+  const g = duel('rattata', 'geodude', { foe: { hp: 999, maxHp: 999 } }); // (1,1) → (2,1)
+  const r = applyMove(g.s, g.a.id, 'frustration', g.f.id, hit);
+  assert.deepEqual([g.a.x, g.f.x], [2, 3]); assert.ok(r.stepped);
+  const b = duel('rattata', 'geodude', { foe: { hp: 999, maxHp: 999 } });
+  applyMove(b.s, b.a.id, 'return', b.f.id, hit);
+  assert.equal(b.a.x, 0);
+});
+test('present can heal, and OHKO on a boss gets its own line', () => {
+  const { s, a, f } = duel('pidgey', 'geodude');
+  f.hp = 10;
+  const r = applyMove(s, a.id, 'present', f.id, () => 0.1);
+  assert.ok(f.hp > 10); assert.ok(r.presentHealed.length);
+  const k = duel('pidgey', 'geodude', { ally: { level: 99 }, foe: { boss: true } });
+  assert.ok(applyMove(k.s, k.a.id, 'guillotine', k.f.id, hit).hits[0].ohkoBoss);
+});

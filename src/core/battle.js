@@ -373,6 +373,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return out;
   }
   a.lastMove = moveId; // 앙코르·사슬묶기·트집용 (기술이 실제로 나갔을 때)
+  (a.usedMoves ??= new Set()).add(moveId); // 마지막수단
 
   // 습기: 주변 2칸에 습기가 있으면 자폭·대폭발 불발
   if (SELF_KO.includes(move.id) && !moldBreaker && state.units.some((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2)) {
@@ -438,6 +439,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
   if (a.charging?.moveId === move.id) a.charging = null;
   let dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
+  a.allMovesUsed = state.units.filter((u) => u.side === a.side).every((u) => (u.moves ?? []).every((m) => u.usedMoves?.has(m))); // 마지막수단
+  if (move.varPower === 'magnitude') { const r = rng() * 100; dmgMove = { ...dmgMove, varPower: null, power: r < 5 ? 10 : r < 15 ? 30 : r < 35 ? 50 : r < 65 ? 70 : r < 85 ? 90 : r < 95 ? 110 : 150 }; } // 매그니튜드 4~10
+  let presentHeal = false;
+  if (move.varPower === 'present') { const r = rng() * 100; if (r < 20) presentHeal = true; else dmgMove = { ...dmgMove, varPower: null, power: r < 60 ? 40 : r < 90 ? 80 : 120 }; } // 프레젠트: 20% 회복, 40% 40, 30% 80, 10% 120
   if (has(a, 'reckless') && dmgMove.power && (move.drain < 0 || CRASH_MOVES.has(move.id))) dmgMove = { ...dmgMove, power: dmgMove.power * 1.2 }; // 이판사판: 반동기 1.2배
   if (ranged && dmgMove.power) dmgMove = { ...dmgMove, power: dmgMove.power * Math.max(0, 1 - RANGE_FALLOFF * Math.max(0, dist(a, ranged) - move.range[1])) }; // 사거리 밖
   a.helped = false;
@@ -470,7 +475,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
     for (let k = 0; k < n; k++) {
       if (!state.units.includes(d) || !state.units.includes(a)) break; // 쓰러지면 멈춤
       const hpBefore = d.hp;
-      const r = move.dreamOnly && d.status !== 'sleep' ? { hit: true, crit: false, typeMult: 0, damage: 0, failed: true } // 꿈먹기: 잠든 상대만
+      const r = presentHeal ? { hit: true, crit: false, typeMult: 1, damage: 0, presentHeal: true } // 프레젠트 회복
+        : move.dreamOnly && d.status !== 'sleep' ? { hit: true, crit: false, typeMult: 0, damage: 0, failed: true } // 꿈먹기: 잠든 상대만
         : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
       if (r.absorbed) absorb(d, r.absorbed);
       if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
@@ -559,6 +565,25 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 사용자 부가효과(인파이트류): 한 명이라도 맞으면 한 번
   // 숨기: 맞든 안 맞든 숨는다 (다음 자기 차례는 봉인)
   if (HIDE_MOVES[move.id] && state.units.includes(a)) { a.burrow = { kind: HIDE_MOVES[move.id], moveId: move.id }; a.recharge = 'hide'; }
+  // 프레젠트 회복: 맞은 대상 HP 1/4
+  const presentHealed = [];
+  if (presentHeal) for (const d of targets) if (state.units.includes(d) && d.guard !== 'protect' && canHeal(d) && d.hp < d.maxHp) { const b = d.hp; d.hp = Math.min(d.maxHp, d.hp + Math.max(1, Math.floor(d.maxHp / 4))); presentHealed.push({ unitId: d.id, amount: d.hp - b }); }
+  // 화풀이: 때리고 그쪽으로 한 칸 (상대를 한 칸 밀고 그 자리로) · 은혜갚기: 때리고 한 칸 물러남
+  let stepped = null;
+  if ((move.id === 'frustration' || move.id === 'return') && anyLanded && state.units.includes(a)) {
+    const d = targets.find((t) => t.side !== a.side);
+    if (d) {
+      const sx = Math.sign(d.x - a.x), sy = Math.sign(d.y - a.y);
+      const free = (x, y) => canEnter(state.grid[y]?.[x], a) && !state.units.some((u) => u.x === x && u.y === y);
+      if (move.id === 'return' && free(a.x - sx, a.y - sy)) { const from = { x: a.x, y: a.y }; moveUnit(state, a.id, a.x - sx, a.y - sy, 0); stepped = { unitId: a.id, from, to: { x: a.x, y: a.y } }; }
+      if (move.id === 'frustration') {
+        const from = { x: a.x, y: a.y };
+        if (!state.units.includes(d) && free(d.x, d.y)) moveUnit(state, a.id, d.x, d.y, 0); // 쓰러졌으면 그 칸으로
+        else if (state.units.includes(d) && !d.boss && free(d.x + sx, d.y + sy) && canEnter(state.grid[d.y + sy]?.[d.x + sx], d)) { const ox = d.x, oy = d.y; moveUnit(state, d.id, d.x + sx, d.y + sy, 0); if (state.units.includes(a)) moveUnit(state, a.id, ox, oy, 0); }
+        if (a.x !== from.x || a.y !== from.y) stepped = { unitId: a.id, from, to: { x: a.x, y: a.y } };
+      }
+    }
+  }
   // 점프킥·무릎차기: 하나도 안 맞았으면(빗나감·방어·무효) 자기 최대 HP 1/2
   let crash = 0;
   if (CRASH_MOVES.has(move.id) && !anyLanded && state.units.includes(a) && !magicGuard(a)) {
@@ -580,7 +605,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];

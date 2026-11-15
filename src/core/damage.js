@@ -12,6 +12,7 @@ const sp = (unit) => SPECIES[unit.species];
 
 export function hitChance(attacker, defender, move, defTile, weather = null) {
   if (move.sure) return 100; // 필중 기술
+  if (move.fixedDamage === 'ohko') return Math.max(0, Math.min(100, 30 + attacker.level - defender.level)); // 일격필살: 레벨 차 (회피·수풀 무시)
   const acc = weatherAccuracy(weather, move, move.accuracy);
   if (acc.sure) return 100; // 비의 번개·싸라기눈의 눈보라: 반드시 명중
   const ab = accuracyFor(attacker, defender, move, acc.value, weather); // 특성 (복안·의욕·노가드·모래숨기 …)
@@ -23,7 +24,19 @@ export function hitChance(attacker, defender, move, defTile, weather = null) {
 }
 
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)
+// 상황 위력: 내 HP가 적을수록(바둥바둥·기사회생), 상대 HP가 많을수록(쥐어짜기·묵사발), 스피드가 느릴수록(자이로볼), 남은 아군이 적을수록(마지막수단)
+export function varPower(attacker, defender, move) {
+  switch (move.varPower) {
+    case 'lowHp': { const p = Math.floor(48 * attacker.hp / attacker.maxHp); return p >= 33 ? 20 : p >= 17 ? 40 : p >= 10 ? 80 : p >= 5 ? 100 : p >= 2 ? 150 : 200; }
+    case 'targetHp': return Math.max(1, Math.floor(120 * defender.hp / defender.maxHp) + 1);
+    case 'speed': return Math.min(150, Math.floor(25 * effectiveStat(defender, 'spe') / Math.max(1, effectiveStat(attacker, 'spe'))) + 1);
+    case 'lastStand': return attacker.allMovesUsed ? 200 : 40; // 마지막수단: 남은 아군 모두가 모든 기술을 한 번씩 썼으면
+    default: return move.power;
+  }
+}
+
 function baseDamage(attacker, defender, move, defTile, weather = null) {
+  if (move.varPower) move = { ...move, power: varPower(attacker, defender, move) };
   if (move.weightPower) move = { ...move, power: weightPower(weightOf(defender)) }; // 안다리걸기·풀묶기: 상대 몸무게
   const physical = move.category === 'physical';
   // 천진: 상대 랭크를 무시 (틀깨기면 천진도 무시)
@@ -57,16 +70,24 @@ export function fixedDamage(attacker, defender, move, weather = null) {
   if (!move.fixedDamage) return null;
   const tm = typeEffect(attacker, defender, move, weather);
   if (tm === 0 || immunity(attacker, defender, move, tm)) return 0; // 불가사의부적은 실제 상성으로 판정
-  return move.fixedDamage === 'level' ? attacker.level : move.fixedDamage;
+  switch (move.fixedDamage) {
+    case 'level': case 'psywave': return attacker.level; // 사이코웨이브는 전투에서 0.5~1.5배로 굴림 (예상은 평균)
+    case 'half': return Math.max(1, Math.floor(defender.hp / 2)); // 분노의앞니
+    case 'endeavor': return Math.max(0, defender.hp - attacker.hp); // 죽기살기: 내 HP 까지 깎음
+    case 'ohko': return defender.boss || defender.level > attacker.level ? 0 : defender.hp; // 일격필살: 보스·레벨 높은 상대에겐 안 됨
+    default: return move.fixedDamage;
+  }
 }
 
 // forceHit: 연속 공격 2타째부터 (명중은 첫 타만)
 export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false }) {
   if (move.fixedDamage) {
     const fd = fixedDamage(attacker, defender, move, weather);
+    if (fd === 0 && move.fixedDamage === 'ohko' && defender.boss) return { hit: true, crit: false, typeMult: 0, damage: 0, ohkoBoss: true }; // 보스 전용 문구
     if (fd === 0) return { hit: true, crit: false, typeMult: 0, damage: 0 };
     const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather);
-    return { hit, crit: false, typeMult: 1, damage: hit ? fd : 0 };
+    const dmg = move.fixedDamage === 'psywave' ? Math.max(1, Math.floor(fd * (0.5 + rng()))) : fd;
+    return { hit, crit: false, typeMult: 1, damage: hit ? dmg : 0 };
   }
   const { raw: base, typeMult, blocked } = baseDamage(attacker, defender, move, defTile, weather);
   const raw = base * spread;
