@@ -57,7 +57,7 @@ export function applyEffect(state, user, target, move, rng, weather) {
       if (target.noMove > 0) return out(false, 'already');
       target.noMove = NO_MOVE_TURNS; return out(true);
     case 'counterStance': // 카운터(물리 2배)·미러코트(특수 2배)·메탈버스트(둘 다 1.5배): 다음 자기 차례까지, 한 번
-      target.counter = COUNTER_KIND[move.id]; return out(true);
+      target.counter = { ...COUNTER_KIND[move.id], id: move.id }; return out(true);
     case 'bide': // 참기: 상대 차례 2번 동안 받은 피해를 모아 2배로 주변에
       if (target.bide) return out(false, 'already');
       target.bide = { stored: 0, turns: 2 }; return out(true);

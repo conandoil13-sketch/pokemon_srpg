@@ -76,7 +76,7 @@
 <div class="tablewrap"><table id="abTable"></table></div>
 <script type="module">
 import { createFxManager } from '../src/render/fx.js';
-import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx } from '../src/data/moveFx.js';
+import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx, GYARADOS_FX } from '../src/data/moveFx.js';
 import { BIND_MOVES } from '../src/core/volatile.js';
 import { drawWeather, drawWeatherBurst, BURST_TIME } from '../src/render/weatherFx.js';
 import { WEATHER_OF } from '../src/core/field.js';
@@ -168,6 +168,7 @@ $('play').onclick = () => { reset(); lastPlay = () => { reset(); D.x = A.x + TIL
 
 // 변화기 효과 (변화기 묶음 1차): 대상 종류대로 나 · 아군 · 적 몸에
 const effectMoves = Object.entries(EFFECT_MOVES).map(([id, effect]) => ({ id, effect, mv: MOVES[id] }));
+effectMoves.push({ id: 'splash-2', effect: 'splash2', mv: { ...MOVES.splash, name: '튀어오르기-2 (갸라도스 등장)' } }); // 2% 이스터에그
 $('effect').innerHTML = effectMoves.map(({ id, effect, mv }) => `<option value="${id}">${mv.name} · ${effect}</option>`).join('');
 function playEffect() {
   lastPlay = playEffect;
@@ -175,7 +176,8 @@ function playEffect() {
   const { id, effect, mv } = effectMoves.find((e) => e.id === $('effect').value);
   const who = id === 'curse' || mv.kind === 'enemy' || mv.kind === 'enemies' ? 'foe' : mv.kind === 'ally' ? 'ally' : 'me';
   const at = { foe: D, ally: L, me: A }[who];
-  if (effect === 'weather') { // 게임처럼: 손끝에 모으기 → 펑 → 날씨
+  if (effect === 'splash2') { fx.spawn(GYARADOS_FX, { x: A.x + TILE, y: A.y }); }
+  else if (effect === 'weather') { // 게임처럼: 손끝에 모으기 → 펑 → 날씨
     onBody(fxForEffect(effect, id), cast.me, A);
     later(() => { sky = { w: WEATHER_OF[id], t: 0 }; }, 600);
   } else if (effect === 'spikes' || effect === 'toxicSpikes') { // 적 칸 + 4방에 하나씩 던짐
