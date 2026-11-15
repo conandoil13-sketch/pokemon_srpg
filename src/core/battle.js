@@ -232,7 +232,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
   const rod = redirectTarget(state, userId, moveId, aim);
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
-  const a = byId(state, userId), move = MOVES[moveId];
+  const a = byId(state, userId), move = moveFor(a, moveId); // 저주: 쓰는 유닛 타입에 따라
   if (a.sealed) return { kind: move.category === 'status' ? 'status' : 'attack', blocked: 'sealed', stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; // 풀죽음: 이번 차례 기술 불가
   a.acted = true;
   const restrict = moveBlock(a, moveId);
@@ -304,9 +304,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
 
   if (kind === 'status') {
-    const missed = [], effects = [];
+    const missed = [], effects = [], protectedIds = [];
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
+      if (t !== a && t.guard === 'protect') { protectedIds.push(t.id); continue; } // 방어: 다른 유닛의 기술을 막음
       const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
       if (ab) { absorb(t, ab); continue; }
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
@@ -315,7 +316,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
-    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects };
+    if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); } // 고스트 저주로 쓰러짐
+    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const spread = targets.length >= 2 ? 0.75 : 1;
@@ -327,6 +329,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   let dealt = 0; // 실제로 깎인 HP 합 (흡수·반동 기준)
   const flinched = [];
   for (const d of targets) {
+    if (d !== a && d.guard === 'protect') { hits.push({ unitId: d.id, hit: false, protected: true, crit: false, typeMult: 1, damage: 0, fainted: false, hpBefore: d.hp, strike: 0 }); continue; } // 방어
     const contact = contactBase && dist(a, d) === 1;
     const n = rollHits(a, move, rng); // 연속 공격 타수 (보통 1)
     let fainted = false, landed = false, last = null;
@@ -338,6 +341,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
         : calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
       if (r.absorbed) absorb(d, r.absorbed);
       d.hp = Math.max(0, d.hp - r.damage);
+      const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김
+      if (endured) d.hp = 1;
       // 옹골참: HP 가득에서 한 방이면 1 남김 (한 층 한 번, 연속 공격은 첫 타만)
       if (k === 0 && d.hp === 0 && hpBefore === d.maxHp && has(d, 'sturdy') && !d.sturdyUsed && !breaksDef) { d.hp = 1; d.sturdyUsed = true; abilityEvents.push({ unitId: d.id, ability: 'sturdy' }); }
       dealt += hpBefore - d.hp;
@@ -369,7 +374,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
         }
       });
       last = r;
-      hits.push({ unitId: d.id, ...r, fainted, hpBefore, strike: k });
+      hits.push({ unitId: d.id, ...r, fainted, hpBefore, strike: k, ...(endured ? { endured: true } : {}) });
       if (k === 0 && !r.hit) break; // 명중은 첫 타만
       if (r.typeMult === 0) break;
     }
@@ -486,7 +491,8 @@ export function endPhase(state, rng = Math.random) {
     }
     if (has(u, 'speed-boost')) { applyStageChange(u, 'spe', 1); abilityLog.push({ unitId: u.id, ability: 'speed-boost' }); }
     if (u.slowTurns > 0) u.slowTurns -= 1;
-    tickEnd(state, u, events, rng); // 도발·이동 불가 … 턴 감소
+    tickEnd(state, u, events, rng); // 도발·이동 불가 … 턴 감소, 지속 회복·저주
+    if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     if (u.status && ((has(u, 'shed-skin') && rng() < 1 / 3) || (has(u, 'hydration') && W === 'rain'))) { cure(u); abilityLog.push({ unitId: u.id, ability: u.ability }); }
   }
   // 나이트메어: 끝나는 편에 있으면 주변 2칸 안 잠든 상대 1/8
