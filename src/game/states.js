@@ -88,7 +88,7 @@ const STATUS_LINE = {
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
-const HEAL_EVENTS = { aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
+const HEAL_EVENTS = { wish: (e) => e.unitId, aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
 // 압정 밟기 알림 (이동·밀려나기 뒤). fainted 면 쓰러짐 줄을 하나 더
 export function trapNotices(events = [], get) {
   const out = [];
@@ -118,6 +118,8 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
       : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
       : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
+      : e.kind === 'wish' ? `${who(e.unitId)}의 소원이 이루어졌다!`
+      : e.kind === 'nightmare' ? `${josa(who(e.unitId), '은/는')} 악몽에 시달리고 있다!`
       : e.kind === 'bideRelease' ? `${josa(who(e.unitId), '은/는')} 참았던 힘을 터뜨렸다!`
       : e.kind === 'bideHit' ? `${josa(who(e.unitId), '은/는')} 큰 피해를 입었다!`
       : e.kind === 'bideFail' ? `${who(e.unitId)}의 참기는 아무것도 모으지 못했다...`

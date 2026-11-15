@@ -157,6 +157,13 @@ export function tickEnd(state, unit, events, rng) {
     unit.hp = Math.min(unit.maxHp, unit.hp + quarter(unit, 16));
     events.push({ unitId: unit.id, kind, healed: unit.hp - before });
   }
+  if (unit.nightmare && unit.status !== 'sleep') unit.nightmare = false; // 깨면 악몽 끝
+  if (unit.nightmare && !magicGuard(unit)) { // 악몽: 자는 동안 1/4
+    const hpBefore = unit.hp, damage = Math.min(unit.hp, quarter(unit, 4));
+    unit.hp -= damage;
+    events.push({ unitId: unit.id, kind: 'nightmare', damage, hpBefore, maxHp: unit.maxHp, x: unit.x, y: unit.y });
+    if (unit.hp <= 0) return;
+  }
   if (unit.cursed && !magicGuard(unit)) {
     const hpBefore = unit.hp, damage = quarter(unit, 4);
     unit.hp = Math.max(0, unit.hp - damage);

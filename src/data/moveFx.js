@@ -150,6 +150,11 @@ export const EFFECT_FX = {
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
+  refresh: HEAL_FX, teamCure: HEAL_FX, wish: fxOn('holy/blessing', {}, 2), stockpile: fxOn('status/rage', { palette: PAL.gold }, 1.5), swallow: HEAL_FX,
+  sacrificeHeal: HEAL_FX, memento: fxOn('status/cursed', { palette: PAL.water }, 1.5), painSplit: fxOn('shadow/soul-drain', {}, 2.5), bellyDrum: fxOn('status/rage', {}, 1.5),
+  acupressure: fxOn('impacts/hit-spark', { palette: PAL.gold }, 1), psychUp: fxOn('arcane/rune-circle', { palette: PAL.arcane }), powerSwap: fxOn('arcane/rune-circle', { palette: PAL.ember }),
+  guardSwap: fxOn('arcane/rune-circle', { palette: PAL.ice }), heartSwap: fxOn('arcane/rune-circle', { palette: PAL.candy }), psychoShift: fxOn('arcane/rune-circle', { palette: PAL.neon }),
+  nightmare: fxOn('shadow/curse', {}, 2.5), teeterDance: fxOn('status/confused', {}, 1.5), splash: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
   counterStance: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5), // 반격 자세
   bide: fxOn('status/rage', {}, 1.5), // 참기
   bind: spec('pokemon/bind-coil', {}, 1, 'front', { life: 1.3 }), // 속박기 (기술별로는 bindFx)

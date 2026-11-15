@@ -322,3 +322,39 @@ test('bide stores two foe phases of damage and releases double around it', () =>
   assert.ok(s.log.statusEvents.some((e) => e.kind === 'bideRelease'));
   assert.equal(a.bide, null);
 });
+
+// ---- 회복·상태 조작 ----
+test('stockpile, spit up and swallow', () => {
+  const { s, a, f } = duel('pidgey', 'geodude', { foe: { hp: 999, maxHp: 999 } });
+  assert.equal(applyMove(s, a.id, 'spit-up', f.id, hit).blocked, 'nostock');
+  a.acted = false; applyMove(s, a.id, 'stockpile', a.id, hit);
+  assert.equal(a.stockpile, 1); assert.equal(a.stages.def, 1);
+  a.acted = false; const r = applyMove(s, a.id, 'spit-up', f.id, () => 0.5);
+  assert.ok(r.hits[0].damage > 0); assert.equal(a.stockpile, 0);
+  a.acted = false; applyMove(s, a.id, 'stockpile', a.id, hit); a.hp = 1;
+  a.acted = false; applyMove(s, a.id, 'swallow', a.id, hit);
+  assert.equal(a.hp, 1 + Math.floor(a.maxHp * 0.25));
+});
+test('healing wish fells the user and fully heals an ally; memento drops foe attack', () => {
+  const m = newMember('pidgey', 40, createRng(1)), m2 = newMember('rattata', 40, createRng(2));
+  const s = createBattle({ tiles: Array.from({ length: 10 }, () => '.'.repeat(10)), allySlots: [{ x: 1, y: 1 }, { x: 1, y: 2 }], enemies: [{ species: 'geodude', x: 8, y: 8, level: 40 }] }, [m, m2]);
+  const [a, b] = s.units; b.hp = 1; b.status = 'burn';
+  const r = applyMove(s, a.id, 'healing-wish', b.id, hit);
+  assert.equal(b.hp, b.maxHp); assert.equal(b.status, null); assert.ok(!s.units.includes(a)); assert.equal(r.selfFainted, a.id);
+  const d = duel('pidgey', 'geodude');
+  applyMove(d.s, d.a.id, 'memento', d.f.id, hit);
+  assert.equal(d.f.stages.atk, -2); assert.ok(!d.s.units.includes(d.a));
+});
+test('pain split, belly drum, swaps, psycho shift, wish, nightmare and splash', () => {
+  const { s, a, f } = duel('pidgey', 'geodude');
+  a.hp = 10; f.hp = 50; applyMove(s, a.id, 'pain-split', f.id, hit); assert.equal(a.hp, 30); assert.equal(f.hp, 30);
+  const b = duel('rattata', 'geodude'); applyMove(b.s, b.a.id, 'belly-drum', b.a.id, hit); assert.equal(b.a.stages.atk, 6);
+  const w = duel('pidgey', 'geodude'); w.f.stages.atk = 0; applyMove(w.s, w.f.id, 'swords-dance', w.f.id, hit);
+  applyMove(w.s, w.a.id, 'power-swap', w.f.id, hit); assert.equal(w.a.stages.atk, 2); assert.equal(w.f.stages.atk, 0);
+  const p = duel('pidgey', 'geodude', { ally: { status: 'burn' } }); applyMove(p.s, p.a.id, 'psycho-shift', p.f.id, hit);
+  assert.equal(p.a.status, null); assert.equal(p.f.status, 'burn');
+  const h = duel('pidgey', 'geodude'); h.a.hp = 1; applyMove(h.s, h.a.id, 'wish', h.a.id, hit); round(h.s); assert.ok(h.a.hp > 1);
+  const n = duel('pidgey', 'geodude', { foe: { status: 'sleep', statusTurns: 5 } }); applyMove(n.s, n.a.id, 'nightmare', n.f.id, hit);
+  const hp = n.f.hp; round(n.s); assert.ok(n.f.hp < hp);
+  const sp = duel('magikarp', 'geodude'); assert.equal(applyMove(sp.s, sp.a.id, 'splash', sp.a.id, hit).effects[0].reason, 'splash');
+});

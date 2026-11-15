@@ -15,6 +15,10 @@ export const EFFECT_MOVES = {
   'rain-dance': 'weather', 'sunny-day': 'weather', sandstorm: 'weather', hail: 'weather', // 날씨 부르기 5턴
   spikes: 'spikes', 'toxic-spikes': 'toxicSpikes', // 칸에 까는 함정
   roar: 'push', whirlwind: 'push', haze: 'haze', // 밀어내기 3칸 · 주변 2칸 랭크 초기화
+  refresh: 'refresh', aromatherapy: 'teamCure', 'heal-bell': 'teamCure', wish: 'wish', stockpile: 'stockpile', swallow: 'swallow',
+  'healing-wish': 'sacrificeHeal', 'lunar-dance': 'sacrificeHeal', memento: 'memento', 'pain-split': 'painSplit', 'belly-drum': 'bellyDrum',
+  acupressure: 'acupressure', 'psych-up': 'psychUp', 'power-swap': 'powerSwap', 'guard-swap': 'guardSwap', 'heart-swap': 'heartSwap',
+  'psycho-shift': 'psychoShift', nightmare: 'nightmare', 'teeter-dance': 'teeterDance', splash: 'splash', // 회복·상태 조작 (SRPG식)
   counter: 'counterStance', 'mirror-coat': 'counterStance', 'metal-burst': 'counterStance', bide: 'bide', // 반격 자세 · 참기
 };
 const SELF = { kind: 'self', range: [0, 0], area: false };
@@ -31,5 +35,12 @@ export const KIND_OVERRIDES = {
   spikes: { kind: 'tile', range: [1, 3], area: false, aimTile: true }, // 칸을 고른다 (그 칸 + 4방)
   'toxic-spikes': { kind: 'tile', range: [1, 3], area: false, aimTile: true },
   counter: { ...SELF, category: 'status' }, 'mirror-coat': { ...SELF, category: 'status' }, 'metal-burst': { ...SELF, category: 'status' }, bide: { ...SELF, category: 'status' }, // 반격: 자세를 잡는 변화기로
+  refresh: SELF, wish: SELF, stockpile: SELF, swallow: SELF, 'belly-drum': SELF, acupressure: SELF, splash: SELF, 'teeter-dance': SELF,
+  aromatherapy: { kind: 'allies', range: [0, 2], area: true }, 'heal-bell': { kind: 'allies', range: [0, 2], area: true },
+  'healing-wish': { kind: 'ally', range: [1, 3], area: false }, 'lunar-dance': { kind: 'ally', range: [1, 3], area: false },
+  memento: { kind: 'enemy', range: [1, 2], area: false }, 'pain-split': { kind: 'enemy', range: [1, 1], area: false },
+  'psych-up': { kind: 'enemy', range: [1, 2], area: false }, 'power-swap': { kind: 'enemy', range: [1, 2], area: false },
+  'guard-swap': { kind: 'enemy', range: [1, 2], area: false }, 'heart-swap': { kind: 'enemy', range: [1, 2], area: false },
+  'psycho-shift': { kind: 'enemy', range: [1, 1], area: false }, nightmare: { kind: 'enemy', range: [1, 2], area: false },
   haze: SELF, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
 };

@@ -30,6 +30,7 @@ export function varPower(attacker, defender, move) {
     case 'lowHp': { const p = Math.floor(48 * attacker.hp / attacker.maxHp); return p >= 33 ? 20 : p >= 17 ? 40 : p >= 10 ? 80 : p >= 5 ? 100 : p >= 2 ? 150 : 200; }
     case 'targetHp': return Math.max(1, Math.floor(120 * defender.hp / defender.maxHp) + 1);
     case 'speed': return Math.min(150, Math.floor(25 * effectiveStat(defender, 'spe') / Math.max(1, effectiveStat(attacker, 'spe'))) + 1);
+    case 'stock': return 100 * Math.max(1, attacker.stockpile ?? 0); // 토해내기
     case 'lastStand': return attacker.allMovesUsed ? 200 : 40; // 마지막수단: 남은 아군 모두가 모든 기술을 한 번씩 썼으면
     default: return move.power;
   }
