@@ -61,7 +61,7 @@ export function volatileTags(unit) {
 
 // "공+2(3) 방-1(2)" — 0 단계는 생략, 괄호는 남은 턴. 뒤에 붙는 효과 표시
 export function stageLine(unit) {
-  return ((unit.confusion > 0 ? '혼란 ' : '') + STAT_KEYS.filter((k) => unit.stages?.[k]).map((k) => `${STAT_SHORT[k]}${unit.stages[k] > 0 ? '+' : '-'}${Math.abs(unit.stages[k])}(${unit.turns[k]})`)
+  return ((unit.confusion > 0 ? '혼란 ' : '') + STAT_KEYS.filter((k) => unit.stages?.[k]).map((k) => `${STAT_SHORT[k]}${unit.stages[k] > 0 ? '+' : '-'}${Math.abs(unit.stages[k])}(${unit.turns[k] > 999 ? "층" : unit.turns[k]})`)
     .concat(volatileTags(unit)).join(' ')).trim();
 }
 

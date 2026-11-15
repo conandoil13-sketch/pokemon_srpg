@@ -158,7 +158,7 @@ function awardExp(state, attacker, defender) {
   const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
   gained[unitKey(attacker)] = full;
   for (const u of state.units) {
-    if (u.side === 'ally' && u !== attacker && u.hp > 0) gained[unitKey(u)] = (gained[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+    if (u.side === 'ally' && !u.bot && u !== attacker && u.hp > 0) gained[unitKey(u)] = (gained[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
   }
   for (const [sp, n] of Object.entries(gained)) state.log.exp[sp] = (state.log.exp[sp] ?? 0) + n;
   return gained;
@@ -169,7 +169,7 @@ function awardShare(state, defender) {
   if (defender.side !== 'enemy') return;
   const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
   for (const u of state.units) {
-    if (u.side === 'ally' && u.hp > 0) state.log.exp[unitKey(u)] = (state.log.exp[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+    if (u.side === 'ally' && !u.bot && u.hp > 0) state.log.exp[unitKey(u)] = (state.log.exp[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
   }
 }
 
@@ -191,7 +191,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
     state.log.coins += 3 + Math.floor(d.level / 3);
     (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.suppressedAbility ?? d.ability, boss: !!d.boss }); // 메타몽 캡슐 (위액으로 꺼졌으면 원래 특성)
   }
-  if (d.side === 'ally' && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
+  if (d.side === 'ally' && !d.bot && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
   refreshField(state); // 오라 주인이 쓰러지면 오라도 사라진다
   return expGained;
 }
@@ -255,6 +255,9 @@ export function retreatMove(state, id, x, y, cost = 0) {
 export const PUSH_TILES = 3;
 // ---- 회복·상태 조작 (SRPG식) ----
 const SUPPORT = new Set(['refresh', 'teamCure', 'wish', 'stockpile', 'swallow', 'sacrificeHeal', 'memento', 'painSplit', 'bellyDrum', 'acupressure', 'psychUp', 'powerSwap', 'guardSwap', 'heartSwap', 'psychoShift', 'nightmare', 'teeterDance', 'splash']);
+const FLOOR_TURNS = 9999; // 그 층 동안 유지되는 랭크 (비축하기·추억의선물·배북)
+const SWAP_RESET = 3; // 스왑: 바꾼 랭크 변화는 남은 턴이 3으로
+export const SPLASH_GYARADOS = 0.02; // 튀어오르기 이스터에그: 아군 갸라도스 등장 확률
 const SWAP_KEYS = { powerSwap: ['atk', 'spa'], guardSwap: ['def', 'spd'], heartSwap: ['atk', 'def', 'spa', 'spd', 'spe', 'acc', 'eva'], psychUp: ['atk', 'def', 'spa', 'spd', 'spe', 'acc', 'eva'] };
 function moveLayers(to, from, keys, swap) { // 랭크 층을 바꾸거나(swap) 복사
   const take = (u, k) => (u.layers ?? []).filter((l) => l.key === k).map((l) => ({ ...l }));
@@ -262,10 +265,21 @@ function moveLayers(to, from, keys, swap) { // 랭크 층을 바꾸거나(swap) 
     const lt = take(to, k), lf = take(from, k);
     to.layers = (to.layers ?? []).filter((l) => l.key !== k).concat(lf);
     if (swap) from.layers = (from.layers ?? []).filter((l) => l.key !== k).concat(lt);
+    for (const u of swap ? [to, from] : [to]) for (const l of u.layers) if (l.key === k && swap && l.turns < FLOOR_TURNS) l.turns = SWAP_RESET; // 스왑: 3턴으로 리셋
     for (const u of swap ? [to, from] : [to]) { const ls = u.layers.filter((l) => l.key === k); u.stages[k] = Math.max(-6, Math.min(6, ls.reduce((s, l) => s + l.amount, 0))); u.turns[k] = ls.reduce((m, l) => Math.max(m, l.turns), 0); }
   }
 }
 const healPart = (u, frac) => { if (!canHeal(u)) return 0; const b = u.hp; u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * frac))); return u.hp - b; };
+// 비축 해제 (토해내기·꿀꺽): 비축으로 오른 방어·특방 층을 없앰
+function releaseStock(u) {
+  for (const k of ['def', 'spd']) {
+    let n = u.stockpile ?? 0;
+    u.layers = (u.layers ?? []).filter((l) => { if (n > 0 && l.key === k && l.amount > 0 && l.turns > FLOOR_TURNS - 200) { n--; return false; } return true; });
+    const ls = u.layers.filter((l) => l.key === k);
+    u.stages[k] = Math.max(-6, Math.min(6, ls.reduce((sum, l) => sum + l.amount, 0))); u.turns[k] = ls.reduce((m, l) => Math.max(m, l.turns), 0);
+  }
+  u.stockpile = 0;
+}
 function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out) {
   const res = (ok, extra = {}) => ({ unitId: t.id, effect: move.effect, ok, ...extra });
   switch (move.effect) {
@@ -274,16 +288,16 @@ function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out)
     case 'wish': if (t.wish) return res(false); t.wish = true; return res(true); // 희망사항: 다음 자기 차례 시작에 1/2 회복
     case 'stockpile': // 비축하기: 최대 3, 방어·특방 +1
       if ((t.stockpile ?? 0) >= 3) return res(false);
-      t.stockpile = (t.stockpile ?? 0) + 1; changeStats(t, [{ stat: 'defense', change: 1 }, { stat: 'special-defense', change: 1 }], stageChanges); return res(true);
+      t.stockpile = (t.stockpile ?? 0) + 1; changeStats(t, [{ stat: 'defense', change: 1 }, { stat: 'special-defense', change: 1 }], stageChanges, FLOOR_TURNS); return res(true); // 그 층 동안 유지
     case 'swallow': { // 꿀꺽: 비축 1/2/3 → 1/4·1/2·전부 회복
       const n = t.stockpile ?? 0;
       if (!n || t.hp >= t.maxHp) return res(false);
-      t.stockpile = 0; return res(true, { healed: healPart(t, [0, 0.25, 0.5, 1][n]) });
+      releaseStock(t); return res(true, { healed: healPart(t, [0, 0.25, 0.5, 1][n]) });
     }
     case 'sacrificeHeal': // 치유소원·초승달춤: 내가 쓰러지고 아군 하나를 완전히 회복
       t.hp = t.maxHp; cure(t); a.hp = 0; knockOut(state, a, null); out.selfFainted = a.id; return res(true);
     case 'memento': // 추억의선물: 내가 쓰러지고 상대 공격·특공 −2
-      changeStats(t, [{ stat: 'attack', change: -2 }, { stat: 'special-attack', change: -2 }], stageChanges, STAGE_TURNS, true); a.hp = 0; knockOut(state, a, null); out.selfFainted = a.id; return res(true);
+      changeStats(t, [{ stat: 'attack', change: -2 }, { stat: 'special-attack', change: -2 }], stageChanges, FLOOR_TURNS, true); a.hp = 0; knockOut(state, a, null); out.selfFainted = a.id; return res(true); // 그 층 동안
     case 'painSplit': { // 아픔나누기: 둘의 HP 를 평균으로 (보스는 1/4 만큼만)
       const avg = Math.floor((a.hp + t.hp) / 2);
       const tNew = t.boss ? Math.max(1, t.hp - Math.max(0, t.hp - avg) / 4 | 0) : avg;
@@ -291,7 +305,7 @@ function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out)
     }
     case 'bellyDrum': // 배북: HP 1/2 를 써서 공격 최대
       if (a.hp <= a.maxHp / 2) return res(false);
-      a.hp -= Math.floor(a.maxHp / 2); changeStats(a, [{ stat: 'attack', change: 12 }], stageChanges); return res(true);
+      a.hp -= Math.floor(a.maxHp / 2); changeStats(a, [{ stat: 'attack', change: 12 }], stageChanges, FLOOR_TURNS); return res(true); // 그 층 동안
     case 'acupressure': { // 경혈찌르기: 무작위 능력 +2
       const keys = ['attack', 'defense', 'special-attack', 'special-defense', 'speed', 'accuracy', 'evasion'];
       changeStats(t, [{ stat: keys[Math.floor(rng() * keys.length) % keys.length], change: 2 }], stageChanges); return res(true);
@@ -309,7 +323,17 @@ function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out)
       for (const u of state.units.filter((u) => u !== a && dist(u, a) === 1)) { const r = inflict(u, 'confusion', rng, null, state.weather); statusChanges.push({ unitId: u.id, ailment: 'confusion', ...r }); }
       return res(true);
     }
-    case 'splash': return res(false, { reason: 'splash' }); // 튀어오르기: 아무 일도
+    case 'splash': { // 튀어오르기: 아무 일도… 가끔 아군 갸라도스가 도우러 온다 (이스터에그)
+      if (rng() >= SPLASH_GYARADOS || a.side !== 'ally') return res(false, { reason: 'splash' });
+      const spot = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]].map(([dx, dy]) => ({ x: a.x + dx, y: a.y + dy }))
+        .find((p) => canEnter(state.grid[p.y]?.[p.x], 'gyarados') && !state.units.some((u) => u.x === p.x && u.y === p.y));
+      if (!spot) return res(false, { reason: 'splash' });
+      const g = makeUnit({ species: 'gyarados', side: 'ally', x: spot.x, y: spot.y, level: a.level, moves: startingMoves(SPECIES.gyarados.learnset, a.level, MOVES, 'gyarados'), id: uniqueId(state.units, 'ally', 'gyarados') });
+      Object.assign(g, newVolatile(), { bot: true, acted: true, moved: true });
+      state.units.push(g);
+      out.summoned = g.id;
+      return res(true, { summoned: g.id });
+    }
     default: return res(false);
   }
 }
@@ -637,7 +661,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 사용자 부가효과(인파이트류): 한 명이라도 맞으면 한 번
   // 숨기: 맞든 안 맞든 숨는다 (다음 자기 차례는 봉인)
   if (HIDE_MOVES[move.id] && state.units.includes(a)) { a.burrow = { kind: HIDE_MOVES[move.id], moveId: move.id }; a.recharge = 'hide'; }
-  if (move.id === 'spit-up') a.stockpile = 0; // 토해내기: 비축을 다 씀
+  if (move.id === 'spit-up') releaseStock(a); // 토해내기: 비축을 다 씀
   // 프레젠트 회복: 맞은 대상 HP 1/4
   const presentHealed = [];
   if (presentHeal) for (const d of targets) if (state.units.includes(d) && d.guard !== 'protect' && canHeal(d) && d.hp < d.maxHp) { const b = d.hp; d.hp = Math.min(d.maxHp, d.hp + Math.max(1, Math.floor(d.maxHp / 4))); presentHealed.push({ unitId: d.id, amount: d.hp - b }); }
@@ -819,7 +843,7 @@ export function checkResult(state) {
   if (state.result === 'stairs') return state.result; // 계단 클리어는 덮어쓰지 않음
   if (state.bossFloor && !state.units.some((u) => u.boss)) { state.result = 'win'; return state.result; }
   const enemies = state.units.some((u) => u.side === 'enemy');
-  const allies = state.units.some((u) => u.side === 'ally');
+  const allies = state.units.some((u) => u.side === 'ally' && !u.bot); // 갸라도스 봇만 남으면 패배
   state.result = !enemies ? 'win' : !allies ? 'lose' : null;
   return state.result;
 }

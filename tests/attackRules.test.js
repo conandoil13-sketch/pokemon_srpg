@@ -356,5 +356,30 @@ test('pain split, belly drum, swaps, psycho shift, wish, nightmare and splash', 
   const h = duel('pidgey', 'geodude'); h.a.hp = 1; applyMove(h.s, h.a.id, 'wish', h.a.id, hit); round(h.s); assert.ok(h.a.hp > 1);
   const n = duel('pidgey', 'geodude', { foe: { status: 'sleep', statusTurns: 5 } }); applyMove(n.s, n.a.id, 'nightmare', n.f.id, hit);
   const hp = n.f.hp; round(n.s); assert.ok(n.f.hp < hp);
-  const sp = duel('magikarp', 'geodude'); assert.equal(applyMove(sp.s, sp.a.id, 'splash', sp.a.id, hit).effects[0].reason, 'splash');
+  const sp = duel('magikarp', 'geodude'); assert.equal(applyMove(sp.s, sp.a.id, 'splash', sp.a.id, () => 0.5).effects[0].reason, 'splash');
+});
+
+// ---- 층 유지 랭크 · 스왑 리셋 · 갸라도스 ----
+test('stockpile, memento and belly drum last the whole floor; spit up removes stockpile boosts', () => {
+  const { s, a, f } = duel('pidgey', 'geodude', { foe: { hp: 999, maxHp: 999 } });
+  applyMove(s, a.id, 'stockpile', a.id, hit);
+  for (let i = 0; i < 6; i++) round(s);
+  assert.equal(a.stages.def, 1);
+  a.acted = false; applyMove(s, a.id, 'spit-up', f.id, () => 0.5);
+  assert.equal(a.stages.def, 0);
+  const m = duel('pidgey', 'geodude'); applyMove(m.s, m.a.id, 'belly-drum', m.a.id, hit);
+  for (let i = 0; i < 6; i++) round(m.s);
+  assert.equal(m.a.stages.atk, 6);
+});
+test('swapped stage changes reset to 3 turns', () => {
+  const w = duel('pidgey', 'geodude');
+  applyMove(w.s, w.f.id, 'swords-dance', w.f.id, hit);
+  applyMove(w.s, w.a.id, 'power-swap', w.f.id, hit);
+  assert.equal(w.a.turns.atk, 3);
+});
+test('splash rarely summons an ally gyarados bot', () => {
+  const { s, a } = duel('magikarp', 'geodude');
+  const r = applyMove(s, a.id, 'splash', a.id, () => 0.01);
+  const g = s.units.find((u) => u.id === r.summoned);
+  assert.ok(g && g.bot && g.side === 'ally' && g.species === 'gyarados' && g.moves.length);
 });

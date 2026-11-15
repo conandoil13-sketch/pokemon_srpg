@@ -54,7 +54,7 @@ const EFFECT_TEXT = {
   sacrificeHeal: (w) => `${W_(w, '은/는')} 완전히 회복했다!`, memento: (w) => `${w}의 힘이 크게 빠졌다!`, painSplit: () => '서로의 아픔을 나눴다!',
   bellyDrum: (w) => `${W_(w, '은/는')} 체력을 깎아 공격을 최대로 올렸다!`, acupressure: (w) => `${w}의 경혈을 찔렀다!`,
   psychUp: () => '상대의 능력 변화를 따라 했다!', powerSwap: () => '공격·특공 변화를 바꿨다!', guardSwap: () => '방어·특방 변화를 바꿨다!', heartSwap: () => '모든 능력 변화를 바꿨다!',
-  psychoShift: () => '상태이상을 옮겼다!', nightmare: (w) => `${W_(w, '은/는')} 악몽을 꾸기 시작했다!`, teeterDance: () => '흔들흔들 춤을 췄다!',
+  psychoShift: () => '상태이상을 옮겼다!', splash: () => '어디선가 갸라도스가 나타나 도우러 왔다!', nightmare: (w) => `${W_(w, '은/는')} 악몽을 꾸기 시작했다!`, teeterDance: () => '흔들흔들 춤을 췄다!',
   counterStance: (w) => `${W_(w, '은/는')} 반격 자세를 취했다!`,
   bide: (w) => `${W_(w, '은/는')} 참기 시작했다!`,
 };
