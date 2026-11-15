@@ -788,6 +788,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         ctx.restore();
         continue;
       }
+      const burrowUnder = u.burrow && (u.burrow.kind === 'ground' || u.burrow.kind === 'water');
+      if (burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 숨기: 흙더미·물웅덩이는 발밑에
+      if (u.burrow) { ctx.save(); ctx.globalAlpha = 0.45; } // 숨은 포켓몬은 반투명
       if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.85)'; }
       if (restFilter) { ctx.save(); ctx.filter = restFilter; }
       if (pose?.flash) { ctx.save(); ctx.filter = 'brightness(3)'; }
@@ -795,6 +798,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (pose?.flash) ctx.restore();
       if (restFilter) ctx.restore();
       if (grey) ctx.restore();
+      if (u.burrow) ctx.restore();
+      if (u.burrow && !burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 구름·그림자는 위에
       if (!pose?.hidden) ui.drawStatusDot(ctx, u, cx, cy);
     }
   }

@@ -59,6 +59,8 @@ export function attackExtraLines(result, attacker) {
   if (result.screensBroken?.length) out.push({ text: '장벽이 깨졌다!', who: attacker, emo: 'Determined' });
   if (result.spun?.freed) out.push({ text: `${josa(label(attacker), '은/는')} 몸이 자유로워졌다!`, who: attacker, emo: 'Happy' });
   if (result.spun?.cleared) out.push({ text: '압정이 날아갔다!', who: attacker, emo: 'Happy' });
+  const HIDE_LINE = { fly: '하늘 높이 날아올랐다!', bounce: '높이 뛰어올랐다!', dig: '땅속으로 파고들었다!', dive: '물속으로 잠수했다!', 'shadow-force': '모습을 감췄다!' };
+  if (attacker.burrow && HIDE_LINE[attacker.burrow.moveId]) out.push({ text: `${josa(label(attacker), '은/는')} ${HIDE_LINE[attacker.burrow.moveId]}`, who: attacker, emo: 'Determined' });
   if (result.crash > 0) out.push({ text: `${josa(label(attacker), '은/는')} 땅에 부딪혔다!`, who: attacker, emo: 'Pain' });
   return out;
 }

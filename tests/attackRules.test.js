@@ -83,3 +83,37 @@ test('rapid spin frees bind and leech seed and clears nearby foe spikes', () => 
   assert.deepEqual(r.spun, { freed: true, cleared: 2 });
   assert.equal(s.spikes.length, 2);
 });
+
+// ---- 숨는 기술 ----
+import { unitsHit, canTarget } from '../src/core/shapes.js';
+test('a hidden unit cannot be targeted until the foe phase ends, then it is sealed', () => {
+  const { s, a, f } = duel('diglett', 'pidgey');
+  applyMove(s, a.id, 'dig', f.id, hit);
+  assert.deepEqual(a.burrow, { kind: 'ground', moveId: 'dig' });
+  assert.deepEqual(unitsHit(s, f, MOVES.tackle, { unitId: a.id }), []);
+  endPhase(s, () => 0.9); // 아군 끝
+  assert.ok(a.burrow);
+  endPhase(s, () => 0.9); // 적 끝 → 풀림, 아군 시작 → 봉인
+  assert.equal(a.burrow, null);
+  assert.equal(a.sealed, true);
+});
+test('earthquake hits a digger for double, thunder hits a flier, nothing hits shadow force', () => {
+  assert.equal(canTarget(MOVES.earthquake, { burrow: { kind: 'ground' } }), true);
+  assert.equal(canTarget(MOVES.tackle, { burrow: { kind: 'ground' } }), false);
+  assert.equal(canTarget(MOVES.thunder, { burrow: { kind: 'sky' } }), true);
+  assert.equal(canTarget(MOVES.whirlpool, { burrow: { kind: 'water' } }), true);
+  assert.equal(canTarget(MOVES.earthquake, { burrow: { kind: 'shadow' } }), false);
+  const { s, a, f } = duel('rattata', 'geodude', { fx: 1, fy: 2, ally: { hp: 999, maxHp: 999 } });
+  const plain = duel('rattata', 'geodude', { fx: 1, fy: 2, ally: { hp: 999, maxHp: 999 } });
+  a.burrow = { kind: 'ground', moveId: 'dig' };
+  const big = applyMove(s, f.id, 'earthquake', { self: true }, () => 0.5).hits.find((h) => h.unitId === a.id);
+  const norm = applyMove(plain.s, plain.f.id, 'earthquake', { self: true }, () => 0.5).hits.find((h) => h.unitId === plain.a.id);
+  assert.ok(big && norm && big.damage > norm.damage * 1.5);
+});
+test('a burrowed unit fainting from poison leaves no burrow behind', () => {
+  const { s, a, f } = duel('diglett', 'pidgey');
+  applyMove(s, a.id, 'dig', f.id, hit);
+  a.status = 'poison'; a.hp = 1;
+  round(s);
+  assert.ok(!s.units.includes(a));
+});

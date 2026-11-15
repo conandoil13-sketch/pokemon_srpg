@@ -8,7 +8,7 @@ import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage, rollHits } from './damage.js';
-import { unitsHit } from './shapes.js';
+import { unitsHit, canTarget, hideDouble } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
@@ -201,6 +201,9 @@ const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 // 기술이 실제로 닿는 유닛들 (move: id 또는 기술 객체, focus: 고른 대상)
 export function targetsOf(state, user, move, focus) {
   const m = typeof move === 'string' ? moveFor(user, move) : move;
+  return targetsOfRaw(state, user, m, focus).filter((u) => u === user || canTarget(m, u)); // 숨은 포켓몬 제외
+}
+function targetsOfRaw(state, user, m, focus) {
   const [lo, hi] = m.range ?? [1, 1];
   switch (m.kind) {
     case 'self': return [user];
@@ -281,6 +284,7 @@ export const RECHARGE_MOVES = new Set(['hyper-beam', 'giga-impact', 'rock-wrecke
 export const CRASH_MOVES = new Set(['jump-kick', 'high-jump-kick']); // 빗나가면 자기 HP 1/2
 export const BREAKS_PROTECT = new Set(['feint', 'shadow-force']); // 방어를 뚫고 없앰
 const SCREENS = ['reflect', 'lightScreen'];
+export const HIDE_MOVES = { fly: 'sky', bounce: 'sky', dig: 'ground', dive: 'water', 'shadow-force': 'shadow' }; // 숨기: 상대 다음 페이즈 끝까지
 
 // aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
 export function applyMove(state, userId, moveId, aim, rng) {
@@ -426,7 +430,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (!state.units.includes(d) || !state.units.includes(a)) break; // 쓰러지면 멈춤
       const hpBefore = d.hp;
       const r = move.dreamOnly && d.status !== 'sleep' ? { hit: true, crit: false, typeMult: 0, damage: 0, failed: true } // 꿈먹기: 잠든 상대만
-        : calcDamage(a, d, dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
+        : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
       if (r.absorbed) absorb(d, r.absorbed);
       d.hp = Math.max(0, d.hp - r.damage);
       const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김
@@ -509,6 +513,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 경험치는 공격이 끝난 뒤 살아 있는 아군 기준 (목록 순서에 따라 달라지지 않게)
   for (const d of knocked) for (const [sp, n] of Object.entries(awardExp(state, a, d))) expGained[sp] = (expGained[sp] ?? 0) + n;
   // 사용자 부가효과(인파이트류): 한 명이라도 맞으면 한 번
+  // 숨기: 맞든 안 맞든 숨는다 (다음 자기 차례는 봉인)
+  if (HIDE_MOVES[move.id] && state.units.includes(a)) { a.burrow = { kind: HIDE_MOVES[move.id], moveId: move.id }; a.recharge = true; }
   // 점프킥·무릎차기: 하나도 안 맞았으면(빗나감·방어·무효) 자기 최대 HP 1/2
   let crash = 0;
   if (CRASH_MOVES.has(move.id) && !anyLanded && state.units.includes(a) && !magicGuard(a)) {
@@ -615,6 +621,7 @@ export function endPhase(state, rng = Math.random) {
     }
   }
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
+  for (const u of state.units) if (u.burrow && u.side !== ending) u.burrow = null; // 숨기: 상대 페이즈가 끝나면 나옴
   tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
   W = effectiveWeather(state); // 날씨 부르기가 방금 끝났을 수 있음 (쾌청 녹이기 등)
   checkResult(state);

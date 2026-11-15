@@ -50,9 +50,15 @@ export function tilesOf(state, user, move, aim) {
 }
 
 // 맞는 유닛: 상대, friendlyFire 면 같은 편도. 사용자 자신은 제외
+// 숨기(공중날기·구멍파기·다이빙·섀도다이브): 숨은 포켓몬은 예외 기술만 맞는다 (땅속·물속 예외는 위력 2배)
+const HIDE_HITS = { ground: ['earthquake', 'magnitude'], sky: ['thunder', 'gust', 'twister', 'sky-uppercut'], water: ['surf', 'whirlpool'], shadow: [] };
+const HIDE_DOUBLE = { ground: ['earthquake', 'magnitude'], water: ['surf', 'whirlpool'] };
+export const canTarget = (move, u) => !u.burrow || (HIDE_HITS[u.burrow.kind] ?? []).includes(move.id);
+export const hideDouble = (move, u) => !!u.burrow && (HIDE_DOUBLE[u.burrow.kind] ?? []).includes(move.id);
+
 export function unitsHit(state, user, move, aim) {
   const keys = new Set(tilesOf(state, user, move, aim).map((t) => `${t.x},${t.y}`));
-  return state.units.filter((u) => u !== user && u.hp > 0 && keys.has(`${u.x},${u.y}`) && (u.side !== user.side || move.friendlyFire));
+  return state.units.filter((u) => u !== user && u.hp > 0 && keys.has(`${u.x},${u.y}`) && (u.side !== user.side || move.friendlyFire) && canTarget(move, u));
 }
 
 export function aimsOf(state, user, move) {

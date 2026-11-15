@@ -811,3 +811,13 @@ test('recharge notice, crash, screen and spin lines', () => {
   assert.ok(msgs.includes('구구는 몸이 자유로워졌다!'));
   assert.ok(msgs.includes('압정이 날아갔다!'));
 });
+
+import { drawBurrowMark } from '../src/render/ui.js';
+test('burrow mark draws by kind', () => {
+  for (const kind of ['ground', 'water', 'sky', 'shadow']) {
+    let n = 0;
+    const ctx = { fillRect() { n++; }, set fillStyle(v) {}, set globalAlpha(v) {}, get globalAlpha() { return 1; }, save() {}, restore() {}, beginPath() {}, ellipse() {}, fill() { n++; } };
+    drawBurrowMark(ctx, { burrow: { kind } }, 24, 24);
+    assert.ok(n > 0, kind);
+  }
+});
