@@ -18,11 +18,11 @@ export const FX_FILES = [
   // 기술 이펙트 다양화 (2026-11-15): 특수 탄 · 물리 타격 · 흡수 · 회복 · 헤롱헤롱
   'fire/fireball', 'ice/ice-lance', // 크기 옵션이 있어 칸(16px)에 맞출 수 있는 탄만
   'melee/claw-swipe', 'melee/thrust',
-  'shadow/life-steal', 'holy/heal', 'status/charmed',
+  'status/charmed',
   // 변화기 묶음 1차 (2026-11-15): 포켓몬에 붙는 효과
   'holy/divine-shield', 'holy/blessing', 'status/rage', 'status/slowed',
-  'nature/root-snare', 'nature/healing-bloom', 'nature/spore-burst',
-  'shadow/grasping-hands', 'shadow/curse', 'shadow/hex-sigil', 'shadow/soul-drain', 'arcane/rune-circle',
+  'nature/root-snare',
+  'shadow/grasping-hands', 'shadow/curse', 'shadow/soul-drain', 'arcane/rune-circle',
 ];
 
 const OUT = fileURLToPath(new URL('../src/vendor/pixelfx/', import.meta.url));

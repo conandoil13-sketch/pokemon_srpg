@@ -1,12 +1,13 @@
-import { Particles, Bits, P, B, Rng, rng, fit, sparkle, clamp, smooth, ease, TAU, WHITE, mix } from "../../core/index.js";
-import { VOID, Puffs, PK, ringFast } from "./_lib.js";
+// Adapted from pixelfx shadow/hex-sigil (MIT, github.com/patch-gg/pixelfx): same sigil at about 60% size for 포켓몬 택틱스.
+import { Particles, Bits, P, B, Rng, rng, fit, sparkle, clamp, smooth, ease, TAU, WHITE, mix } from "../../vendor/pixelfx/core/index.js";
+import { VOID, Puffs, PK, ringFast } from "../../vendor/pixelfx/fx/shadow/_lib.js";
 
 export const meta = {
-  name: "Hex sigil",
-  desc: "A burning pen traces a cursed sigil in the air, its glyphs pop in one by one, then it flares white and crumbles into falling embers.",
+  name: "Small sigil",
+  desc: "A smaller hex sigil (about 60%) for a single seal: a pen traces it above the head, glyphs pop in, it flares and crumbles into embers.",
   tags: ["shadow", "hex", "sigil", "rune", "curse", "magic", "circle", "one-shot"],
-  size: [168, 128],
-  origin: [84, 112],
+  size: [112, 96],
+  origin: [56, 84],
   duration: 4.2,
   loop: false,
   fps: 30,
@@ -15,7 +16,7 @@ export const meta = {
 };
 
 // the sigil's centre and radii; the beats: traced, glyphs pop, holds, flares, crumbles
-const CY = -50, RO = 28, RI = 22, RC = 6, GLYPH = 1.62, FLARE = 2.6, BREAK = 2.74;
+const CY = -40, RO = 17, RI = 13, RC = 4, GLYPH = 1.62, FLARE = 2.6, BREAK = 2.74;
 
 // the strokes, in the order the pen draws them, as points with the moment the pen passes each
 function strokes(seed) {
@@ -78,7 +79,7 @@ export function create(o) {
       }
       // power drawn into the sigil while it's written and held: streaks racing in to its heart
       if (t > 0.2 && t < FLARE - 0.05 && R.chance(dt * (8 + 14 * smooth(0.2, FLARE, t)))) {
-        const a = R.range(0, TAU), D0 = R.range(40, 60), T = R.range(0.22, 0.32), v = (D0 * 3) / (Math.exp(3 * T) - 1);
+        const a = R.range(0, TAU), D0 = R.range(25, 36), T = R.range(0.22, 0.32), v = (D0 * 3) / (Math.exp(3 * T) - 1);
         ps.spawn(P.STREAK, Math.cos(a) * D0, CY + Math.sin(a) * D0, -Math.cos(a) * v, -Math.sin(a) * v, T, R.chance(0.5) ? C[7] : C[6]);
       }
       for (const g of G)
@@ -89,10 +90,10 @@ export function create(o) {
         }
       if (t >= FLARE && !flared) {
         flared = true;
-        lights.push({ x: 0, y: CY, r: 96, k: 1.4, life: 0.45, max: 0.45 }, { x: 0, y: CY, r: 44, k: 1, life: 0.14, max: 0.14 });
+        lights.push({ x: 0, y: CY, r: 58, k: 1.2, life: 0.45, max: 0.45 }, { x: 0, y: CY, r: 26, k: 1, life: 0.14, max: 0.14 });
         for (let i = 0; i < 24; i++) {
           const a = R.range(0, TAU), sp = R.range(60, 130);
-          ps.spawn(P.SPARK, Math.cos(a) * 13, CY + Math.sin(a) * 13, Math.cos(a) * sp, Math.sin(a) * sp - 30, R.range(0.2, 0.45));
+          ps.spawn(P.SPARK, Math.cos(a) * 8, CY + Math.sin(a) * 8, Math.cos(a) * sp, Math.sin(a) * sp - 30, R.range(0.2, 0.45));
         }
       }
       if (t >= BREAK && !broke) {
@@ -105,7 +106,7 @@ export function create(o) {
           if (i % 27 === 0) embers.spawn(P.EMBER, q.x, q.y, R.range(-10, 10), -R.range(10, 40), R.range(0.6, 1.1));
         }
         for (const g of G) puffs.spawn(PK.SOOT, g.x, g.y, R.range(-6, 6), -R.range(8, 18), R.range(0.7, 1.1), R.range(3, 5));
-        for (let i = 0; i < 8; i++) puffs.spawn(PK.SOOT, R.range(-20, 20), CY + R.range(-20, 20), R.range(-8, 8), -R.range(6, 16), R.range(0.8, 1.2), R.range(3, 6), R.range(0, 0.15));
+        for (let i = 0; i < 8; i++) puffs.spawn(PK.SOOT, R.range(-12, 12), CY + R.range(-12, 12), R.range(-8, 8), -R.range(6, 16), R.range(0.8, 1.2), R.range(3, 6), R.range(0, 0.15));
       }
       for (let i = lights.length - 1; i >= 0; i--) if ((lights[i].life -= dt) <= 0) lights.splice(i, 1);
       bits.update(dt);
@@ -114,9 +115,9 @@ export function create(o) {
       puffs.update(dt);
     },
     drawBack(p) {
-      puffs.draw(p, PK.SOOT, { x: 0, y: CY, k: broke ? 0.3 : 0, reach: 50 });
+      puffs.draw(p, PK.SOOT, { x: 0, y: CY, k: broke ? 0.3 : 0, reach: 30 });
       const k = t < BREAK ? smooth(0.1, 0.6, t) : 1 - smooth(BREAK, BREAK + 0.6, t);
-      if (k > 0) p.glow(0, CY, 52, C[4], 0.3 * k);
+      if (k > 0) p.glow(0, CY, 32, C[4], 0.3 * k);
     },
     draw(p) {
       if (!broke) {
@@ -145,8 +146,8 @@ export function create(o) {
       }
       // the flare: a burst ring as it goes white
       const fu = (t - FLARE) / 0.35, bu = (t - FLARE) / 0.22;
-      if (bu > 0 && bu < 1) sparkle(p, 0, CY, 18 * (1 - bu), C[7], C[5], 0.9 * (1 - bu));
-      if (fu > 0 && fu < 1) ringFast(p, 0, CY, RO + 3 + 12 * ease.outCubic(fu), Math.max(1, 3 * (1 - fu)), fu < 0.4 ? WHITE : fu < 0.7 ? C[6] : C[4]);
+      if (bu > 0 && bu < 1) sparkle(p, 0, CY, 11 * (1 - bu), C[7], C[5], 0.9 * (1 - bu));
+      if (fu > 0 && fu < 1) ringFast(p, 0, CY, RO + 2 + 8 * ease.outCubic(fu), Math.max(1, 3 * (1 - fu)), fu < 0.4 ? WHITE : fu < 0.7 ? C[6] : C[4]);
       bits.draw(p);
       puffs.draw(p, PK.FLAME);
       ps.draw(p);

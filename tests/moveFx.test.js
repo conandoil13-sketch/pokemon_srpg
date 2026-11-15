@@ -38,7 +38,7 @@ test('every spec points at a vendored effect and runs at most 2x', () => {
   for (const m of Object.values(MOVES)) if (m.learnable && m.category !== 'status') for (const d of [1, 2]) specs.push(...Object.values(fxForMove(m, { distance: d })));
   specs.push(fxForStage(1), fxForStage(-1));
   for (const a of ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze', 'confusion', 'infatuation']) specs.push(...Object.values(fxForAilment(a)));
-  specs.push({ id: 'holy/heal', timeScale: 1.5 }, { id: 'shadow/life-steal', timeScale: 1.5 }); // mapAttack 의 회복·흡수 연출
+  specs.push(HEAL_FX, drainFx(24, 0)); // mapAttack 의 회복·흡수 연출
   for (const s of specs.filter(Boolean)) { assert.ok(FX[s.id], s.id); assert.ok(s.timeScale <= 2, s.id); }
 });
 
@@ -88,4 +88,30 @@ test('every effect has an fx that is registered', () => {
     assert.ok(EFFECT_FX[e], e);
     assert.ok(FX[EFFECT_FX[e].id], `${e}: ${EFFECT_FX[e].id}`);
   }
+});
+
+import { fxForEffect } from '../src/data/moveFx.js';
+test('spider web and block get their own fx; mean look keeps the hands', () => {
+  assert.equal(fxForEffect('noMove', 'spider-web').id, 'pokemon/silk-wrap');
+  assert.equal(fxForEffect('noMove', 'block').id, 'pokemon/brick-stack');
+  assert.equal(fxForEffect('noMove', 'mean-look').id, 'shadow/grasping-hands');
+  assert.equal(fxForEffect('taunt', 'taunt'), EFFECT_FX.taunt);
+});
+test('aqua ring is rings, leech seed and worry seed are real seeds', () => {
+  assert.equal(fxForEffect('aquaRing', 'aqua-ring').id, 'pokemon/aqua-ring');
+  assert.equal(fxForEffect('leechSeed', 'leech-seed').id, 'pokemon/seed-scatter');
+  const w = fxForEffect('worrySeed', 'worry-seed');
+  assert.deepEqual([w.id, w.opts.head], ['pokemon/seed-scatter', true]);
+});
+test('taunt is an anger mark, disable is chains, heal block is a smaller sigil', () => {
+  assert.equal(fxForEffect('taunt', 'taunt').id, 'pokemon/anger-mark');
+  assert.equal(fxForEffect('disable', 'disable').id, 'pokemon/chain-bind');
+  assert.equal(fxForEffect('healBlock', 'heal-block').id, 'pokemon/small-sigil');
+});
+import { HEAL_FX, drainFx } from '../src/data/moveFx.js';
+test('heal moves, rest and drain use the short heal glow and drain orbs', () => {
+  assert.equal(HEAL_FX.id, 'pokemon/heal-glow');
+  assert.equal(fxForEffect('rest', 'rest').id, 'pokemon/heal-glow');
+  const d = drainFx(-48, 24);
+  assert.deepEqual([d.id, d.opts.fromX, d.opts.fromY], ['pokemon/drain-orbs', -48, 24]);
 });

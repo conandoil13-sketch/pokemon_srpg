@@ -10,7 +10,7 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment, EFFECT_FX } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
 import { idleFrameSource } from './sprites.js';
 
@@ -68,8 +68,8 @@ function effectLines(result, get) {
   return out;
 }
 export const effectMessages = (result, get) => effectLines(result, get).map((l) => l.text);
-const effectSteps = (result, get) => effectLines(result, get).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT || l.selfFaint ? (l.selfFaint ? 'Pain' : 'Normal') : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id } : null, selfFaint: !!l.selfFaint }));
-const spawnEffectFx = (fx, s, get) => { if (s?.efx) { const u = get(s.efx.unitId); if (u) onBody(fx, EFFECT_FX[s.efx.effect], u); } };
+const effectSteps = (result, get, moveId = null) => effectLines(result, get).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT || l.selfFaint ? (l.selfFaint ? 'Pain' : 'Normal') : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id, moveId } : null, selfFaint: !!l.selfFaint }));
+const spawnEffectFx = (fx, s, get) => { if (s?.efx) { const u = get(s.efx.unitId); if (u) onBody(fx, fxForEffect(s.efx.effect, s.efx.moveId), u); } };
 
 // 랭크 변화 대사 (changes: applyMove 의 stageChanges, byId: 유닛 찾기 객체/함수)
 export function stageMessages(changes, byId) {
@@ -253,14 +253,14 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const missed = (result.missed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}에게는 맞지 않았다!`), who: get(id), emo: 'Normal' }));
   const healed = result.healed ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(attacker), '은/는')} 체력을 회복했다!`), who: attacker, emo: 'Happy', heal: true }]
     : result.healFailed ? [{ k: 'msg', d: AUTO, text: wrapMessage(result.healFailed === 'full' ? '그러나 HP 가 가득 차 있다!' : '이번 층에서는 더 쓸 수 없다!'), who: attacker, emo: 'Normal' }] : [];
-  const efx = effectSteps(result, get);
+  const efx = effectSteps(result, get, move.id);
   const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
   const steps = [{ k: 'act', d: 0.45 }, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
-  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'holy/heal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get); }; // 회복: 초록 반짝임
+  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, HEAL_FX, attacker); spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get); }; // 회복: 초록 반짝임
   return {
     defender: target,
     get done() { return i >= steps.length; },
@@ -369,7 +369,12 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     spawnEffectFx(fx, s, get); // 방어·버티기·길동무
     if (!s || !spec) return;
     if (s.k === 'act' && spec.cast) spawnSafe(fx, spec.cast, feet(attacker), { dir });
-    if (s.drain) onBody(fx, { id: 'shadow/life-steal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); // 흡수: 생명 흡수 연출
+    if (s.drain) { // 흡수: 대상에서 구슬이 날아오고, 도착하면 회복 표시
+      const src = defenders[0] ?? attacker;
+      spawnSafe(fx, drainFx((src.x - attacker.x) * TILE, (src.y - attacker.y) * TILE), feet(attacker));
+      const actor = actorFor(attacker.species, idleFrameSource(attacker.species));
+      spawnSafe(fx, HEAL_FX, bodyAt(actor, attacker.x * TILE + TILE / 2, attacker.y * TILE + TILE / 2), { actor, delay: 0.5 });
+    }
     if (s.k === 'travel' && spec.travel) {
       if (spec.travel.clip) {
         const len = (Math.abs(endPt.x - attacker.x) + Math.abs(endPt.y - attacker.y)) * TILE + TILE / 2;
