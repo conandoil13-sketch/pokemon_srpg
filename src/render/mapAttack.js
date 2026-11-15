@@ -53,6 +53,15 @@ const EFFECT_TEXT = {
 // 속박기 걸림 대사: 감는 기술은 "묶였다", 가두는 기술은 "갇혔다"
 const COILS = new Set(['bind', 'wrap', 'clamp']);
 export const bindLine = (name, moveId) => `${josa(name, '은/는')} ${MOVES[moveId].name}에 ${COILS.has(moveId) ? '묶였다' : '갇혔다'}!`;
+// 공격 뒤 덧붙는 대사: 깨뜨리다·고속스핀·점프킥 충돌
+export function attackExtraLines(result, attacker) {
+  const out = [];
+  if (result.screensBroken?.length) out.push({ text: '장벽이 깨졌다!', who: attacker, emo: 'Determined' });
+  if (result.spun?.freed) out.push({ text: `${josa(label(attacker), '은/는')} 몸이 자유로워졌다!`, who: attacker, emo: 'Happy' });
+  if (result.spun?.cleared) out.push({ text: '압정이 날아갔다!', who: attacker, emo: 'Happy' });
+  if (result.crash > 0) out.push({ text: `${josa(label(attacker), '은/는')} 땅에 부딪혔다!`, who: attacker, emo: 'Pain' });
+  return out;
+}
 export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = {
@@ -410,6 +419,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const after = [];
   if (result.drained > 0) after.push({ text: `${josa(label(attacker), '은/는')} 체력을 흡수했다!`, who: attacker, emo: 'Happy', drain: true });
   if (result.drained < 0) after.push({ text: `${josa(label(attacker), '은/는')} 해감액을 흡수해 데미지를 입었다!`, who: attacker, emo: 'Pain' });
+  after.push(...attackExtraLines(result, attacker));
   if (result.recoil > 0) after.push({ text: `${josa(label(attacker), '은/는')} 반동으로 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   for (const id of result.flinched ?? []) { const u = get(id); if (u) after.push({ text: `${josa(label(u), '은/는')} 풀이 죽었다!`, who: u, emo: 'Pain' }); }
   for (const b of result.bound ?? []) { const u = get(b.unitId); if (u) after.push({ text: bindLine(label(u), b.moveId), who: u, emo: 'Pain', effect: 'bind', moveId: b.moveId }); }

@@ -11,6 +11,7 @@ import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunit
 const sp = (unit) => SPECIES[unit.species];
 
 export function hitChance(attacker, defender, move, defTile, weather = null) {
+  if (move.sure) return 100; // 필중 기술
   const acc = weatherAccuracy(weather, move, move.accuracy);
   if (acc.sure) return 100; // 비의 번개·싸라기눈의 눈보라: 반드시 명중
   const ab = accuracyFor(attacker, defender, move, acc.value, weather); // 특성 (복안·의욕·노가드·모래숨기 …)

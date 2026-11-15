@@ -799,3 +799,15 @@ test('bind tag, catch lines, forecast note and phase notices', () => {
   assert.ok(out[0].hp);
   assert.equal(out[1].lines.join(' '), '꼬마돌은 김밥말이에서 풀려났다!');
 });
+
+// ---- 공격기 고유 효과 2차: 대사 ----
+import { attackExtraLines } from '../src/render/mapAttack.js';
+test('recharge notice, crash, screen and spin lines', () => {
+  const u = { id: 'a', species: 'pidgey', side: 'ally', x: 1, y: 1 };
+  assert.equal(phaseNotices([{ unitId: 'a', kind: 'recharge' }], [], () => u)[0].lines.join(' '), '구구는 반동으로 기술을 쓸 수 없다!');
+  const msgs = attackExtraLines({ crash: 10, screensBroken: ['reflect'], spun: { freed: true, cleared: 2 } }, u).map((l) => l.text);
+  assert.ok(msgs.includes('구구는 땅에 부딪혔다!'));
+  assert.ok(msgs.includes('장벽이 깨졌다!'));
+  assert.ok(msgs.includes('구구는 몸이 자유로워졌다!'));
+  assert.ok(msgs.includes('압정이 날아갔다!'));
+});

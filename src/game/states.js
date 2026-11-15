@@ -118,6 +118,7 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
       : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
       : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
+      : e.kind === 'recharge' ? `${josa(who(e.unitId), '은/는')} 반동으로 기술을 쓸 수 없다!`
       : e.kind === 'bind' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}의 데미지를 입고 있다!`
       : e.kind === 'bindEnd' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}에서 풀려났다!`
       : e.kind === 'aquaRing' ? `${josa(who(e.unitId), '은/는')} 아쿠아링으로 체력을 회복했다!`
@@ -832,14 +833,14 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, `${spec(a).name} → ${spec(d).name}`, 10, y + 5);
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     drawText(ctx, mv.name, 10, y + 20);
-    const bn = bindNote(moveId);
+    const bn = bindNote(moveId) ?? (mv.sure ? '필중' : null); // 속박기 · 필중
     if (bn) drawText(ctx, bn, 16 + textWidth(mv.name), y + 22, '#5848a0', null, 'small'); // 속박기
     const tm = min.typeMult;
     const eff = tm === 0 ? ['효과 없음', '#808080'] : tm > 1 ? ['효과 굉장', '#20a020'] : tm < 1 ? ['효과 별로', '#c07020'] : null;
     if (eff) drawText(ctx, eff[0], W - 12 - textWidth(eff[0]), y + 20, eff[1]);
     drawText(ctx, `명중 ${tm === 0 ? '-' : `${hit}%`}`, 10, y + 35);
     drawText(ctx, `데미지 ${tm === 0 ? 0 : `${min.damage}~${max.damage}`}`, 72, y + 35);
-    const ko = tm === 0 ? '' : min.damage >= d.hp && hit === 100 ? '기절!' : max.damage >= d.hp ? '기절?' : '';
+    const ko = tm === 0 || moveId === 'false-swipe' ? '' : min.damage >= d.hp && hit === 100 ? '기절!' : max.damage >= d.hp ? '기절?' : '';
     if (ko) drawText(ctx, ko, 172, y + 35, '#e03030');
     ui.drawHpBar(ctx, 206, y + 39, 40, Math.max(0, d.hp - max.damage), d.maxHp);
   }
