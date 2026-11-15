@@ -7,7 +7,12 @@ export const EFFECT_MOVES = {
   'aqua-ring': 'aquaRing', ingrain: 'ingrain', curse: 'curse',
   yawn: 'yawn', 'leech-seed': 'leechSeed', 'helping-hand': 'helpingHand',
   foresight: 'identNormal', 'odor-sleuth': 'identNormal', 'miracle-eye': 'identPsychic',
+  encore: 'encore', disable: 'disable', torment: 'torment', 'heal-block': 'healBlock',
+  'gastro-acid': 'abilityOff', 'worry-seed': 'worrySeed', 'destiny-bond': 'bond',
 };
+
+// 효과 없이 지금 변화기 규칙(랭크 + 상태이상)으로 충분해서 배울 수 있게만 하는 기술
+export const PLAIN_MOVES = ['swagger', 'flatter'];
 
 // PokeAPI 대상 덮어쓰기: 방해·견제는 사거리 1~2 적 하나
 export const KIND_OVERRIDES = {

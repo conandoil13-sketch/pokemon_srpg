@@ -14,7 +14,7 @@ import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILME
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
-import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor } from './volatile.js';
+import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
 
@@ -154,6 +154,11 @@ function awardShare(state, defender) {
 // 같은 편끼리 쓰러뜨리면 경험치·코인 없음 (awardExp 는 아군→적만 지급)
 function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   state.units = state.units.filter((u) => u !== d);
+  // 길동무: 공격으로 쓰러뜨린 상대도 기절 (보스 제외)
+  if (d.bond && by && by.side !== d.side && state.units.includes(by) && !by.boss) {
+    (state.log.bonded ??= []).push(by.id);
+    knockOut(state, by, null);
+  }
   for (const u of state.units) if (u.infatuatedBy === d.id) { u.infatuation = 0; u.infatuatedBy = null; } // 건 상대가 쓰러지면 헤롱헤롱이 풀린다
   let expGained = {};
   if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
@@ -242,6 +247,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
   const abilityEvents = (state.log.abilityEvents = []); // 이번 기술에서 발동한 특성 (연출용)
+  state.log.bonded = []; // 이번 기술에서 길동무로 같이 쓰러진 유닛
   const moldBreaker = has(a, 'mold-breaker'); // 틀깨기: 상대의 방어 특성(클리어바디·유연·습기 …) 무시
   // 특성 흡수 결과 적용: 회복·랭크·타오르는불꽃
   const absorb = (u, ab) => {
@@ -408,7 +414,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (!magicGuard(a)) { a.hp = Math.max(0, a.hp - amt); drained = -amt; }
       abilityEvents.push({ unitId: targets.find((t) => t.ability === 'liquid-ooze').id, ability: 'liquid-ooze', damage: true });
       if (a.hp === 0) knockOut(state, a, null);
-    } else { const before = a.hp; a.hp = Math.min(a.maxHp, a.hp + amt); drained = a.hp - before; }
+    } else if (canHeal(a)) { const before = a.hp; a.hp = Math.min(a.maxHp, a.hp + amt); drained = a.hp - before; }
   }
   if (dealt > 0 && move.drain < 0 && state.units.includes(a) && !has(a, 'rock-head') && !magicGuard(a)) {
     recoilDamage = Math.max(1, Math.floor(dealt * -move.drain / 100));
@@ -423,7 +429,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, flinched, retreat: !!a.retreatReady && state.units.includes(a) };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, flinched, retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];
@@ -464,7 +470,7 @@ export function endPhase(state, rng = Math.random) {
     const r = phaseEnd(u);
     // 포이즌힐: 독이면 피해 대신 1/8 회복, 매직가드: 상태 피해 없음
     if (r.damage && (r.kind === 'poison' || r.kind === 'toxic') && has(u, 'poison-heal')) {
-      u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp / 8))); abilityLog.push({ unitId: u.id, ability: 'poison-heal' }); r.damage = 0;
+      if (canHeal(u)) u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp / 8))); abilityLog.push({ unitId: u.id, ability: 'poison-heal' }); r.damage = 0;
     }
     if (r.damage && magicGuard(u)) r.damage = 0;
     if (r.damage) {
@@ -485,7 +491,7 @@ export function endPhase(state, rng = Math.random) {
     }
     // 특성: 날씨 회복·피해, 가속, 탈피, 촉촉바디
     const hpRate = phaseEndHp(u, W);
-    if (hpRate > 0 && u.hp < u.maxHp) { u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * hpRate))); abilityLog.push({ unitId: u.id, ability: u.ability }); }
+    if (hpRate > 0 && u.hp < u.maxHp && canHeal(u)) { u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * hpRate))); abilityLog.push({ unitId: u.id, ability: u.ability }); }
     if (hpRate < 0 && !magicGuard(u)) {
       u.hp = Math.max(0, u.hp - Math.max(1, Math.floor(u.maxHp * -hpRate)));
       abilityLog.push({ unitId: u.id, ability: u.ability, damage: true });

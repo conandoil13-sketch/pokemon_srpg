@@ -10,6 +10,7 @@ import { canInflict, canInfatuate } from './status.js';
 import { immunity, has } from './abilities.js';
 import { aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
+import { moveBlock } from './volatile.js';
 
 const KO_BONUS = 100;
 const THREAT_WEIGHT = 0.5;
@@ -113,7 +114,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
     const p = parse(k);
     const ghost = { ...unit, x: p.x, y: p.y };
     const risk = THREAT_WEIGHT * threatAt(threats, ghost, p.x, p.y, state.grid[p.y][p.x]);
-    for (const mid of unit.sealed ? [] : unit.moves) { // 풀죽음 봉인: 기술 없이 이동만
+    for (const mid of unit.sealed ? [] : unit.moves.filter((m) => !moveBlock(unit, m))) { // 풀죽음 봉인: 기술 없이 이동만, 도발·앙코르 … 로 못 쓰는 기술 제외
       const move = MOVES[mid];
       if (move.heal) { // 회복기: HP 절반 이하이고 남은 횟수가 있을 때만, 안전한 칸에서
         if (unit.hp <= unit.maxHp / 2 && (unit.healUses ?? 0) > 0) {
@@ -257,6 +258,7 @@ function bestSelfBuff(unit, foes, canAttack) {
   let top = null;
   for (const mid of unit.moves) {
     const move = MOVES[mid];
+    if (moveBlock(unit, mid)) continue;
     if (!isStatus(move) || (move.kind !== 'self' && move.kind !== 'allies')) continue;
     const vals = changesOf(move).map((c) => changeValue(unit, foes, true, unit, c));
     if (!vals.some((v) => v > 0)) continue;

@@ -6,7 +6,7 @@ export const PUNCH = ['ice-punch', 'fire-punch', 'thunder-punch', 'mach-punch', 
 export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell'];
 const PINCH = { overgrow: 'grass', blaze: 'fire', torrent: 'water', swarm: 'bug' };
 
-export const has = (u, id) => u?.ability === id;
+export const has = (u, id) => u?.ability === id && !u.abilityOff; // 위액: 특성 꺼짐
 const breaks = (attacker) => has(attacker, 'mold-breaker'); // 틀깨기: 방어 쪽 특성 무시
 const def = (attacker, defender, id) => !breaks(attacker) && has(defender, id);
 

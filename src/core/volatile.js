@@ -4,7 +4,7 @@ import { MOVES } from '../data/moves.js';
 import { typesOf, blocksAilment, magicGuard } from './abilities.js';
 import { cure, canInflict, inflict } from './status.js';
 
-export const TAUNT_TURNS = 3, NO_MOVE_TURNS = 2;
+export const TAUNT_TURNS = 3, NO_MOVE_TURNS = 2, LOCK_TURNS = 3; // 도발 · 이동 불가 · 앙코르·사슬묶기·트집·회복봉인
 export const YAWN_RANGE = 3; // 하품: 쓴 포켓몬에게서 3칸 이내면 잠듦, 4칸 이상이면 풀림
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
@@ -24,11 +24,17 @@ export function moveFor(unit, moveId) {
   return isGhost(unit) ? { ...m, kind: 'enemy', range: [1, 2] } : { ...m, kind: 'self', range: [0, 0], effect: null, statChanges: CURSE_STATS };
 }
 const quarter = (u, n) => Math.max(1, Math.floor(u.maxHp / n));
+export const isHealMove = (m) => !!m && (!!m.heal || m.effect === 'rest' || m.effect === 'aquaRing' || m.effect === 'ingrain');
+export const canHeal = (u) => !(u.healBlock > 0); // 회복봉인
 
 // 지금 그 기술을 못 쓰는 이유 (없으면 null)
 export function moveBlock(unit, moveId) {
   const m = MOVES[moveId];
   if (unit.taunt > 0 && m?.category === 'status') return 'taunt';
+  if (unit.encore && moveId !== unit.encore.move) return 'encore';
+  if (unit.disable && moveId === unit.disable.move) return 'disable';
+  if (unit.torment > 0 && moveId === unit.lastMove) return 'torment';
+  if (unit.healBlock > 0 && isHealMove(m)) return 'healBlock';
   return null;
 }
 
@@ -83,6 +89,24 @@ export function applyEffect(state, user, target, move, rng, weather) {
     case 'identNormal': case 'identPsychic': // 꿰뚫어보기·냄새구별 / 미라클아이
       if (target[move.effect]) return out(false, 'already');
       target[move.effect] = true; return out(true);
+    case 'encore': case 'disable':
+      if (target[move.effect]) return out(false, 'already');
+      if (!target.lastMove) return out(false, 'noLast');
+      target[move.effect] = { move: target.lastMove, turns: LOCK_TURNS }; return out(true);
+    case 'torment': case 'healBlock':
+      if (target[move.effect] > 0) return out(false, 'already');
+      target[move.effect] = LOCK_TURNS; return out(true);
+    case 'abilityOff': // 위액
+      if (target.abilityOff) return out(false, 'already');
+      target.abilityOff = true; return out(true);
+    case 'worrySeed': // 고민씨: 특성이 불면 (잠들어 있으면 깸)
+      if (['truant', 'insomnia', 'multitype'].includes(target.ability)) return out(false, 'immune');
+      target.ability = 'insomnia';
+      if (target.status === 'sleep') cure(target);
+      return out(true);
+    case 'bond': // 길동무: 다음 내 편 페이즈 시작까지. 연속 사용 실패
+      if (target.bondPrev) return out(false, 'chain');
+      target.bond = true; return out(true);
     default:
       return out(false, 'blocked');
   }
@@ -92,7 +116,7 @@ export function applyEffect(state, user, target, move, rng, weather) {
 export function tickEnd(state, unit, events, rng) {
   // 지속 회복 (아쿠아링·뿌리박기 각 1/16), 저주 피해 1/4
   for (const [flag, kind] of [['aquaRing', 'aquaRing'], ['rooted', 'ingrain']]) {
-    if (!unit[flag] || unit.hp >= unit.maxHp) continue;
+    if (!unit[flag] || unit.hp >= unit.maxHp || !canHeal(unit)) continue;
     const before = unit.hp;
     unit.hp = Math.min(unit.maxHp, unit.hp + quarter(unit, 16));
     events.push({ unitId: unit.id, kind, healed: unit.hp - before });
@@ -108,7 +132,7 @@ export function tickEnd(state, unit, events, rng) {
     unit.hp -= damage;
     const by = state.units.find((u) => u.id === unit.leechBy);
     let healed = 0;
-    if (by) { const b = by.hp; by.hp = Math.min(by.maxHp, by.hp + damage); healed = by.hp - b; }
+    if (by && canHeal(by)) { const b = by.hp; by.hp = Math.min(by.maxHp, by.hp + damage); healed = by.hp - b; }
     events.push({ unitId: unit.id, kind: 'leech', by: unit.leechBy, damage, healed, hpBefore, maxHp: unit.maxHp, x: unit.x, y: unit.y });
   }
   // 하품: 쓴 포켓몬이 살아 있고 3칸 이내이며 아직 잠들 수 있으면 잠듦
@@ -120,12 +144,16 @@ export function tickEnd(state, unit, events, rng) {
     events.push({ unitId: unit.id, kind: ok ? 'yawnSleep' : 'yawnFizzle' });
   }
   unit.helped = false; // 도우미는 그 페이즈만
-  for (const key of ['taunt', 'noMove']) {
+  for (const key of ['taunt', 'noMove', 'torment', 'healBlock']) {
     if (unit[key] > 0 && --unit[key] === 0) events.push({ unitId: unit.id, kind: 'effectEnd', effect: key });
+  }
+  for (const key of ['encore', 'disable']) {
+    if (unit[key] && --unit[key].turns <= 0) { unit[key] = null; events.push({ unitId: unit.id, kind: 'effectEnd', effect: key }); }
   }
 }
 
 // 그 유닛 편 페이즈 시작
 export function tickStart(unit) {
   unit.guardPrev = unit.guard !== null; unit.guard = null; // 방어·버티기
+  unit.bondPrev = unit.bond; unit.bond = false; // 길동무
 }

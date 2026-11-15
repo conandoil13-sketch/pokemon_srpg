@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBattle, applyMove, endPhase } from '../src/core/battle.js';
-import { critRate, typeEffect } from '../src/core/abilities.js';
+import { critRate, typeEffect, has } from '../src/core/abilities.js';
+import { planEnemyAction } from '../src/core/ai.js';
 import { accuracyShift } from '../src/core/stages.js';
 import { typeMultiplier } from '../src/data/types.js';
 import { moveBudget } from '../src/core/status.js';
@@ -310,4 +311,127 @@ test('foresight lets normal and fighting hit ghosts and ignores evasion boosts',
   assert.equal(typeEffect(m.a, m.f, MOVES.confusion), 0);
   applyMove(m.s, m.a.id, 'miracle-eye', m.f.id, hit);
   assert.equal(typeEffect(m.a, m.f, MOVES.confusion), typeMultiplier('psychic', ['flying']));
+});
+
+// ---- Task 4: 방해·견제 나머지 ----
+test('encore locks the last move for 3 turns, fails without one', () => {
+  const { s, a, f } = duel('clefairy', 'pidgey');
+  assert.equal(applyMove(s, a.id, 'encore', f.id, hit).effects[0].reason, 'noLast');
+  f.lastMove = 'tackle'; a.acted = false;
+  assert.equal(applyMove(s, a.id, 'encore', f.id, hit).effects[0].ok, true);
+  assert.equal(moveBlock(f, 'growl'), 'encore');
+  assert.equal(moveBlock(f, 'tackle'), null);
+  round(s); round(s); round(s);
+  assert.equal(moveBlock(f, 'growl'), null);
+});
+
+test('encored move that cannot be used leaves only waiting', () => {
+  const { s, a, f } = duel('clefairy', 'chansey', { foe: { moves: ['pound', 'soft-boiled'], lastMove: 'soft-boiled', healUses: 0 } });
+  applyMove(s, a.id, 'encore', f.id, hit);
+  endPhase(s);
+  f.hp = 1;
+  const plan = planEnemyAction(s, f);
+  assert.equal(plan.attack, null);
+});
+
+test('disable seals the last move 3 turns; torment forbids repeats 3 turns', () => {
+  const { s, a, f } = duel('gastly', 'pidgey');
+  f.lastMove = 'gust';
+  applyMove(s, a.id, 'disable', f.id, hit);
+  assert.equal(moveBlock(f, 'gust'), 'disable');
+  assert.equal(moveBlock(f, 'tackle'), null);
+  round(s); round(s); round(s);
+  assert.equal(moveBlock(f, 'gust'), null);
+  const t = duel('murkrow', 'pidgey');
+  t.a.acted = false;
+  applyMove(t.s, t.a.id, 'torment', t.f.id, hit);
+  t.f.lastMove = 'tackle';
+  assert.equal(moveBlock(t.f, 'tackle'), 'torment');
+  assert.equal(moveBlock(t.f, 'gust'), null);
+});
+
+test('heal block stops every heal source for 3 turns', () => {
+  const blockOn = (u) => { u.healBlock = 3; };
+  const h = duel('chansey', 'pidgey', { fx: 8, fy: 8 });
+  blockOn(h.a); h.a.hp = 10;
+  assert.equal(moveBlock(h.a, 'soft-boiled'), 'healBlock');
+  assert.equal(moveBlock(h.a, 'rest'), 'healBlock');
+  assert.equal(applyMove(h.s, h.a.id, 'soft-boiled', h.a.id, hit).blocked, 'healBlock');
+  const d = duel('bulbasaur', 'snorlax', { ally: { hp: 10 }, foe: { hp: 999, maxHp: 999 } });
+  blockOn(d.a);
+  assert.equal(applyMove(d.s, d.a.id, 'giga-drain', d.f.id, hit).drained, 0);
+  assert.equal(d.a.hp, 10);
+  const r = duel('squirtle', 'pidgey', { fx: 8, fy: 8, ally: { hp: 10, aquaRing: true, rooted: true } });
+  blockOn(r.a);
+  endPhase(r.s);
+  assert.equal(r.a.hp, 10);
+  const l = duel('bulbasaur', 'snorlax', { ally: { hp: 10 }, foe: { hp: 400, maxHp: 400 } });
+  applyMove(l.s, l.a.id, 'leech-seed', l.f.id, hit);
+  blockOn(l.a);
+  round(l.s);
+  assert.equal(l.f.hp, 350);
+  assert.equal(l.a.hp, 10);
+  const w = duel('lotad', 'pidgey', { fx: 8, fy: 8, ally: { hp: 10, ability: 'rain-dish' } });
+  w.s.weather = 'rain'; blockOn(w.a);
+  endPhase(w.s);
+  assert.equal(w.a.hp, 10);
+  const p = duel('shroomish', 'pidgey', { fx: 8, fy: 8, ally: { hp: 10, ability: 'poison-heal', status: 'poison' } });
+  blockOn(p.a);
+  endPhase(p.s);
+  assert.equal(p.a.hp, 10);
+  const t = duel('abra', 'pidgey');
+  assert.equal(applyMove(t.s, t.a.id, 'heal-block', t.f.id, hit).effects[0].ok, true);
+  assert.equal(t.f.healBlock, 3);
+});
+
+test('swagger and flatter confuse even at max stage', () => {
+  const { s, a, f } = duel('murkrow', 'pidgey');
+  assert.equal(MOVES.swagger.learnable, true);
+  assert.equal(MOVES.flatter.learnable, true);
+  f.stages.atk = 6;
+  applyMove(s, a.id, 'swagger', f.id, hit);
+  assert.ok(f.confusion > 0);
+});
+
+test('gastro acid turns the ability off; worry seed makes it insomnia', () => {
+  const g = duel('grimer', 'geodude', { foe: { ability: 'sturdy' } });
+  assert.equal(applyMove(g.s, g.a.id, 'gastro-acid', g.f.id, hit).effects[0].ok, true);
+  assert.equal(has(g.f, 'sturdy'), false);
+  const w = duel('oddish', 'pidgey', { foe: { status: 'sleep', statusTurns: 2 } });
+  applyMove(w.s, w.a.id, 'worry-seed', w.f.id, hit);
+  assert.equal(w.f.ability, 'insomnia');
+  assert.equal(w.f.status, null);
+  const tr = duel('oddish', 'slakoth', { foe: { ability: 'truant' } });
+  assert.equal(applyMove(tr.s, tr.a.id, 'worry-seed', tr.f.id, hit).effects[0].reason, 'immune');
+});
+
+test('destiny bond takes the attacker down, once, not a boss', () => {
+  const { s, a, f } = duel('gastly', 'houndour', { level: 10, foeLevel: 80 });
+  assert.equal(applyMove(s, a.id, 'destiny-bond', a.id, hit).effects[0].ok, true);
+  endPhase(s);
+  const r = applyMove(s, f.id, 'bite', a.id, hit);
+  assert.ok(!s.units.includes(a));
+  assert.ok(!s.units.includes(f));
+  assert.deepEqual(r.bond, [f.id]);
+  const x = duel('gastly', 'voltorb', { level: 10, foeLevel: 80 });
+  applyMove(x.s, x.a.id, 'destiny-bond', x.a.id, hit);
+  endPhase(x.s);
+  applyMove(x.s, x.f.id, 'self-destruct', { self: true }, hit);
+  assert.ok(!x.s.units.includes(x.f));
+  assert.ok(x.s.log.defeated.length <= 1);
+  const b = duel('gastly', 'houndour', { level: 10, foeLevel: 80, foe: { boss: true } });
+  b.s.bossFloor = true;
+  applyMove(b.s, b.a.id, 'destiny-bond', b.a.id, hit);
+  endPhase(b.s);
+  applyMove(b.s, b.f.id, 'bite', b.a.id, hit);
+  assert.ok(b.s.units.includes(b.f));
+  const c = duel('gastly', 'pidgey', { fx: 8, fy: 8 });
+  applyMove(c.s, c.a.id, 'destiny-bond', c.a.id, hit);
+  round(c.s);
+  assert.equal(applyMove(c.s, c.a.id, 'destiny-bond', c.a.id, hit).effects[0].reason, 'chain');
+  const p = duel('gastly', 'pidgey', { fx: 3, fy: 1 });
+  applyMove(p.s, p.a.id, 'destiny-bond', p.a.id, hit);
+  p.a.status = 'poison'; p.a.hp = 1;
+  endPhase(p.s);
+  assert.ok(p.s.units.includes(p.f));
 });

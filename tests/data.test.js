@@ -130,7 +130,7 @@ test('every species starts with at least one damaging move', () => {
 });
 
 test('status moves with side effects out of scope are not learnable', () => {
-  for (const k of ['swagger', 'flatter', 'memento', 'stockpile']) assert.equal(MOVES[k].learnable, false, k);
+  for (const k of ['memento', 'stockpile']) assert.equal(MOVES[k].learnable, false, k); // 뽐내기·부추기기는 변화기 묶음 1차에서 배울 수 있게 됨
 });
 
 // ---- 상태이상 데이터 ----
@@ -143,7 +143,7 @@ test('status condition moves', () => {
   assert.deepEqual([m.ember.ailment, m.ember.ailmentChance], ['burn', 10]);
   assert.equal(m['sleep-powder'].ailment, 'sleep');
   assert.equal(m['confuse-ray'].ailment, 'confusion');
-  for (const k of ['teeter-dance', 'swagger', 'flatter']) assert.equal(m[k].learnable, false, k);
+  assert.equal(m['teeter-dance'].learnable, false); // 뽐내기·부추기기는 변화기 묶음 1차에서 배울 수 있게 됨
   assert.equal(m['tri-attack'].ailment, null);
 });
 
