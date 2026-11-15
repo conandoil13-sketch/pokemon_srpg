@@ -821,3 +821,19 @@ test('burrow mark draws by kind', () => {
     assert.ok(n > 0, kind);
   }
 });
+
+test('a charged move rushes and fires by itself at the start of the next ally phase', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state, c = st.units.find((u) => u.id === 'ally-chimchar');
+  const foe = st.units.find((u) => u.side === 'enemy');
+  c.maxHp = c.hp = 999;
+  foe.maxHp = foe.hp = 999; // 반격·기절 없이 확인
+  c.charging = { moveId: 'sky-attack', targetId: foe.id };
+  const before = foe.hp;
+  game.handle({ type: 'endTurn' });
+  assert.ok(run(game, () => c.charging === null && st.phase === 'player', [{ type: 'confirm' }], 200), `mode ${game.mode} phase ${st.phase}`);
+  assert.ok(run(game, (m) => m === 'idle', null, 60), `stuck in ${game.mode}`); // 대사는 자동으로 넘어감
+  assert.ok(foe.hp < before || !st.units.includes(foe));
+  assert.equal(c.acted, true);
+});

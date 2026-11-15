@@ -8,14 +8,14 @@ import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage, rollHits } from './damage.js';
-import { unitsHit, canTarget, hideDouble } from './shapes.js';
+import { unitsHit, canTarget, hideDouble, aimsOf } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE, FIELD_RADIUS } from './field.js';
-import { pathTo, canEnter } from './pathfind.js';
+import { pathTo, canEnter, reachable } from './pathfind.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal, BIND_MOVES, BIND_TURNS, bindCheck } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -284,7 +284,27 @@ export const RECHARGE_MOVES = new Set(['hyper-beam', 'giga-impact', 'rock-wrecke
 export const CRASH_MOVES = new Set(['jump-kick', 'high-jump-kick']); // 빗나가면 자기 HP 1/2
 export const BREAKS_PROTECT = new Set(['feint', 'shadow-force']); // 방어를 뚫고 없앰
 const SCREENS = ['reflect', 'lightScreen'];
+export const CHARGE_MOVES = new Set(['solar-beam', 'razor-wind', 'skull-bash', 'sky-attack']); // 모으고 다음 차례 돌진 발사
 export const HIDE_MOVES = { fly: 'sky', bounce: 'sky', dig: 'ground', dive: 'water', 'shadow-force': 'shadow' }; // 숨기: 상대 다음 페이즈 끝까지
+
+// 준비 기술 발사 경로: 이동력 무시, 대상을 맞힐 수 있는 가장 가까운 칸 (불발이면 null)
+export function chargeRoute(state, unit) {
+  const c = unit.charging;
+  if (!c || !state.units.includes(unit)) return null;
+  if (unit.status === 'sleep' || unit.status === 'freeze' || unit.noMove > 0 || unit.bound) return null;
+  const target = c.targetId && byId(state, c.targetId);
+  if (!target) return null;
+  const move = MOVES[c.moveId];
+  const spots = [...reachable(state.grid, state.units, unit, Infinity)].sort((p, q) => p[1] - q[1]);
+  for (const [k] of spots) {
+    const [x, y] = k.split(',').map(Number);
+    const ghost = { ...unit, x, y };
+    const sim = { ...state, units: state.units.map((u) => (u === unit ? ghost : u)) };
+    const aim = aimsOf(sim, ghost, move).find((a) => unitsHit(sim, ghost, move, a).includes(target));
+    if (aim) return { path: pathTo(state.grid, state.units, unit, x, y, Infinity), aim };
+  }
+  return null;
+}
 
 // aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
 export function applyMove(state, userId, moveId, aim, rng) {
@@ -400,6 +420,14 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...out2, ...(selfFainted ? { selfFainted } : {}) };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
+  // 준비 기술: 처음 쓰면 모으기만 (솔라빔은 쾌청이면 바로). 같은 기술을 모아 둔 상태면 발사
+  if (CHARGE_MOVES.has(move.id) && a.charging?.moveId !== move.id && !(move.id === 'solar-beam' && W === 'sun')) {
+    const foe = targets.find((d) => d.side !== a.side) ?? (focusId ? byId(state, focusId) : null);
+    a.charging = { moveId: move.id, targetId: foe?.id ?? null };
+    if (move.id === 'skull-bash') changeStats(a, [{ stat: 'defense', change: 1 }], stageChanges); // 로켓박치기: 모을 때 방어 +1
+    return { kind: 'attack', charged: { ...a.charging }, hits: [], expGained: {}, stageChanges, statusChanges, thawed, selfKO: false, abilityEvents, drained: 0, recoil: 0, crash: 0, screensBroken: [], spun: null, flinched: [], bound: [], retreat: false, bond: [] };
+  }
+  if (a.charging?.moveId === move.id) a.charging = null;
   const dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
   a.helped = false;
   if (RECHARGE_MOVES.has(move.id)) a.recharge = true; // 파괴광선류: 기술이 나갔으면 다음 차례 반동

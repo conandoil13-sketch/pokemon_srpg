@@ -117,3 +117,52 @@ test('a burrowed unit fainting from poison leaves no burrow behind', () => {
   round(s);
   assert.ok(!s.units.includes(a));
 });
+
+// ---- 준비 기술 ----
+import { chargeRoute, moveUnit } from '../src/core/battle.js';
+test('solar beam charges first, skull bash raises defense while charging, sunny solar beam fires at once', () => {
+  const { s, a, f } = duel('bulbasaur', 'geodude');
+  const r = applyMove(s, a.id, 'solar-beam', { dir: 'right' }, hit);
+  assert.deepEqual(r.charged, { moveId: 'solar-beam', targetId: f.id });
+  assert.equal(r.hits.length, 0);
+  assert.equal(f.hp, f.maxHp);
+  const k = duel('squirtle', 'geodude');
+  const rk = applyMove(k.s, k.a.id, 'skull-bash', k.f.id, hit);
+  assert.ok(rk.charged);
+  assert.equal(k.a.stages.def, 1);
+  const sun = duel('bulbasaur', 'geodude');
+  sun.s.weather = 'sun';
+  const rs = applyMove(sun.s, sun.a.id, 'solar-beam', { dir: 'right' }, hit);
+  assert.equal(rs.charged, undefined);
+  assert.ok(sun.f.hp < sun.f.maxHp);
+});
+test('the charged move fires next turn after rushing past the normal move range', () => {
+  const { s, a, f } = duel('pidgey', 'geodude');
+  applyMove(s, a.id, 'sky-attack', f.id, hit);
+  f.x = 8; f.y = 6;
+  round(s);
+  const route = chargeRoute(s, a);
+  assert.ok(route);
+  const end = route.path.at(-1);
+  assert.equal(Math.abs(end.x - f.x) + Math.abs(end.y - f.y), 1);
+  assert.ok(route.path.length - 1 > moveBudget(a));
+  moveUnit(s, a.id, end.x, end.y, 0, route.path);
+  const r = applyMove(s, a.id, 'sky-attack', route.aim, hit);
+  assert.ok(r.hits.some((h) => h.unitId === f.id && h.damage > 0));
+  assert.equal(a.charging, null);
+});
+test('a fainted target, no path, or a sleeping charger fizzles', () => {
+  const g = duel('pidgey', 'geodude');
+  applyMove(g.s, g.a.id, 'sky-attack', g.f.id, hit);
+  g.s.units = g.s.units.filter((u) => u !== g.f);
+  assert.equal(chargeRoute(g.s, g.a), null);
+  const z = duel('pidgey', 'geodude');
+  applyMove(z.s, z.a.id, 'sky-attack', z.f.id, hit);
+  z.a.status = 'sleep';
+  assert.equal(chargeRoute(z.s, z.a), null);
+  const w = duel('pidgey', 'geodude');
+  applyMove(w.s, w.a.id, 'sky-attack', w.f.id, hit);
+  w.s.grid = w.s.grid.map((row, y) => row.split('').map((c, x) => (Math.abs(x - 8) + Math.abs(y - 6) === 1 ? '#' : c)).join(''));
+  w.f.x = 8; w.f.y = 6;
+  assert.equal(chargeRoute(w.s, w.a), null);
+});

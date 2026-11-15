@@ -58,8 +58,8 @@ export function reachable(grid, units, unit, budget = null) {
 }
 
 // 시작 칸 → (tx,ty) 경로 (양끝 포함). 도달 불가면 [시작 칸]
-export function pathTo(grid, units, unit, tx, ty) {
-  const { best, parent } = search(grid, units, unit);
+export function pathTo(grid, units, unit, tx, ty, budget = null) {
+  const { best, parent } = search(grid, units, unit, budget);
   let k = `${tx},${ty}`;
   if (!best.has(k)) return [{ x: unit.x, y: unit.y }];
   const out = [];

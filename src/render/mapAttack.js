@@ -211,6 +211,7 @@ function spawnChangeFx(fx, s, result, get) {
 const BEAM_HAND = { right: [15, -24], left: [-15, -24], up: [-24, -15], down: [24, 15] };
 
 export function createMapAttack(opts) {
+  if (opts.result.charged) return createBlockedAnim({ ...opts, result: { ...opts.result, blocked: 'charged' } }); // 준비 기술: 모으기 대사만
   if (opts.result.blocked) return createBlockedAnim(opts);
   return opts.result.kind === 'status' ? createStatusAnim(opts) : createAttack(opts);
 }
@@ -225,6 +226,9 @@ function createBlockedAnim({ attacker, result, fx }) {
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 헤롱헤롱해서 기술을 쓸 수 없었다!`), emo: 'Normal' }]
     : result.blocked === 'sealed'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 풀이 죽어 기술을 쓸 수 없다!`), emo: 'Pain' }]
+    : result.blocked === 'charged'
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} ${result.charged.moveId === 'solar-beam' ? '빛을' : '힘을'} 모으고 있다!`), emo: 'Determined' },
+      ...(result.stageChanges?.length ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${who}의 방어가 올라갔다!`), emo: 'Determined' }] : [])]
     : result.blocked === 'damp'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage('습기 때문에 폭발할 수 없다!'), emo: 'Normal' }]
     : BLOCK_TEXT[result.blocked]

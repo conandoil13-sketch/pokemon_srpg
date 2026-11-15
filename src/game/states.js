@@ -1,5 +1,5 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
-import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
@@ -300,12 +300,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 대사 뒤: 결과가 났으면 결과 화면, 아군이 전원 쉬면(잠듦·얼음) 바로 상대 턴
   const weatherTag = () => (st.weather ? ` · ${WEATHER_KO[st.weather]}${st.weatherTimer ? ` (${st.weatherTimer.turns})` : ''}` : ''); // 날씨 부르기 남은 턴
   const playerPhase = (lines = []) => showBanner('아군 턴', (floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`) + weatherTag(), '#4080f8',
-    () => noticeChain(lines, () => {
+    () => noticeChain(lines, () => runCharges('ally', () => {
       focus = null;
       if (st.result) { mode = 'result'; return; }
       if (allyUnits().every((u) => u.acted)) { enemyPhase(); return; }
       mode = 'idle';
-    }));
+    })));
 
   function enemyPhase() {
     sel = null;
@@ -318,7 +318,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       // 안개: 적 차례 시작 때 적 누구에게서도 먼 아군은 이번 차례 안 보인다
       enemyUnseen = st.weather === 'fog' ? new Set(allyUnits().filter((a) => isHidden(a, st.units.filter((u) => u.side === 'enemy'))).map((a) => a.id)) : new Set();
       mode = 'enemy';
-      nextEnemy();
+      runCharges('enemy', () => { mode = 'enemy'; nextEnemy(); }); // 준비 기술 발사 먼저
     }));
   }
 
@@ -365,6 +365,30 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 압정에 쓰러져 행동이 끝남: 아군은 다음 선택, 적은 다음 적
+  // 준비 기술: 그 편 페이즈 시작에 모아 둔 포켓몬이 차례로 대상에게 돌진해 발사 (이동력 무시). 불발이면 알림 후 평소대로
+  function runCharges(side, then) {
+    const queue = st.units.filter((u) => u.side === side && u.charging);
+    const next = () => {
+      if (st.result) { mode = 'result'; return; }
+      const u = queue.shift();
+      if (!u) { then(); return; }
+      if (!st.units.includes(u)) { next(); return; }
+      const route = chargeRoute(st, u);
+      if (!route) {
+        u.charging = null;
+        noticeChain([{ lines: [wrapMessage(`${unitLabel(u)}의 모은 힘이 흩어졌다!`)], at: { x: u.x, y: u.y } }], next);
+        return;
+      }
+      const mv = MOVES[u.charging.moveId];
+      focus = u; cursor = { x: u.x, y: u.y };
+      startWalk(u, route.path, () => {
+        const target = unitsHit(st, u, mv, route.aim).find((d) => d.side !== u.side) ?? null;
+        attackWith(u, target, mv, () => { u.moved = true; u.acted = true; next(); }, route.aim);
+      }, () => next());
+    };
+    next();
+  }
+
   function afterTrapFaint(unit) {
     if (st.result) { mode = 'result'; return; }
     if (unit.side === 'ally') {
@@ -373,9 +397,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     } else nextEnemy();
   }
 
-  function startWalk(unit, path, onDone) {
+  function startWalk(unit, path, onDone, onDead = null) {
     path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
-    walk = { unit, path, t: 0, onDone, prevMode: mode };
+    walk = { unit, path, t: 0, onDone, onDead, prevMode: mode };
     if (unit.side === 'ally' && path.length > 1) { // 도착할 칸 표시 (도착하면 사라짐)
       const end = path.at(-1);
       fxm.unfollow('moveMarker');
@@ -690,7 +714,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       }
       if (walk.t >= STEP * (walk.path.length - 1)) {
         fxm.unfollow('moveMarker');
-        const { onDone, prevMode, unit, path } = walk;
+        const { onDone, onDead, prevMode, unit, path } = walk;
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
@@ -701,7 +725,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const trapLines = trapNotices(st.log.trapEvents, get);
         if ((arriveLines.length || trapLines.length) && unit.side === 'ally') moveLocked = true; // 위협·압정이 걸린 이동은 취소할 수 없다
         const dead = !st.units.includes(unit);
-        noticeChain([...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) afterTrapFaint(unit); else onDone(); });
+        noticeChain([...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
       }
     } else if (mode === 'anim') {
       anim.update(dt);
