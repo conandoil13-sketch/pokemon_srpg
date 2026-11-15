@@ -438,6 +438,9 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
   if (a.charging?.moveId === move.id) a.charging = null;
   let dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
+  a.alliesLeft = state.units.filter((u) => u.side === a.side).length; // 마지막수단
+  if (move.varPower === 'magnitude') { const r = rng() * 100; dmgMove = { ...dmgMove, varPower: null, power: r < 5 ? 10 : r < 15 ? 30 : r < 35 ? 50 : r < 65 ? 70 : r < 85 ? 90 : r < 95 ? 110 : 150 }; } // 매그니튜드 4~10
+  if (move.varPower === 'present') { const r = rng() * 100; dmgMove = { ...dmgMove, varPower: null, power: r < 50 ? 40 : r < 87.5 ? 80 : 120 }; } // 프레젠트 (회복 효과는 없음)
   if (has(a, 'reckless') && dmgMove.power && (move.drain < 0 || CRASH_MOVES.has(move.id))) dmgMove = { ...dmgMove, power: dmgMove.power * 1.2 }; // 이판사판: 반동기 1.2배
   if (ranged && dmgMove.power) dmgMove = { ...dmgMove, power: dmgMove.power * Math.max(0, 1 - RANGE_FALLOFF * Math.max(0, dist(a, ranged) - move.range[1])) }; // 사거리 밖
   a.helped = false;
