@@ -12,5 +12,9 @@ import * as smallSigil from './pokemon/small-sigil.js';
 import * as healGlow from './pokemon/heal-glow.js';
 import * as drainOrbs from './pokemon/drain-orbs.js';
 import * as moveMarker from './pokemon/move-marker.js';
+import * as tailwindGust from './pokemon/tailwind-gust.js';
+import * as veilDome from './pokemon/veil-dome.js';
+import * as groundFog from './pokemon/ground-fog.js';
+import * as chantPool from './pokemon/chant-pool.js';
 
-export const CUSTOM_FX = { 'pokemon/bite': bite, 'pokemon/kick': kick, 'pokemon/sound-wave': soundWave, 'pokemon/silk-wrap': silkWrap, 'pokemon/brick-stack': brickStack, 'pokemon/aqua-ring': aquaRing, 'pokemon/seed-scatter': seedScatter, 'pokemon/anger-mark': angerMark, 'pokemon/chain-bind': chainBind, 'pokemon/small-sigil': smallSigil, 'pokemon/heal-glow': healGlow, 'pokemon/drain-orbs': drainOrbs, 'pokemon/move-marker': moveMarker };
+export const CUSTOM_FX = { 'pokemon/bite': bite, 'pokemon/kick': kick, 'pokemon/sound-wave': soundWave, 'pokemon/silk-wrap': silkWrap, 'pokemon/brick-stack': brickStack, 'pokemon/aqua-ring': aquaRing, 'pokemon/seed-scatter': seedScatter, 'pokemon/anger-mark': angerMark, 'pokemon/chain-bind': chainBind, 'pokemon/small-sigil': smallSigil, 'pokemon/heal-glow': healGlow, 'pokemon/drain-orbs': drainOrbs, 'pokemon/move-marker': moveMarker, 'pokemon/tailwind-gust': tailwindGust, 'pokemon/veil-dome': veilDome, 'pokemon/ground-fog': groundFog, 'pokemon/chant-pool': chantPool };

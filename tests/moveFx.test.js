@@ -115,3 +115,12 @@ test('heal moves, rest and drain use the short heal glow and drain orbs', () => 
   const d = drainFx(-48, 24);
   assert.deepEqual([d.id, d.opts.fromX, d.opts.fromY], ['pokemon/drain-orbs', -48, 24]);
 });
+
+test('auras and fog get their own fx: wind, a see-through veil, rolling fog, a purple pool', () => {
+  assert.equal(fxForEffect('tailwind', 'tailwind').id, 'pokemon/tailwind-gust');
+  assert.equal(fxForEffect('safeguard', 'safeguard').id, 'pokemon/veil-dome');
+  assert.equal(fxForEffect('mist', 'mist').id, 'pokemon/ground-fog');
+  assert.equal(fxForEffect('haze', 'haze').id, 'pokemon/ground-fog');
+  assert.notDeepEqual(fxForEffect('mist', 'mist').opts.palette, fxForEffect('haze', 'haze').opts.palette); // 흰 / 검정
+  assert.equal(fxForEffect('luckyChant', 'lucky-chant').id, 'pokemon/chant-pool');
+});

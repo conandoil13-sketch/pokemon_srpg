@@ -120,6 +120,8 @@ export const HEAL_FX = spec('pokemon/heal-glow', {}, 1, 'front', { life: 1.1 });
 export const drainFx = (fromX, fromY) => spec('pokemon/drain-orbs', { fromX, fromY }, 1, 'front', { life: 1.1 });
 
 // 포켓몬에 붙는 효과 (변화기 묶음 1차): 걸릴 때 몸에 한 번. 큰 이펙트는 빠르게(timeScale) 짧게(life)
+const FOG_WHITE = ['#6a6a7a', '#9a9aac', '#c4c4d4', '#e2e2ee', '#f8f8ff'];
+const FOG_DARK = ['#0c0814', '#1e1630', '#342a4a', '#4e4266', '#7a6a90'];
 const fxOn = (id, opts = {}, timeScale = 2) => spec(id, opts, timeScale, 'front', { life: 1.2 });
 export const EFFECT_FX = {
   protect: fxOn('holy/divine-shield', { palette: PAL.holy, radius: 14 }, 1.5),
@@ -144,10 +146,10 @@ export const EFFECT_FX = {
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
   // 2차 오라: 발밑에서 퍼지는 고리 (종류별 색) · 장판: 방패 / 땅에 번지는 물·흙
-  tailwind: fxOn('ice/frost-nova', { palette: PAL.ice, reach: AREA_REACH }, 2),
-  safeguard: fxOn('ice/frost-nova', { palette: PAL.candy, reach: AREA_REACH }, 2),
-  mist: fxOn('ice/frost-nova', { palette: PAL.bone, reach: AREA_REACH }, 2),
-  luckyChant: fxOn('ice/frost-nova', { palette: PAL.arcane, reach: AREA_REACH }, 2),
+  tailwind: spec('pokemon/tailwind-gust', {}, 1, 'back', { life: 1.3 }), // 주변 2칸에서 바람이 불어 들어옴
+  safeguard: spec('pokemon/veil-dome', {}, 1, 'front', { life: 1.4 }), // 분홍 반투명 막
+  mist: spec('pokemon/ground-fog', { palette: FOG_WHITE }, 1, 'back', { life: 1.7 }), // 바닥에 깔리는 흰 안개
+  luckyChant: spec('pokemon/chant-pool', {}, 1, 'front', { life: 1.5 }), // 자주 웅덩이 + 솟는 물방울
   reflect: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 20 }, 1.5),
   lightScreen: fxOn('holy/divine-shield', { palette: PAL.gold, radius: 20 }, 1.5),
   mudSport: fxOn('nature/acid-splash', { palette: PAL.earth }, 2),
@@ -156,7 +158,7 @@ export const EFFECT_FX = {
   spikes: fxOn('impacts/ground-slam', { palette: PAL.stone }, 2), // 압정: 사용자 발밑 (깔린 칸은 맵에 그림)
   toxicSpikes: fxOn('impacts/ground-slam', { palette: POISON_PAL }, 2),
   push: fxOn('pokemon/sound-wave', { palette: PAL.bone }, 1.5), // 울부짖기·날려버리기 (사용자 앞 퍼지는 파동)
-  haze: fxOn('ice/frost-nova', { palette: PAL.smoke, reach: AREA_REACH }, 1.5), // 흑안개
+  haze: spec('pokemon/ground-fog', { palette: FOG_DARK }, 1, 'back', { life: 1.7 }), // 바닥에 깔리는 검은 안개
 };
 // 같은 효과라도 기술마다 인상이 다른 것: 거미집 = 실로 감은 고치, 블록 = 쌓이는 장난감 벽돌 (검은눈빛은 위 손 그대로)
 const MOVE_EFFECT_FX = {
