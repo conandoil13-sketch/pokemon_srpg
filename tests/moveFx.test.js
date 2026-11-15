@@ -141,3 +141,12 @@ test('whirlwind is a gust that reaches the target, roar keeps the sound wave', (
   assert.equal(pushFx('whirlwind', 2).opts.reach, 48);
   assert.equal(pushFx('roar', 1).id, 'pokemon/sound-wave');
 });
+
+import { bindFx } from '../src/data/moveFx.js';
+test('wrap-like moves coil, vortex moves swirl in their type colour', () => {
+  assert.equal(bindFx('wrap').id, 'pokemon/bind-coil');
+  assert.equal(bindFx('clamp').id, 'pokemon/bind-coil');
+  assert.equal(bindFx('whirlpool').id, 'pokemon/bind-vortex');
+  assert.notDeepEqual(bindFx('fire-spin').opts.palette, bindFx('sand-tomb').opts.palette);
+  assert.equal(fxForEffect('bind', 'fire-spin').id, 'pokemon/bind-vortex');
+});
