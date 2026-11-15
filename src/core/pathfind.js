@@ -5,11 +5,14 @@ import { moveBudget } from './status.js';
 export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1 };
 
 // who: 유닛(타입은 유닛 기준 — 메타몽 빌드) 또는 종 키
-export function canEnter(tile, who) {
-  if (tile === '#' || tile === undefined) return false;
+// trees: 벽(#)이 나무인 맵 (유연은 나무를 지나갈 수 있음 — 멈추지는 못함, reachable 이 뺀다)
+const ab = (who) => (typeof who === 'object' && !who.abilityOff ? who.ability : null);
+export function canEnter(tile, who, trees = false) {
+  if (tile === undefined) return false;
+  if (tile === '#') return trees && ab(who) === 'limber'; // 유연: 나무 통과
   if (tile === '~') {
     const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;
-    return t.includes('water') || t.includes('flying');
+    return t.includes('water') || t.includes('flying') || ab(who) === 'levitate'; // 부유: 비행처럼 물 위로
   }
   return true;
 }
@@ -34,10 +37,10 @@ function search(grid, units, unit, budgetOverride = null) {
       const x = cur.x + dx, y = cur.y + dy;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
       const tile = grid[y][x];
-      if (!canEnter(tile, unit)) continue;
+      if (!canEnter(tile, unit, !!grid.trees)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side) continue;
-      const c = cur.c + TILE_COST[tile];
+      const c = cur.c + (tile === '#' ? 1 : TILE_COST[tile]); // 유연이 지나는 나무는 1
       if (c > budget) continue;
       const k = `${x},${y}`;
       if (best.has(k) && best.get(k) <= c) continue;
@@ -54,6 +57,7 @@ export function reachable(grid, units, unit, budget = null) {
   const { best, occ } = search(grid, units, unit, budget);
   // 같은 편이 서 있는 칸은 통과만 가능, 정지 불가
   for (const [k, side] of occ) if (side === unit.side) best.delete(k);
+  for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number); if (grid[y][x] === '#') best.delete(k); } // 나무 위엔 못 섬
   return best;
 }
 

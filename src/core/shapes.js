@@ -6,6 +6,8 @@ const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const inMap = (state, x, y) => x >= 0 && y >= 0 && x < state.width && y < state.height;
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const aimRangeOf = (move) => move.aimRange ?? move.shape?.range ?? move.range ?? [1, 1];
+// 스나이퍼: 사거리 2 이상 기술은 1칸 더
+export const sniperBonus = (user, hi) => (user && user.ability === 'sniper' && !user.abilityOff && hi >= 2 ? 1 : 0);
 
 // 직선·부채꼴에 대상 유닛으로 조준하면(옛 호출 방식) 그 유닛 쪽 방향으로 바꾼다
 function dirToward(state, user, aim) {
@@ -23,7 +25,8 @@ export function tilesOf(state, user, move, aim) {
     case 'line': {
       const [dx, dy] = VEC[aim.dir];
       const out = [];
-      for (let i = 1; i <= (s.length ?? 3); i++) {
+      const len = (s.length ?? 3) + sniperBonus(user, s.length ?? 3);
+      for (let i = 1; i <= len; i++) {
         const x = user.x + dx * i, y = user.y + dy * i;
         if (!inMap(state, x, y) || state.grid[y][x] === '#') break; // 벽에서 멈춤
         out.push({ x, y });
@@ -65,7 +68,7 @@ export function aimsOf(state, user, move) {
   const type = move.shape?.type ?? 'single';
   if (type === 'around') return [{ self: true }];
   if (type === 'line' || type === 'cone') return DIRS.filter((dir) => tilesOf(state, user, move, { dir }).length).map((dir) => ({ dir }));
-  const [lo, hi] = aimRangeOf(move);
+  const [lo, hi0] = aimRangeOf(move), hi = hi0 + sniperBonus(user, hi0);
   if (type === 'blast') {
     const out = [];
     for (let y = user.y - hi; y <= user.y + hi; y++) for (let x = user.x - hi; x <= user.x + hi; x++) {
