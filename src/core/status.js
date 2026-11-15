@@ -56,10 +56,11 @@ export function inflict(unit, ailment, rng, move, weather = null, opts = {}) {
 export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 
 export const moveBudget = (unit) => {
-  if (unit.noMove > 0 || unit.rooted || unit.bound) return 0; // 검은눈빛·블록·거미집·뿌리박기·속박
+  const runAway = has(unit, 'run-away'); // 도주: 상대가 거는 이동 제한(이동 불가·속박·묶기 특성)을 무시
+  if (unit.rooted || (!runAway && (unit.noMove > 0 || unit.bound))) return 0; // 검은눈빛·블록·거미집·뿌리박기·속박
   const m = SPECIES[unit.species].move;
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
-  if (unit.trapped) return 1; // 개미지옥·그림자밟기·자력
+  if (unit.trapped && !runAway) return 1; // 개미지옥·그림자밟기·자력
   return Math.max(1, base + moveBonus(unit)) + (unit.field?.tailwind ? 1 : 0); // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1, 순풍 +1
 };
 

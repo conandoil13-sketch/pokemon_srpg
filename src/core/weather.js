@@ -45,7 +45,8 @@ export function phaseEndWeather(unit, weather) {
 }
 
 // 안개: 보는 쪽 유닛 누구와도 FOG_SIGHT 이상 떨어져 있으면 숨겨진다
-export const isHidden = (target, viewers) => viewers.every((v) => Math.abs(v.x - target.x) + Math.abs(v.y - target.y) >= FOG_SIGHT);
+export const ILLUMINATE_SIGHT = 2; // 발광: 안개 속 시야 +2
+export const isHidden = (target, viewers) => viewers.every((v) => Math.abs(v.x - target.x) + Math.abs(v.y - target.y) >= FOG_SIGHT + (v.ability === 'illuminate' ? ILLUMINATE_SIGHT : 0));
 
 // 에어록·날씨부정이 전장에 있으면 비·쾌청·모래바람·싸라기눈 효과 없음 (안개는 그대로)
 export const effectiveWeather = (state) => (state.weather && state.weather !== 'fog' && state.units.some((u) => u.ability === 'air-lock' || u.ability === 'cloud-nine') ? null : state.weather ?? null);
