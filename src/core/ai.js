@@ -10,7 +10,8 @@ import { canInflict, canInfatuate } from './status.js';
 import { immunity, has } from './abilities.js';
 import { aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
-import { moveBlock } from './volatile.js';
+import { moveBlock, moveFor, isHealMove } from './volatile.js';
+import { typesOf } from './abilities.js';
 
 const KO_BONUS = 100;
 const THREAT_WEIGHT = 0.5;
@@ -25,6 +26,13 @@ const HEAL_WEIGHT = 1.2;      // 회복기 점수: 회복량 × 이 값
 const SELF_KO = ['self-destruct', 'explosion'];
 const SELF_TURNS = 3;         // 자폭 감점: 자기 최선 기대 데미지 × 3턴
 const SIG_SELF_KO = 0.3, OTHER_SELF_KO = 2;
+// 변화기 묶음 1차 (포켓몬에 붙는 효과) 점수
+const GUARD_HP = 0.5;          // 방어·판별·버티기: HP 비율 이하이고 맞을 칸일 때
+const REST_HP = 0.4;           // 잠자기: HP 비율 이하
+const REST_WEIGHT = 0.8;       // 잠자기 회복량 가중치 (2턴 잠듦 감점)
+const BOND_HP = 0.25;          // 길동무: HP 비율 이하이고 맞을 칸일 때
+const HINDER_SCORE = 8;        // 앙코르·사슬묶기·트집·이동 불가·특성 끄기 등 기본 점수
+const IDLE_EFFECTS = ['focusEnergy', 'aquaRing', 'ingrain'];
 
 // 조준 하나의 점수 (위험도 제외). 적이 하나도 안 맞으면 null
 function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
@@ -121,6 +129,12 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
           const score = Math.min(unit.maxHp / 2, unit.maxHp - unit.hp) * HEAL_WEIGHT - risk;
           if (!bestStatus || score > bestStatus.score) bestStatus = { score, moveTo: p, attack: { moveId: mid, targetId: unit.id } };
         }
+        continue;
+      }
+      if (isStatus(move) && moveFor(unit, mid).effect) { // 포켓몬에 붙는 효과
+        const threat = risk / THREAT_WEIGHT;
+        const cand = effectCandidate(state, unit, ghost, moveFor(unit, mid), foes, threat, risk);
+        if (cand && (!bestStatus || cand.score > bestStatus.score)) bestStatus = { score: cand.score, moveTo: p, attack: { moveId: mid, targetId: cand.targetId } };
         continue;
       }
       if (isStatus(move)) {
@@ -257,8 +271,14 @@ function positionalStatus(state, unit, ghost, move, foes) {
 function bestSelfBuff(unit, foes, canAttack) {
   let top = null;
   for (const mid of unit.moves) {
-    const move = MOVES[mid];
+    const move = moveFor(unit, mid); // 저주(비고스트)는 랭크 기술
     if (moveBlock(unit, mid)) continue;
+    if (IDLE_EFFECTS.includes(move.effect)) { // 기충전·아쿠아링·뿌리박기: 때릴 상대가 없을 때만
+      const flag = { focusEnergy: 'focusEnergy', aquaRing: 'aquaRing', ingrain: 'rooted' }[move.effect];
+      if (!canAttack && !unit[flag] && (move.effect === 'focusEnergy' || unit.hp < unit.maxHp) && (!top || IDLE_BUFF_SCORE > top.score)) top = { score: IDLE_BUFF_SCORE, attack: { moveId: mid, targetId: unit.id } };
+      continue;
+    }
+    if (move.effect) continue;
     if (!isStatus(move) || (move.kind !== 'self' && move.kind !== 'allies')) continue;
     const vals = changesOf(move).map((c) => changeValue(unit, foes, true, unit, c));
     if (!vals.some((v) => v > 0)) continue;
@@ -266,6 +286,62 @@ function bestSelfBuff(unit, foes, canAttack) {
     if (!top || score > top.score) top = { score, attack: { moveId: mid, targetId: unit.id } };
   }
   return top;
+}
+
+// 포켓몬에 붙는 효과 변화기의 한 칸 점수 (위험 반영 끝난 score). threat: 그 칸에서 받을 최악 기대 데미지
+function effectCandidate(state, unit, ghost, move, foes, threat, risk) {
+  const self = (score) => (score > 0 ? { score, targetId: unit.id } : null);
+  const hpRate = unit.hp / unit.maxHp;
+  switch (move.effect) {
+    case 'protect': case 'endure': // 맞을 칸이고 HP 가 낮을 때. 막는 데미지가 곧 점수 (위험을 빼지 않음)
+      if (unit.guardPrev || hpRate > GUARD_HP || threat <= 0) return null;
+      return self(threat + (threat >= unit.hp ? KO_BONUS : 0));
+    case 'bond':
+      if (unit.bondPrev || hpRate > BOND_HP || threat < unit.hp) return null;
+      return self(KO_BONUS / 2);
+    case 'rest':
+      if (hpRate > REST_HP || (unit.healUses ?? 0) <= 0 || unit.healBlock > 0) return null;
+      return self((unit.maxHp - unit.hp) * HEAL_WEIGHT * REST_WEIGHT - risk);
+    case 'helpingHand': {
+      let top = null;
+      for (const m of state.units) {
+        if (m.side !== unit.side || m === unit || m.acted || m.helped || manhattan(ghost, m) !== 1) continue;
+        const v = bestDamage(m, foes) * 0.5 - risk;
+        if (v > 0 && (!top || v > top.score)) top = { score: v, targetId: m.id };
+      }
+      return top;
+    }
+  }
+  if (move.kind !== 'enemy') return null;
+  const acc = { ...move, accuracy: move.accuracy ?? 100 };
+  let top = null;
+  for (const r of foes) {
+    const d = manhattan(ghost, r);
+    if (d < move.range[0] || d > move.range[1]) continue;
+    const v = hinderValue(state, ghost, r, move) * hitChance(ghost, r, acc, state.grid[r.y][r.x], W) / 100 - risk;
+    if (v > 0 && (!top || v > top.score)) top = { score: v, targetId: r.id };
+  }
+  return top;
+}
+
+// 상대 하나에게 거는 효과의 가치 (이미 걸렸거나 안 통하면 0)
+function hinderValue(state, user, r, move) {
+  const hasStatus = r.moves.some((m) => isStatus(MOVES[m]));
+  switch (move.effect) {
+    case 'yawn': return r.yawnBy ? 0 : ailmentValue(state, user, r, { ...move, ailment: 'sleep' }) * 0.8;
+    case 'leechSeed': return r.leechBy || typesOf(r).includes('grass') ? 0 : (r.maxHp / 8) * 3;
+    case 'curse': return r.cursed || user.hp <= user.maxHp / 2 ? 0 : (r.maxHp / 4) * 3 - user.maxHp / 2;
+    case 'taunt': return r.taunt > 0 || !hasStatus ? 0 : HINDER_SCORE + bestDamage(r, [user]) * 0.2;
+    case 'healBlock': return r.healBlock > 0 || !r.moves.some((m) => isHealMove(MOVES[m])) ? 0 : HINDER_SCORE;
+    case 'encore': case 'disable': return r[move.effect] || !r.lastMove ? 0 : HINDER_SCORE;
+    case 'torment': return r.torment > 0 || !r.lastMove ? 0 : HINDER_SCORE / 2;
+    case 'noMove': return r.noMove > 0 ? 0 : HINDER_SCORE;
+    case 'identNormal': return r.identNormal || !typesOf(r).includes('ghost') || !user.moves.some((m) => ['normal', 'fighting'].includes(MOVES[m].type) && !isStatus(MOVES[m])) ? 0 : HINDER_SCORE;
+    case 'identPsychic': return r.identPsychic || !typesOf(r).includes('dark') || !user.moves.some((m) => MOVES[m].type === 'psychic' && !isStatus(MOVES[m])) ? 0 : HINDER_SCORE;
+    case 'abilityOff': return r.abilityOff ? 0 : HINDER_SCORE / 2;
+    case 'worrySeed': return r.ability === 'insomnia' || r.ability === 'truant' ? 0 : HINDER_SCORE / 2;
+    default: return 0;
+  }
 }
 
 // 적(=foes) 위치에서 출발하는 다익스트라: 이 유닛이 지날 수 있는 지형만, 유닛은 무시
