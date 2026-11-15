@@ -6,6 +6,17 @@ export const meta = { name: "Heal Sign", desc: "A short signature motif per heal
 const body = (o) => (o.actor ? { x: o.actor.x, y: o.actor.y, w: o.actor.w, h: o.actor.h } : { x: -12, y: -38, w: 24, h: 38 });
 const H = (a) => a.map(hex);
 const SPR = (p, rows, pal, x, y, a = 1) => rows.forEach((r, j) => [...r].forEach((ch, i) => { if (ch !== '.' && pal[ch] !== undefined) p.dot(x + i, y + j, pal[ch], a); }));
+// 속이 찬 초승달: 원 A 안 · 원 B(오른쪽 위로 비킨) 밖. 바깥 가장자리 밝게, 안쪽은 은은하게 (반투명)
+function crescentFill(p, cx, cy, r, tilt, M, a) {
+  const ox = Math.cos(tilt) * r * 0.55, oy = Math.sin(tilt) * r * 0.55;
+  p.each(cx - r - 1, cy - r - 1, cx + r + 1, cy + r + 1, (x, y, sx, sy) => {
+    const dx = x - cx, dy = y - cy, da = Math.hypot(dx, dy), db = Math.hypot(dx - ox, dy - oy);
+    if (da > r || db < r * 0.92) return;
+    const edge = r - da, inner = db - r * 0.92;
+    const c = edge < 1.2 ? M[3] : inner < 1.2 ? M[1] : M[2];
+    p.blendPx(sx, sy, c, a * (edge < 1.2 ? 0.95 : 0.75));
+  });
+}
 const MOTIF = {
   cross(p, t, b, R) { const C = H(['#1e8a34', '#3ec85a', '#b0ffb0']), cx = b.x + b.w / 2, cy = b.y + b.h / 2;
     for (let k = 0; k < 2; k++) { const u = clamp((t - k * 0.25) / 0.5, 0, 1); if (u <= 0 || u >= 1) continue; const r = 6 + u * 14;
@@ -33,17 +44,17 @@ const MOTIF = {
     for (let i = 0; i < 6; i++) { const u = clamp((t - 0.5 - i * 0.04) / 0.4, 0, 1); if (u <= 0 || u >= 1) continue; p.dot(b.x + R.range(0, b.w), b.y + b.h - u * b.h * 1.2, i % 2 ? WHITE : G[3], 1 - u); } },
   sun(p, t, b) { const C = H(['#e08010', '#ffc030', '#fff4b0']), cx = b.x + b.w / 2, y = b.y - 10 - ease.outCubic(clamp(t / 0.5, 0, 1)) * 14;
     p.circle(cx, y, 6, C[1]); p.circle(cx, y, 4, C[2]); for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU + t * 2; p.line(cx + Math.cos(a) * 8, y + Math.sin(a) * 8, cx + Math.cos(a) * 12, y + Math.sin(a) * 12, C[1]); } p.glow(cx, y, 20, C[1], 0.5); },
-  moon(p, t, b, R) { // 달의불빛: 후광 두른 초승달이 떠오르고 은빛 달빛 기둥이 내려옴, 별 반짝 · 은빛 가루
-    const M = H(['#3a3a6a', '#7a80c0', '#c8ccff', '#eef0ff']), cx = b.x + b.w / 2, rise = ease.outCubic(clamp(t / 0.35, 0, 1)), fade = 1 - clamp((t - 0.72) / 0.18, 0, 1);
-    const my = b.y - 26 - rise * 8;
-    p.glow(cx, my, 22, M[2], 0.45 * rise * fade); for (let s2 = 0; s2 < 36; s2++) { const a = (s2 / 36) * TAU; if (s2 % 3) continue; p.dot(cx + Math.cos(a) * 13, my + Math.sin(a) * 13, M[1], 0.6 * rise * fade); } // 후광 고리
-    p.arc(cx, my, 9, 4, Math.PI * 0.55, Math.PI * 1.95, M[2], rise * fade); p.arc(cx, my, 9, 1.5, Math.PI * 0.6, Math.PI * 1.3, M[3], rise * fade); p.dot(cx - 7, my - 2, WHITE, fade);
-    const beam = clamp((t - 0.2) / 0.3, 0, 1) * fade; // 달빛 기둥 (아래로 넓어지는 반투명)
-    if (beam > 0) p.each(cx - 16, my + 8, cx + 16, b.y + b.h, (x, y, sx, sy) => { const f = (y - my - 8) / (b.y + b.h - my - 8); if (f > beam) return; const w = 5 + f * 11; if (Math.abs(x - cx) > w) return;
-      p.blendPx(sx, sy, Math.abs(x - cx) < w * 0.4 ? M[3] : M[2], (0.28 - f * 0.12) * fade); });
-    for (let i = 0; i < 5; i++) { const x = cx + R.range(-24, 24), y = my + R.range(-10, 16), tw = Math.floor(t * 10 + i * 3) % 4 === 0; if (t < 0.15 + i * 0.05) continue; // 별 반짝
-      p.dot(x, y, tw ? WHITE : M[2], fade); if (tw) { p.dot(x - 1, y, M[2], fade); p.dot(x + 1, y, M[2], fade); p.dot(x, y - 1, M[2], fade); p.dot(x, y + 1, M[2], fade); } }
-    for (let i = 0; i < 12; i++) { const u = clamp((t - 0.3 - i * 0.03) / 0.5, 0, 1); if (u <= 0 || u >= 1) continue; p.dot(cx + R.range(-8, 8) + Math.sin(u * 6 + i) * 2, my + 10 + u * (b.y + b.h - my - 10), i % 3 ? M[3] : WHITE, 1 - u); } },
+  moon(p, t, b, R) { // 달의불빛: 은은하게 — 꽉 찬 초승달이 천천히 떠오르고 옅은 달빛이 내려와 감쌈
+    const M = H(['#2a2e5a', '#6a74b0', '#b8c0f0', '#f4f6ff']), cx = b.x + b.w / 2, k = ease.inOutCubic ? ease.inOutCubic(clamp(t / 0.45, 0, 1)) : clamp(t / 0.45, 0, 1);
+    const fade = 1 - clamp((t - 0.7) / 0.2, 0, 1), a = k * fade, my = b.y - 22 - k * 6;
+    p.disc(cx, my, 15, M[1], 0.12 * a); p.glow(cx, my, 20, M[2], 0.22 * a); // 옅은 달무리
+    crescentFill(p, cx, my, 8, -0.7, M, a);
+    const beam = clamp((t - 0.25) / 0.35, 0, 1) * fade;
+    if (beam > 0) p.each(cx - 16, my + 6, cx + 16, b.y + b.h + 2, (x, y, sx, sy) => { const f = (y - my - 6) / (b.y + b.h - my - 4); if (f > beam) return; const w = 4 + f * 12, d = Math.abs(x - cx) / w; if (d > 1) return;
+      p.blendPx(sx, sy, M[3], 0.13 * (1 - d * d) * (1 - f * 0.4) * fade); });
+    p.glow(cx, b.y + b.h / 2, b.w * 0.7, M[2], 0.15 * beam);
+    for (let i = 0; i < 4; i++) { const x = cx + R.range(-22, 22), y = my + R.range(-12, 10), tw = (Math.sin(t * 8 + i * 2) + 1) / 2; p.blend(x, y, M[3], 0.6 * tw * a); }
+    for (let i = 0; i < 10; i++) { const u = clamp((t - 0.3 - i * 0.035) / 0.55, 0, 1); if (u <= 0 || u >= 1) continue; p.blend(cx + R.range(-9, 9) + Math.sin(u * 5 + i) * 2, my + 8 + u * (b.y + b.h - my - 8), M[3], 0.55 * Math.sin(Math.PI * u)); } },
   zzz(p, t, b) { const C = H(['#8aa0c8', '#e0e8ff']), x0 = b.x + b.w / 2 + 6, y0 = b.y - 4;
     for (let k = 0; k < 3; k++) { const u = clamp((t - k * 0.2) / 0.6, 0, 1); if (u <= 0 || u >= 1) continue; const s = 2 + k, x = x0 + k * 5 + u * 4, y = y0 - k * 7 - u * 6;
       p.line(x, y, x + s, y, C[1], 1 - u); p.line(x + s, y, x, y + s, C[1], 1 - u); p.line(x, y + s, x + s, y + s, C[1], 1 - u); }
@@ -61,8 +72,13 @@ const MOTIF = {
     if (t < 0.6) { SPR(p, ['...w...', '...y...', '..yyy..', 'ywwwwwy', '.yywyy.', '.yy.yy.', 'y.....y'], { w: C[2], y: C[1] }, cx - 3, y - 3); p.glow(cx, y, 12, C[1], 0.6);
       for (let k = 1; k < 12; k++) { p.dot(cx, y - 3 - k * 3, C[1], 1 - k / 12); if (k % 3 === 0) p.dot(cx + (k % 2 ? 2 : -2), y - 3 - k * 3, WHITE, 1 - k / 12); } }
     const u = clamp((t - 0.55) / 0.35, 0, 1); if (u > 0 && u < 1) { p.glow(cx, b.y, 22, C[1], 0.7 * (1 - u)); for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU; p.dot(cx + Math.cos(a) * u * 16, b.y + Math.sin(a) * u * 10, i % 2 ? WHITE : C[1], 1 - u); } } },
-  crescent(p, t, b, R) { const C = H(['#6a5ab8', '#c8c0ff', '#ffffff']), cx = b.x + b.w / 2, f = ease.outCubic(clamp(t / 0.5, 0, 1)), y = b.y - 40 + f * 26, rot = t * 6;
-    for (let s = 0; s < 40; s++) { const a = (s / 40) * Math.PI * 1.3 + rot; p.dot(cx + Math.cos(a) * 7, y + Math.sin(a) * 7, s % 4 ? C[1] : C[2]); }
-    p.glow(cx, y, 16, C[1], 0.5); for (let i = 0; i < 10; i++) { const u = clamp((t - 0.3 - i * 0.03) / 0.5, 0, 1); if (u <= 0 || u >= 1) continue; p.dot(cx + R.range(-12, 12), y + u * 24, i % 2 ? WHITE : C[1], 1 - u); } },
+  crescent(p, t, b, R) { // 초승달춤: 꽉 찬 초승달이 살짝 흔들리며 내려와 은빛 깃 가루를 은은하게 흩뿌림
+    const M = H(['#3a2a6a', '#7a6ac0', '#c8bcff', '#f6f2ff']), cx = b.x + b.w / 2, k = clamp(t / 0.5, 0, 1), e = 1 - (1 - k) ** 3;
+    const fade = 1 - clamp((t - 0.7) / 0.2, 0, 1), a = clamp(t / 0.2, 0, 1) * fade, y = b.y - 40 + e * 22, sway = Math.sin(t * 7) * 3;
+    p.disc(cx + sway, y, 14, M[1], 0.12 * a); p.glow(cx + sway, y, 18, M[2], 0.25 * a);
+    crescentFill(p, cx + sway, y, 8, -0.7 + Math.sin(t * 5) * 0.25, M, a);
+    for (let i = 0; i < 14; i++) { const u = clamp((t - 0.2 - i * 0.03) / 0.6, 0, 1); if (u <= 0 || u >= 1) continue; const x = cx + sway + R.range(-14, 14) + Math.sin(u * 6 + i) * 3, yy = y + 6 + u * (b.y + b.h - y);
+      p.blend(x, yy, i % 3 ? M[2] : M[3], 0.65 * Math.sin(Math.PI * u)); }
+    const land = clamp((t - 0.5) / 0.4, 0, 1); if (land > 0 && land < 1) { p.glow(cx, b.y + b.h / 2, b.w * 0.8, M[2], 0.25 * Math.sin(Math.PI * land)); } },
 };
 export function draw(p, t, o) { const f = MOTIF[o.motif] ?? MOTIF.star; f(p, t, body(o), new Rng(o.seed)); }
