@@ -859,3 +859,18 @@ test('the summoned gyarados stays hidden until its geyser has risen', () => {
   runFor(anim, 0.45 + 1.2);
   assert.notEqual(anim.unitPose(g)?.hidden, true);
 });
+
+test('pain split makes both pokemon flinch when the orbs land', () => {
+  const me = { id: 'a', species: 'pidgey', side: 'ally', x: 2, y: 2 }, foe = { id: 'e', species: 'geodude', side: 'enemy', x: 3, y: 2 };
+  const anim = statusAnim('pain-split', { effects: [{ unitId: 'e', effect: 'painSplit', ok: true }] }, [me, foe]);
+  runFor(anim, 0.45 + 0.6);
+  assert.equal(anim.unitPose(me)?.anim, 'Hurt');
+  assert.equal(anim.unitPose(foe)?.anim, 'Hurt');
+});
+
+test('teeter dance spins the dancer before the confusion', () => {
+  const me = { id: 'a', species: 'pidgey', side: 'ally', x: 2, y: 2 };
+  const anim = statusAnim('teeter-dance', { effects: [{ unitId: 'a', effect: 'teeterDance', ok: true }] }, [me]);
+  runFor(anim, 0.5);
+  assert.ok(['Twirl', 'Rotate'].includes(anim.unitPose(me)?.anim));
+});

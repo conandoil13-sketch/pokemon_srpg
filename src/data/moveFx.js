@@ -110,7 +110,7 @@ const AILMENT_FX = {
   toxic: { inflict: spec('nature/acid-splash', { palette: POISON_PAL }, 2, 'front', { life: 0.6 }), loop: spec('status/poisoned', { palette: POISON_PAL, light: 1.5 }) },
   sleep: { loop: spec('status/sleep') },
   freeze: { inflict: spec('ice/frost-nova', { reach: AREA_REACH / 2 }, 2, 'back', { life: 0.8 }), loop: spec('status/frozen') },
-  confusion: { loop: spec('status/confused') },
+  confusion: { inflict: spec('status/confused', { light: 1.5 }, 1.5, 'front', { life: 1.0 }), loop: spec('status/confused') }, // 걸릴 때 어질어질
 };
 AILMENT_FX.infatuation = { inflict: spec('status/charmed', {}, 1, 'front', { life: 1.2 }), loop: AILMENT_FX.confusion.loop }; // 헤롱헤롱: 하트
 export const fxForAilment = (ailment) => AILMENT_FX[ailment] ?? { loop: null };
@@ -158,7 +158,7 @@ export const EFFECT_FX = {
   sacrificeHeal: HEAL_FX, memento: fxOn('status/cursed', { palette: PAL.water }, 1.5), painSplit: fxOn('shadow/soul-drain', {}, 2.5), bellyDrum: spec('pokemon/drum-beat', {}, 1, 'front', { life: 1.3 }),
   acupressure: spec('pokemon/needle-point', {}, 1, 'front', { life: 0.9 }), psychUp: fxOn('arcane/rune-circle', { palette: PAL.arcane }), powerSwap: fxOn('arcane/rune-circle', { palette: PAL.ember }),
   guardSwap: fxOn('arcane/rune-circle', { palette: PAL.ice }), heartSwap: fxOn('arcane/rune-circle', { palette: PAL.candy }), psychoShift: fxOn('arcane/rune-circle', { palette: PAL.neon }),
-  nightmare: spec('pokemon/nightmare-cloud', {}, 1, 'front', { life: 1.3 }), teeterDance: fxOn('status/confused', {}, 1.5), splash: spec('pokemon/splash-hop', {}, 1, 'front', { life: 0.9 }),
+  nightmare: spec('pokemon/nightmare-cloud', {}, 1, 'front', { life: 1.3 }), teeterDance: spec('pickups/collect-burst', { palette: PAL.candy }, 1.6, 'front', { dy: 22 }), splash: spec('pokemon/splash-hop', {}, 1, 'front', { life: 0.9 }), // 흔들흔들댄스: 춤 동작 뒤 반짝 + 걸린 상대마다 어질어질
   counterStance: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5), // 반격 자세
   bide: fxOn('status/rage', {}, 1.5), // 참기
   bind: spec('pokemon/bind-coil', {}, 1, 'front', { life: 1.3 }), // 속박기 (기술별로는 bindFx)

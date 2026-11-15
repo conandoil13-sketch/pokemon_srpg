@@ -5,7 +5,7 @@ import { MOVES } from '../data/moves.js';
 import { TYPE_COLORS } from '../data/types.js';
 import { josa } from '../data/text.js';
 import { TILE } from './tiles.js';
-import { animTiming, hasPmd, DIR } from './sprites.js';
+import { animTiming, hasPmd, DIR, hasAnim } from './sprites.js';
 import { dirFromDelta } from './pmdData.js';
 import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
@@ -310,7 +310,8 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const weatherSteps = wx ? [{ k: 'wcharge', d: 0.6 }, { k: 'wburst', d: BURST_TIME }] : [];
   const push = result.pushed ? [{ k: 'push', d: 0.3 }] : []; // 밀려나며 미끄러짐
   const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const DANCE = move.id === 'teeter-dance'; // 흔들흔들댄스: 빙글빙글 춤춘 뒤 혼란
+  const steps = [{ k: 'act', d: DANCE ? 1.2 : 0.45 }, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
@@ -319,6 +320,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     if (!s) return;
     if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
     if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
+    if (s.efx?.effect === 'painSplit') pain = { at: total, targetId: s.efx.unitId }; // 아픔나누기: 구슬이 닿을 때 둘 다 아파함
     if (LINK_EFFECTS.has(s.efx?.effect)) { const u = get(s.efx.unitId); if (u) spawnSafe(fx, linkFx(s.efx.effect, (attacker.x - u.x) * TILE, (attacker.y - u.y) * TILE), feet(u)); spawnChangeFx(fx, s, result, get); return; } // 주고받는 구슬
     if (result.summoned && s.efx?.effect === 'splash') { const g = get(result.summoned); if (g) spawnSafe(fx, GYARADOS_FX, feet(g)); summonAt = total; spawnChangeFx(fx, s, result, get); return; } // 갸라도스 등장: 물기둥
     if (TOSSED.has(s.efx?.effect) && tossAt === null) { // 압정: 깔린 칸마다 하나씩 던짐
@@ -336,6 +338,8 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
        feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
   }
   let summonAt = null; // 갸라도스: 물기둥이 치솟은 뒤에 보인다
+  let pain = null;
+  const PAIN_HIT = [0.5, 0.95]; // 구슬 도착(0.2+0.3초) 뒤 아파하는 구간
   const laid = (result.trapsLaid ?? []).map((p) => ({ ...p, kind: move.effect })); // 종류까지 (같은 칸의 다른 압정은 숨기지 않음)
   let tossAt = null; // 던지기 시작 시각 (total 기준)
   const burstAt = steps.findIndex((x) => x.k === 'wburst');
@@ -363,6 +367,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     unitPose(u) {
       const s = step();
       if (!s) return null;
+      if (pain && (u === attacker || u.id === pain.targetId)) { const k = total - pain.at; if (k >= PAIN_HIT[0] && k < PAIN_HIT[1]) return { anim: 'Hurt', t: k - PAIN_HIT[0], loop: false, flash: Math.floor(k / 0.06) % 2 === 0 && k < PAIN_HIT[0] + 0.25 }; }
       if (result.summoned && u.id === result.summoned && (summonAt === null || total - summonAt < 1.0)) return { hidden: true }; // 물기둥 속에서 등장
       if (result.pushed && u.id === result.pushed.unitId) { // 밀려난 포켓몬: 원래 칸 → 새 칸
         const pi = steps.findIndex((x) => x.k === 'push'), { from, to } = result.pushed;
@@ -372,6 +377,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
         return { anim: 'Hurt', t, loop: false, dx: (from.x - to.x) * TILE * (1 - k), dy: (from.y - to.y) * TILE * (1 - k) };
       }
       if (u !== attacker) return null;
+      if (DANCE && s.k === 'act') return { anim: hasAnim(u.species, 'Twirl') ? 'Twirl' : 'Rotate', t: total, loop: true, dy: -Math.round(3 * Math.abs(Math.sin(total * 9))) }; // 춤: 돌며 통통
       if (steps.slice(0, i + 1).some((x) => x.selfFaint)) return { hidden: true }; // 저주로 쓰러짐
       const hop = s.k === 'act' ? -Math.round(4 * Math.sin(Math.PI * Math.min(1, t / 0.45))) : 0;
       return { anim: 'Idle', t: total, loop: true, dir: dir ?? undefined, dy: hop };
