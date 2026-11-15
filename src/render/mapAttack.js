@@ -12,6 +12,7 @@ import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
 import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
+import { BURST_TIME, drawBurstRing, drawBurstFlash } from './weatherFx.js';
 import { idleFrameSource } from './sprites.js';
 
 const AUTO = 1.1;
@@ -271,15 +272,23 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const missed = (result.missed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}에게는 맞지 않았다!`), who: get(id), emo: 'Normal' }));
   const healed = result.healed ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(attacker), '은/는')} 체력을 회복했다!`), who: attacker, emo: 'Happy', heal: true }]
     : result.healFailed ? [{ k: 'msg', d: AUTO, text: wrapMessage(result.healFailed === 'full' ? '그러나 HP 가 가득 차 있다!' : '이번 층에서는 더 쓸 수 없다!'), who: attacker, emo: 'Normal' }] : [];
-  const efx = effectSteps(result, get, move.id);
+  const wx = (result.effects ?? []).find((e) => e.effect === 'weather' && e.ok); // 날씨 부르기 성공: 모으기 → 펑 → 날씨
+  const efx = effectSteps(result, get, move.id).map((s) => (wx && s.efx?.effect === 'weather' ? { ...s, efx: null } : s));
+  const weatherSteps = wx ? [{ k: 'wcharge', d: 0.6 }, { k: 'wburst', d: BURST_TIME }] : [];
   const push = result.pushed ? [{ k: 'push', d: 0.3 }] : []; // 밀려나며 미끄러짐
   const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const steps = [{ k: 'act', d: 0.45 }, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
-  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, HEAL_FX, attacker); spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get); }; // 회복: 초록 반짝임
+  const enter = (s) => {
+    if (!s) return;
+    if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
+    if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
+    spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get);
+  };
+  const burstAt = steps.findIndex((x) => x.k === 'wburst');
   return {
     defender: target,
     get done() { return i >= steps.length; },
@@ -290,6 +299,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
     get trapsShown() { return i < steps.length ? result.trapsLaid ?? [] : []; }, // 적이 깐 압정도 까는 동안은 보인다
+    get weatherShown() { return !wx || i >= steps.length ? undefined : i < burstAt ? wx.from : wx.to; }, // 펑 전엔 이전 날씨
     unitPose(u) {
       const s = step();
       if (!s) return null;
@@ -309,10 +319,12 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
       const age = stageAge();
       if (age !== null && step()) drawStagePops(ctx, result.stageChanges, get, age);
       if (step()?.pop) drawStatusPop(ctx, step().pop, get);
+      if (step()?.k === 'wburst') { const c = center(attacker); drawBurstRing(ctx, wx.to, t / BURST_TIME, c.x, c.y); }
     },
     drawScreen(ctx) {
       const s = step();
       if (!s) return;
+      if (s.k === 'wburst') drawBurstFlash(ctx, wx.to, t / BURST_TIME);
       drawMessage(ctx, text, { species: who.species, side: who.side, emotion: emo }, s.k === 'msg' && Math.floor(t * 3) % 2 === 0);
     },
   };

@@ -715,3 +715,23 @@ test('moving an ally shows a destination marker until it arrives', () => {
   assert.ok(run(game, (m) => m === 'action'));
   assert.equal(game.fx.following, 0);
 });
+
+// ---- 2차 변화기 이펙트: 상태 연출 ----
+import { createMapAttack } from '../src/render/mapAttack.js';
+const statusAnim = (moveId, result, units, fx = null) => createMapAttack({ attacker: units[0], defender: units[1] ?? null, move: { ...MV2[moveId], id: moveId }, result: { kind: 'status', stageChanges: [], statusChanges: [], ...result }, lookup: (id) => units.find((u) => u.id === id), fx });
+const runFor = (anim, sec) => { for (let t = 0; t < sec - 1e-9; t += 0.05) anim.update(0.05); };
+test('weather shows the old weather until the screen-wide burst, then the new one', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 };
+  const anim = statusAnim('rain-dance', { effects: [{ unitId: 'a', effect: 'weather', ok: true, from: 'sun', to: 'rain' }] }, [me]);
+  assert.equal(anim.weatherShown, 'sun');
+  runFor(anim, 0.45 + 0.6 - 0.1); assert.equal(anim.weatherShown, 'sun'); // 모으는 중
+  runFor(anim, 0.2); assert.equal(anim.weatherShown, 'rain'); // 펑
+  while (!anim.done) { anim.advance(); anim.update(0.05); }
+  assert.equal(anim.weatherShown, undefined);
+});
+test('a failed weather call has no burst and leaves the weather alone', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 };
+  const anim = statusAnim('rain-dance', { effects: [{ unitId: 'a', effect: 'weather', ok: false, reason: 'already' }] }, [me]);
+  assert.equal(anim.weatherShown, undefined);
+  runFor(anim, 1.2); assert.equal(anim.weatherShown, undefined);
+});

@@ -110,7 +110,7 @@ export function applyEffect(state, user, target, move, rng, weather) {
     case 'bond': // 길동무: 다음 내 편 페이즈 시작까지. 연속 사용 실패
       if (target.bondPrev) return out(false, 'chain');
       target.bond = true; return out(true);
-    case 'weather': { const r = castWeather(state, user, move.id); return out(r.ok, r.reason); }
+    case 'weather': { const r = castWeather(state, user, move.id); return r.ok ? { ...out(true), from: r.from, to: r.to } : out(false, r.reason); }
     default:
       if (AURAS.includes(move.effect) || ZONES.includes(move.effect)) { const r = castField(state, user, move.effect); return out(r.ok, r.reason); } // 오라·장판
       return out(false, 'blocked');

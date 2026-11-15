@@ -330,3 +330,10 @@ test('review fix: a push reports its trap hits and where the target really stopp
   assert.equal(r.pushed.fainted, true);
   assert.equal(r.trapEvents[0].kind, 'spikes');
 });
+
+test('a weather call reports the weather before and after', () => {
+  const { s, a } = field([['squirtle', 1, 1]], [['geodude', 11, 7]]);
+  const e = applyMove(s, a[0].id, 'rain-dance', a[0].id, hit).effects[0];
+  assert.equal(e.from, null);
+  assert.equal(e.to, 'rain');
+});
