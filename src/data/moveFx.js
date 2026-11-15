@@ -139,6 +139,15 @@ export const EFFECT_FX = {
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
+  // 2차 오라: 발밑에서 퍼지는 고리 (종류별 색) · 장판: 방패 / 땅에 번지는 물·흙
+  tailwind: fxOn('ice/frost-nova', { palette: PAL.ice, reach: AREA_REACH }, 2),
+  safeguard: fxOn('ice/frost-nova', { palette: PAL.candy, reach: AREA_REACH }, 2),
+  mist: fxOn('ice/frost-nova', { palette: PAL.bone, reach: AREA_REACH }, 2),
+  luckyChant: fxOn('ice/frost-nova', { palette: PAL.arcane, reach: AREA_REACH }, 2),
+  reflect: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 20 }, 1.5),
+  lightScreen: fxOn('holy/divine-shield', { palette: PAL.gold, radius: 20 }, 1.5),
+  mudSport: fxOn('nature/acid-splash', { palette: PAL.earth }, 2),
+  waterSport: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
 };
 // 같은 효과라도 기술마다 인상이 다른 것: 거미집 = 실로 감은 고치, 블록 = 쌓이는 장난감 벽돌 (검은눈빛은 위 손 그대로)
 const MOVE_EFFECT_FX = {

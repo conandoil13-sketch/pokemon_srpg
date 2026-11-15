@@ -4,6 +4,7 @@ import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
 import { weatherDamageMult, weatherAccuracy } from './weather.js';
+import { fieldDamageMult } from './field.js';
 import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult } from './abilities.js';
 
 
@@ -74,7 +75,7 @@ export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1,
   const crit = hit && rng() < critRate(attacker, defender, move);
   const roll = 0.85 + rng() * 0.15;
   if (!hit) return { hit, crit: false, typeMult, damage: 0 };
-  const damage = Math.max(1, Math.floor(raw * (crit ? critMult(attacker) : 1) * roll));
+  const damage = Math.max(1, Math.floor(raw * (crit ? critMult(attacker) : 1) * roll * fieldDamageMult(attacker, defender, move, crit))); // 리플렉터·빛의장막·흙놀이·물놀이
   return { hit, crit, typeMult, damage };
 }
 
@@ -82,7 +83,7 @@ export function expectedDamage(attacker, defender, move, defTile, spread = 1, we
   const acc = hitChance(attacker, defender, move, defTile, weather) / 100;
   if (move.fixedDamage) return fixedDamage(attacker, defender, move, weather) * acc;
   const { raw } = baseDamage(attacker, defender, move, defTile, weather);
-  return raw * spread * 0.925 * acc * avgHits(move); // 연속 공격은 평균 타수
+  return raw * spread * 0.925 * acc * avgHits(move) * fieldDamageMult(attacker, defender, move); // 연속 공격은 평균 타수
 }
 
 // 혼란 자해: 위력 40 · 타입 없음 · 물리, 자기 공격/방어 랭크와 화상 반영, 난수·급소 없음

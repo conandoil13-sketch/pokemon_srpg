@@ -9,7 +9,11 @@ export const EFFECT_MOVES = {
   foresight: 'identNormal', 'odor-sleuth': 'identNormal', 'miracle-eye': 'identPsychic',
   encore: 'encore', disable: 'disable', torment: 'torment', 'heal-block': 'healBlock',
   'gastro-acid': 'abilityOff', 'worry-seed': 'worrySeed', 'destiny-bond': 'bond',
+  // 2차: 오라 (쓴 포켓몬 주변 2칸, 따라다님) · 장판 (쓴 자리 주변 2칸, 고정)
+  tailwind: 'tailwind', safeguard: 'safeguard', mist: 'mist', 'lucky-chant': 'luckyChant',
+  reflect: 'reflect', 'light-screen': 'lightScreen', 'mud-sport': 'mudSport', 'water-sport': 'waterSport',
 };
+const SELF = { kind: 'self', range: [0, 0], area: false };
 
 // 효과 없이 지금 변화기 규칙(랭크 + 상태이상)으로 충분해서 배울 수 있게만 하는 기술
 export const PLAIN_MOVES = ['swagger', 'flatter'];
@@ -17,5 +21,6 @@ export const PLAIN_MOVES = ['swagger', 'flatter'];
 // PokeAPI 대상 덮어쓰기: 방해·견제는 사거리 1~2 적 하나
 export const KIND_OVERRIDES = {
   'heal-block': { kind: 'enemy', range: [1, 2], area: false },
-  curse: { type: 'ghost', kind: 'self', range: [0, 0] }, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
+  curse: { type: 'ghost', kind: 'self', range: [0, 0] },
+  tailwind: SELF, safeguard: SELF, mist: SELF, 'lucky-chant': SELF, reflect: SELF, 'light-screen': SELF, 'mud-sport': SELF, 'water-sport': SELF, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
 };

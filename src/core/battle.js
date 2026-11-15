@@ -14,6 +14,7 @@ import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILME
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
+import { newField, refreshField, tickField } from './field.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -77,9 +78,11 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
     weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
+    ...newField(), // 오라 · 장판 · 압정 · 날씨 부르기 (층마다 새로)
   };
   floorStartAbilities(state);
   for (const u of units) u.fieldWeather = effectiveWeather(state); // 날씨 특성(쓱쓱 등)이 처음부터 이동력에 반영
+  refreshField(state);
   return state;
 
 }
@@ -114,6 +117,7 @@ export function moveUnit(state, id, x, y, cost = 0) {
   const stayed = u.x === x && u.y === y;
   u.spent = (u.spent ?? 0) + cost;
   u.x = x; u.y = y; u.moved = true;
+  refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
   state.log.arriveAbilityEvents = [];
   // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
   if (has(u, 'intimidate') && !stayed) {
@@ -168,6 +172,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
     (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.suppressedAbility ?? d.ability, boss: !!d.boss }); // 메타몽 캡슐 (위액으로 꺼졌으면 원래 특성)
   }
   if (d.side === 'ally' && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
+  refreshField(state); // 오라 주인이 쓰러지면 오라도 사라진다
   return expGained;
 }
 
@@ -229,6 +234,7 @@ const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
 export function applyMove(state, userId, moveId, aim, rng) {
   const W = effectiveWeather(state); // 에어록·날씨부정 반영
   for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 등 스피드·이동력 특성용
+  refreshField(state);
   // 플러스·마이너스 / 플라워기프트: 옆 동료를 보고 켠다 (데미지 계산이 읽음)
   const nextTo = (u, pred) => state.units.some((o) => o !== u && o.side === u.side && dist(o, u) === 1 && pred(o));
   for (const u of state.units) {
@@ -515,6 +521,7 @@ export function endPhase(state, rng = Math.random) {
     }
   }
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
+  tickField(state, ending, events); // 그 편이 놓은 오라·장판
   checkResult(state);
   state.log.expired = [];
   for (const u of state.units) {
