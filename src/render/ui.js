@@ -54,6 +54,7 @@ export function volatileTags(unit) {
   if (unit.guard === 'endure') out.push('버티기');
   for (const [k, name] of Object.entries(TAG_TURNS)) if (unit[k] > 0) out.push(`${name}${unit[k]}`);
   for (const [k, name] of Object.entries(TAG_LOCK)) if (unit[k]) out.push(`${name}${unit[k].turns}`);
+  if (unit.bound) out.push(`속박${unit.bound.turns}`);
   for (const [k, name] of Object.entries(TAG_FLAG)) if (unit[k] && !out.includes(name)) out.push(name);
   return out;
 }

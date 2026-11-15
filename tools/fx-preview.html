@@ -68,7 +68,8 @@
 <div class="tablewrap"><table id="leftTable"></table></div>
 <script type="module">
 import { createFxManager } from '../src/render/fx.js';
-import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx } from '../src/data/moveFx.js';
+import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx } from '../src/data/moveFx.js';
+import { BIND_MOVES } from '../src/core/volatile.js';
 import { drawWeather, drawWeatherBurst, BURST_TIME } from '../src/render/weatherFx.js';
 import { WEATHER_OF } from '../src/core/field.js';
 import { actorFor, bodyAt } from '../src/render/fxActor.js';
@@ -149,6 +150,7 @@ function playMove() {
   if (spec.hit) later(() => fx.spawn(spec.hit, T, { dir: 'right', actor: foeActor() }), hitAt);
   if (spec.hit2) later(() => fx.spawn(spec.hit2, T, { dir: 'right', actor: foeActor() }), hitAt + 80);
   if (spec.burst) later(() => fx.spawn(spec.burst, T, { dir: 'right' }), hitAt);
+  if (BIND_MOVES.has(mv.id)) later(() => fx.spawn(bindFx(mv.id), T, { actor: foeActor() }), hitAt + 400); // 속박: 맞은 뒤 감김
   $('info').textContent = `${mv.name} (${mv.id}) · ${mv.type} · 위력 ${mv.power ?? '-'} · 계열 ${familyOf(mv) ?? '-'} → ${Object.entries(spec).map(([k, v]) => `${k}: ${v.id}`).join(', ')}`;
 }
 $('playMove').onclick = playMove;

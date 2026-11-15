@@ -56,7 +56,7 @@ export function inflict(unit, ailment, rng, move, weather = null, opts = {}) {
 export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 
 export const moveBudget = (unit) => {
-  if (unit.noMove > 0 || unit.rooted) return 0; // 검은눈빛·블록·거미집·뿌리박기
+  if (unit.noMove > 0 || unit.rooted || unit.bound) return 0; // 검은눈빛·블록·거미집·뿌리박기·속박
   const m = SPECIES[unit.species].move;
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
   if (unit.trapped) return 1; // 개미지옥·그림자밟기·자력

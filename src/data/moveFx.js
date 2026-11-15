@@ -3,6 +3,7 @@
 import { PAL } from '../vendor/pixelfx/core/index.js';
 import OVERRIDES from './moveFx.json' with { type: 'json' };
 import { familyOf } from './moveFamilies.js';
+import { MOVES } from './moves.js';
 
 export const TYPE_PALETTE = {
   normal: 'bone', fire: 'fire', water: 'water', electric: 'volt', grass: 'leaf', ice: 'ice', fighting: 'ember',
@@ -149,6 +150,7 @@ export const EFFECT_FX = {
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
+  bind: spec('pokemon/bind-coil', {}, 1, 'front', { life: 1.3 }), // 속박기 (기술별로는 bindFx)
   // 2차 오라: 발밑에서 퍼지는 고리 (종류별 색) · 장판: 방패 / 땅에 번지는 물·흙
   tailwind: spec('pokemon/tailwind-gust', {}, 1, 'back', { life: 1.3 }), // 주변 2칸에서 바람이 불어 들어옴
   safeguard: spec('pokemon/veil-dome', {}, 1, 'front', { life: 1.4 }), // 분홍 반투명 막
@@ -173,7 +175,14 @@ const MOVE_EFFECT_FX = {
   sandstorm: fxOn('arcane/spell-charge', { palette: PAL.earth }, 1.5),
   hail: fxOn('arcane/spell-charge', { palette: PAL.ice }, 1.5),
 };
-export const fxForEffect = (effect, moveId) => MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect];
+// 속박기: 감는 기술은 몸을 감는 띠, 가두는 기술은 타입 색 소용돌이
+const COIL_MOVES = new Set(['bind', 'wrap', 'clamp']);
+export const bindFx = (moveId) => {
+  const type = MOVES[moveId]?.type ?? 'normal';
+  const palette = moveId === 'magma-storm' ? PAL.lava : moveId === 'clamp' ? PAL.water : pal(type);
+  return spec(COIL_MOVES.has(moveId) ? 'pokemon/bind-coil' : 'pokemon/bind-vortex', { palette }, 1, 'front', { life: 1.3 });
+};
+export const fxForEffect = (effect, moveId) => (effect === 'bind' && moveId ? bindFx(moveId) : MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect]);
 // 밀어내기: 쓴 포켓몬 → 대상 쪽. 날려버리기는 대상까지 닿는 돌풍, 울부짖기는 음파 (tiles: 대상까지 칸 수)
 export const pushFx = (moveId, tiles) => (moveId === 'whirlwind'
   ? spec('pokemon/gust-blast', { reach: Math.max(1, tiles) * 24 }, 1, 'front', { life: 0.8 })

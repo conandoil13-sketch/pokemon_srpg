@@ -1,6 +1,7 @@
 // 맵 위 공격 연출 (PMD식). 로직 결과(result)를 재생만 한다.
 import { PAL } from '../vendor/pixelfx/core/index.js';
 import { SPECIES } from '../data/species.js';
+import { MOVES } from '../data/moves.js';
 import { TYPE_COLORS } from '../data/types.js';
 import { josa } from '../data/text.js';
 import { TILE } from './tiles.js';
@@ -49,6 +50,9 @@ const EFFECT_TEXT = {
   spikes: () => '발밑에 압정이 뿌려졌다!', toxicSpikes: () => '발밑에 독압정이 뿌려졌다!',
   haze: () => '모든 랭크 변화가 원래대로 돌아왔다!',
 };
+// 속박기 걸림 대사: 감는 기술은 "묶였다", 가두는 기술은 "갇혔다"
+const COILS = new Set(['bind', 'wrap', 'clamp']);
+export const bindLine = (name, moveId) => `${josa(name, '은/는')} ${MOVES[moveId].name}에 ${COILS.has(moveId) ? '묶였다' : '갇혔다'}!`;
 export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = {
@@ -82,6 +86,7 @@ function effectLines(result, get, moveId = null) {
     say(u, `${W_(label(u), '은/는')} ${TRAP_LINE[e.kind]}`);
     if (e.fainted) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, pushFaint: true });
   }
+  for (const b of result.unbound ?? []) { const u = get(b.unitId); if (u) say(u, `${W_(label(u), '은/는')} ${MOVES[b.moveId].name}에서 풀려났다!`); } // 밀어내기로 속박이 풀림
   if (result.selfFainted) { const u = get(result.selfFainted); if (u) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, selfFaint: true }); } // 고스트 저주
   return out;
 }
@@ -407,6 +412,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   if (result.drained < 0) after.push({ text: `${josa(label(attacker), '은/는')} 해감액을 흡수해 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   if (result.recoil > 0) after.push({ text: `${josa(label(attacker), '은/는')} 반동으로 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   for (const id of result.flinched ?? []) { const u = get(id); if (u) after.push({ text: `${josa(label(u), '은/는')} 풀이 죽었다!`, who: u, emo: 'Pain' }); }
+  for (const b of result.bound ?? []) { const u = get(b.unitId); if (u) after.push({ text: bindLine(label(u), b.moveId), who: u, emo: 'Pain', effect: 'bind', moveId: b.moveId }); }
   const bonded = result.bond?.includes(attacker.id) ? defenders.find((d) => hitOf(d)?.fainted) : null; // 길동무로 같이 쓰러짐
   if (bonded) after.push({ text: `${josa(label(bonded), '은/는')} 상대를 길동무로 삼았다!`, who: bonded, emo: 'Pain', effect: 'bond' });
   const steps = [
@@ -417,7 +423,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
-    ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain, efx: m.effect ? { effect: m.effect, unitId: m.who.id } : null })),
+    ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain, efx: m.effect ? { effect: m.effect, unitId: m.who.id, moveId: m.moveId ?? null } : null })),
     ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
