@@ -455,6 +455,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const breaksDef = has(a, 'mold-breaker');
   let dealt = 0; // 실제로 깎인 HP 합 (흡수·반동 기준)
   const flinched = [], bound = [], screensBroken = [];
+  let countered = null;
   if (targets.length && move.power) a.ncTouched = true; // 자연회복: 공격함
   const flinchChance = move.flinchChance || (has(a, 'stench') && move.power ? STENCH_FLINCH : 0); // 악취: 풀죽음 10%
   if (move.id === 'brick-break') { // 깨뜨리다: 피해 전에 대상을 덮는 상대 편 장벽을 부숨
@@ -481,6 +482,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (r.absorbed) absorb(d, r.absorbed);
       if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
       if (r.damage > 0) d.ncTouched = true; // 자연회복: 맞음
+      if (r.damage > 0 && d.bide && d !== a) d.bide.stored += Math.min(r.damage, d.hp); // 참기: 받은 피해 모음
       d.hp = Math.max(0, d.hp - r.damage);
       const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김
       if (endured) d.hp = 1;
@@ -489,6 +491,13 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (k === 0 && d.hp === 0 && hpBefore === d.maxHp && has(d, 'sturdy') && !d.sturdyUsed && !breaksDef) { d.hp = 1; d.sturdyUsed = true; abilityEvents.push({ unitId: d.id, ability: 'sturdy' }); }
       dealt += hpBefore - d.hp;
       fainted = d.hp === 0;
+      // 반격 자세: 맞고 버텼으면 때린 상대에게 바로 돌려줌 (한 번)
+      if (!fainted && d.counter && d !== a && hpBefore - d.hp > 0 && (d.counter.cat === 'both' || d.counter.cat === move.category) && state.units.includes(a)) {
+        const back = Math.min(a.hp, Math.max(1, Math.floor((hpBefore - d.hp) * d.counter.mult)));
+        a.hp -= back; d.counter = null;
+        countered = { unitId: d.id, damage: back };
+        if (a.hp === 0) knockOut(state, a, null);
+      }
       if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
       else if (move.type === 'fire' && r.damage > 0 && d.status === 'freeze') { cure(d); thawed.push(d.id); } // 불꽃 공격에 맞으면 녹는다
       landed ||= r.hit && r.typeMult > 0;
@@ -605,7 +614,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];
@@ -712,6 +721,20 @@ export function endPhase(state, rng = Math.random) {
     bindCheck(state, u, events); // 속박: 묶은 쪽이 멀어졌으면 풀림
     u.spent = 0; u.retreatReady = false; u.retreated = false; // 치고 빠지기
     if (u.flinch) { u.flinch = false; u.sealed = true; events.push({ unitId: u.id, kind: 'sealed' }); } // 풀죽음 → 이번 차례 기술 봉인
+    u.counter = null; // 반격 자세는 다음 자기 차례까지
+    if (u.bide && --u.bide.turns <= 0) { // 참기 방출: 모은 피해 2배를 주변 1칸 상대에게
+      const dmg = u.bide.stored * 2;
+      u.bide = null; u.acted = true; u.moved = true;
+      if (dmg > 0) {
+        events.push({ unitId: u.id, kind: 'bideRelease' });
+        for (const o of state.units.filter((o) => o.side !== u.side && dist(o, u) === 1)) {
+          const hpBefore = o.hp, damage = Math.min(o.hp, dmg);
+          o.hp -= damage;
+          events.push({ unitId: o.id, kind: 'bideHit', damage, hpBefore, maxHp: o.maxHp, x: o.x, y: o.y });
+          if (o.hp === 0) { knockOut(state, o, u); events.push({ unitId: o.id, kind: 'fainted' }); }
+        }
+      } else events.push({ unitId: u.id, kind: 'bideFail' });
+    } else if (u.bide) u.sealed = true; // 참는 중: 기술 없이 이동만
     if (u.recharge) { events.push({ unitId: u.id, kind: 'recharge', ...(u.recharge === 'hide' ? { hide: true } : {}) }); u.recharge = false; u.sealed = true; } // 파괴광선류 반동 · 숨기 뒤
     u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
     u.trapped = state.units.some((o) => o.side !== u.side && dist(o, u) === 1 && traps(o, u)); // 묶기

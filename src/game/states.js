@@ -118,6 +118,9 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
       : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
       : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
+      : e.kind === 'bideRelease' ? `${josa(who(e.unitId), '은/는')} 참았던 힘을 터뜨렸다!`
+      : e.kind === 'bideHit' ? `${josa(who(e.unitId), '은/는')} 큰 피해를 입었다!`
+      : e.kind === 'bideFail' ? `${who(e.unitId)}의 참기는 아무것도 모으지 못했다...`
       : e.kind === 'naturalCure' ? `${josa(who(e.unitId), '은/는')} 자연회복으로 상태이상이 나았다!`
       : e.kind === 'recharge' ? `${josa(who(e.unitId), '은/는')} ${e.hide ? '자세를 가다듬느라 기술을 쓸 수 없다!' : '반동으로 기술을 쓸 수 없다!'}`
       : e.kind === 'bind' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}의 데미지를 입고 있다!`
