@@ -9,6 +9,7 @@ export const TAUNT_TURNS = 3, NO_MOVE_TURNS = 2, LOCK_TURNS = 3; // 도발 · �
 // 속박기: 맞고 살아남으면 3턴 이동 불가 + 페이즈 끝 1/8. 묶은 쪽이 쓰러지거나 기술 사거리보다 멀어지면 풀림
 export const BIND_MOVES = new Set(['bind', 'clamp', 'fire-spin', 'magma-storm', 'sand-tomb', 'whirlpool', 'wrap']);
 export const BIND_TURNS = 3;
+export const COUNTER_KIND = { counter: { cat: 'physical', mult: 2 }, 'mirror-coat': { cat: 'special', mult: 2 }, 'metal-burst': { cat: 'both', mult: 1.5 } };
 export const YAWN_RANGE = 3; // 하품: 쓴 포켓몬에게서 3칸 이내면 잠듦, 4칸 이상이면 풀림
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
@@ -16,7 +17,7 @@ export const newVolatile = () => ({
   guard: null, guardPrev: false, bond: false, bondPrev: false,
   focusEnergy: false, aquaRing: false, rooted: false, cursed: false,
   leechBy: null, yawnBy: null, helped: false, identNormal: false, identPsychic: false, abilityOff: false,
-  taunt: 0, encore: null, disable: null, torment: 0, healBlock: 0, noMove: 0, lastMove: null, bound: null,
+  taunt: 0, encore: null, disable: null, torment: 0, healBlock: 0, noMove: 0, lastMove: null, bound: null, counter: null, bide: null,
 });
 
 // 쓰는 유닛 기준 기술. 저주: 고스트면 적 하나(사거리 1~2), 아니면 자신 랭크(스피드 −1·공격 +1·방어 +1)
@@ -55,6 +56,11 @@ export function applyEffect(state, user, target, move, rng, weather) {
     case 'noMove':
       if (target.noMove > 0) return out(false, 'already');
       target.noMove = NO_MOVE_TURNS; return out(true);
+    case 'counterStance': // 카운터(물리 2배)·미러코트(특수 2배)·메탈버스트(둘 다 1.5배): 다음 자기 차례까지, 한 번
+      target.counter = COUNTER_KIND[move.id]; return out(true);
+    case 'bide': // 참기: 상대 차례 2번 동안 받은 피해를 모아 2배로 주변에
+      if (target.bide) return out(false, 'already');
+      target.bide = { stored: 0, turns: 2 }; return out(true);
     case 'protect': case 'endure': // 다음 내 편 페이즈 시작까지. 바로 앞 차례에 썼으면 실패
       if (target.guardPrev) return out(false, 'chain');
       target.guard = move.effect; return out(true);

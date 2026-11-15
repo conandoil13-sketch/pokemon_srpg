@@ -49,6 +49,8 @@ const EFFECT_TEXT = {
   reflect: () => '리플렉터로 물리 공격에 강해졌다!', lightScreen: () => '빛의장막으로 특수 공격에 강해졌다!', mudSport: () => '전기의 위력이 약해졌다!', waterSport: () => '불꽃의 위력이 약해졌다!',
   spikes: () => '발밑에 압정이 뿌려졌다!', toxicSpikes: () => '발밑에 독압정이 뿌려졌다!',
   haze: () => '모든 랭크 변화가 원래대로 돌아왔다!',
+  counterStance: (w) => `${W_(w, '은/는')} 반격 자세를 취했다!`,
+  bide: (w) => `${W_(w, '은/는')} 참기 시작했다!`,
 };
 // 속박기 걸림 대사: 감는 기술은 "묶였다", 가두는 기술은 "갇혔다"
 const COILS = new Set(['bind', 'wrap', 'clamp']);
@@ -61,6 +63,7 @@ export function attackExtraLines(result, attacker) {
   if (result.spun?.cleared) out.push({ text: '압정이 날아갔다!', who: attacker, emo: 'Happy' });
   const HIDE_LINE = { fly: '하늘 높이 날아올랐다!', bounce: '높이 뛰어올랐다!', dig: '땅속으로 파고들었다!', dive: '물속으로 잠수했다!', 'shadow-force': '모습을 감췄다!' };
   if (attacker.burrow && HIDE_LINE[attacker.burrow.moveId]) out.push({ text: `${josa(label(attacker), '은/는')} ${HIDE_LINE[attacker.burrow.moveId]}`, who: attacker, emo: 'Determined' });
+  if (result.countered) out.push({ text: `${josa(label(attacker), '은/는')} 반격을 받았다!`, who: attacker, emo: 'Pain' }); // 카운터·미러코트·메탈버스트
   if (result.crash > 0) out.push({ text: `${josa(label(attacker), '은/는')} 땅에 부딪혔다!`, who: attacker, emo: 'Pain' });
   return out;
 }
@@ -444,7 +447,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
     ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain, efx: m.effect ? { effect: m.effect, unitId: m.who.id, moveId: m.moveId ?? null } : null })),
-    ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0 || result.crash > 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
+    ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0 || result.crash > 0 || result.countered) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';

@@ -284,3 +284,41 @@ test('present can heal, and OHKO on a boss gets its own line', () => {
   const k = duel('pidgey', 'geodude', { ally: { level: 99 }, foe: { boss: true } });
   assert.ok(applyMove(k.s, k.a.id, 'guillotine', k.f.id, hit).hits[0].ohkoBoss);
 });
+
+// ---- 반격 기술 ----
+test('counter, mirror coat and metal burst strike back once at whoever hits them', () => {
+  const c = duel('machop', 'rattata', { ally: { hp: 999, maxHp: 999 } });
+  applyMove(c.s, c.a.id, 'counter', c.a.id, hit);
+  assert.ok(c.a.counter);
+  const hp = c.f.hp, r = applyMove(c.s, c.f.id, 'tackle', c.a.id, () => 0.5), dealt = r.hits[0].damage;
+  assert.deepEqual(r.countered, { unitId: c.a.id, damage: Math.min(hp, dealt * 2) });
+  assert.equal(c.a.counter, null);
+  const m = duel('machop', 'rattata', { ally: { hp: 999, maxHp: 999 } });
+  applyMove(m.s, m.a.id, 'mirror-coat', m.a.id, hit);
+  assert.equal(applyMove(m.s, m.f.id, 'tackle', m.a.id, () => 0.5).countered, null); // 물리엔 안 됨
+  const b = duel('machop', 'rattata', { ally: { hp: 999, maxHp: 999 } });
+  applyMove(b.s, b.a.id, 'metal-burst', b.a.id, hit);
+  const rb = applyMove(b.s, b.f.id, 'tackle', b.a.id, () => 0.5);
+  assert.equal(rb.countered.damage, Math.min(b.f.hp + rb.countered.damage, Math.floor(rb.hits[0].damage * 1.5)));
+});
+test('the counter stance ends at the user\'s next phase', () => {
+  const { s, a } = duel('machop', 'rattata');
+  applyMove(s, a.id, 'counter', a.id, hit);
+  round(s);
+  assert.equal(a.counter, null);
+});
+test('bide stores two foe phases of damage and releases double around it', () => {
+  const { s, a, f } = duel('rattata', 'geodude', { ally: { hp: 999, maxHp: 999 }, foe: { hp: 999, maxHp: 999 } });
+  applyMove(s, a.id, 'bide', a.id, hit);
+  endPhase(s, () => 0.9); // 아군 끝
+  const r1 = applyMove(s, f.id, 'tackle', a.id, () => 0.5);
+  endPhase(s, () => 0.9); // 적 끝 → 아군 시작: 아직 참는 중
+  assert.equal(a.sealed, true);
+  endPhase(s, () => 0.9);
+  const r2 = applyMove(s, f.id, 'tackle', a.id, () => 0.5);
+  const hp = f.hp;
+  endPhase(s, () => 0.9); // 아군 시작: 방출
+  assert.equal(hp - f.hp, 2 * (r1.hits[0].damage + r2.hits[0].damage));
+  assert.ok(s.log.statusEvents.some((e) => e.kind === 'bideRelease'));
+  assert.equal(a.bide, null);
+});

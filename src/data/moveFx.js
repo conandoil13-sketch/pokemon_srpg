@@ -150,6 +150,8 @@ export const EFFECT_FX = {
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
+  counterStance: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5), // 반격 자세
+  bide: fxOn('status/rage', {}, 1.5), // 참기
   bind: spec('pokemon/bind-coil', {}, 1, 'front', { life: 1.3 }), // 속박기 (기술별로는 bindFx)
   // 2차 오라: 발밑에서 퍼지는 고리 (종류별 색) · 장판: 방패 / 땅에 번지는 물·흙
   tailwind: spec('pokemon/tailwind-gust', {}, 1, 'back', { life: 1.3 }), // 주변 2칸에서 바람이 불어 들어옴
