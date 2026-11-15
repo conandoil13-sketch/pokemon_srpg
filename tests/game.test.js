@@ -751,3 +751,14 @@ test('hidden trap tiles are not drawn', () => {
   const st = { spikes: [{ x: 1, y: 1, kind: 'spikes', side: 'ally', revealed: false }, { x: 2, y: 1, kind: 'spikes', side: 'ally', revealed: false }] };
   assert.deepEqual(drawTraps(ctx, st, [], [{ x: 2, y: 1 }]).map((t) => [t.x, t.y]), [[1, 1]]);
 });
+
+test('push moves blow toward the target even when it does not budge', () => {
+  const made = [];
+  const fx = { spawn: (spec, at, o) => { made.push({ id: spec.id, dir: o?.dir }); return {}; } };
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 }, foe = { id: 'e', species: 'geodude', side: 'enemy', x: 2, y: 4 };
+  statusAnim('whirlwind', { effects: [{ unitId: 'e', effect: 'push', ok: false, reason: 'immune' }] }, [me, foe], fx);
+  assert.deepEqual(made.find((m) => m.id === 'pokemon/gust-blast'), { id: 'pokemon/gust-blast', dir: 'down' });
+  made.length = 0;
+  statusAnim('roar', { effects: [{ unitId: 'e', effect: 'push', ok: true }], pushed: { unitId: 'e', from: { x: 4, y: 2 }, to: { x: 7, y: 2 }, path: [] } }, [me, foe], fx);
+  assert.deepEqual(made.find((m) => m.id === 'pokemon/sound-wave'), { id: 'pokemon/sound-wave', dir: 'right' }); // 밀린 칸의 원래 위치 쪽
+});

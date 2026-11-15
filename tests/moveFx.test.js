@@ -134,3 +134,10 @@ test('spikes are tossed one by one, toxic spikes in purple', () => {
   assert.equal(fxForEffect('spikes', 'spikes').id, 'pokemon/caltrop-toss');
   assert.ok(TOSS_FLIGHT > 0 && TOSS_GAP > 0);
 });
+
+import { pushFx } from '../src/data/moveFx.js';
+test('whirlwind is a gust that reaches the target, roar keeps the sound wave', () => {
+  assert.equal(pushFx('whirlwind', 2).id, 'pokemon/gust-blast');
+  assert.equal(pushFx('whirlwind', 2).opts.reach, 48);
+  assert.equal(pushFx('roar', 1).id, 'pokemon/sound-wave');
+});

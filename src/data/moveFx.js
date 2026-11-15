@@ -174,3 +174,7 @@ const MOVE_EFFECT_FX = {
   hail: fxOn('arcane/spell-charge', { palette: PAL.ice }, 1.5),
 };
 export const fxForEffect = (effect, moveId) => MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect];
+// 밀어내기: 쓴 포켓몬 → 대상 쪽. 날려버리기는 대상까지 닿는 돌풍, 울부짖기는 음파 (tiles: 대상까지 칸 수)
+export const pushFx = (moveId, tiles) => (moveId === 'whirlwind'
+  ? spec('pokemon/gust-blast', { reach: Math.max(1, tiles) * 24 }, 1, 'front', { life: 0.8 })
+  : EFFECT_FX.push);

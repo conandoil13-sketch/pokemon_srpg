@@ -10,7 +10,7 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
 import { BURST_TIME, drawBurstRing, drawBurstFlash } from './weatherFx.js';
 import { idleFrameSource } from './sprites.js';
@@ -296,6 +296,10 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     }
     spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get);
   };
+  if (move.effect === 'push') { // 울부짖기·날려버리기: 대상(밀렸으면 원래 칸) 쪽으로 바로
+    const to = result.pushed?.from ?? (defender && defender !== attacker ? defender : null);
+    if (to) spawnSafe(fx, pushFx(move.id, Math.abs(to.x - attacker.x) + Math.abs(to.y - attacker.y)), feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
+  }
   const laid = result.trapsLaid ?? [];
   let tossAt = null; // 던지기 시작 시각 (total 기준)
   const burstAt = steps.findIndex((x) => x.k === 'wburst');
