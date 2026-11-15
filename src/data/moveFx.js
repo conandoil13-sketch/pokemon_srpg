@@ -190,11 +190,11 @@ const HIDE_FX = { fly: 'pokemon/hide-sky', bounce: 'pokemon/hide-sky', dig: 'pok
 const LINK = {
   powerSwap: ['swap', ['#3a0a0a', '#8a1a1a', '#e04040', '#ff9a8a', '#ffe0d8']], guardSwap: ['swap', ['#06143a', '#1a3a8a', '#3a7ae0', '#8ac0ff', '#e0f0ff']],
   heartSwap: ['swap', ['#3a0a2a', '#8a1a5a', '#e04aa0', '#ff9ad0', '#ffe0f2']], psychUp: ['take', ['#1e0a3a', '#4a1a8a', '#8a4ae0', '#c49aff', '#f0e4ff']],
-  psychoShift: ['give', ['#2a1a04', '#7a4a10', '#e09a28', '#ffd070', '#fff4d0']], painSplit: ['swap', ['#2a0404', '#7a0a10', '#d01a2a', '#ff6a6a', '#ffd0d0']],
+  psychoShift: ['give', ['#2a1a04', '#7a4a10', '#e09a28', '#ffd070', '#fff4d0']], painSplit: ['swap', ['#2a0404', '#7a0a10', '#d01a2a', '#ff6a6a', '#ffd0d0'], { fly: 0.3, hurt: true }], // 빠르게 주고받고 둘 다 맞음
   memento: ['give', ['#06040a', '#1a1424', '#3a2e4e', '#6a5a8a', '#b0a4d0']],
 };
 export const LINK_EFFECTS = new Set(Object.keys(LINK));
-export const linkFx = (effect, fromX, fromY) => spec('pokemon/link-orbs', { mode: LINK[effect][0], palette: LINK[effect][1], fromX, fromY }, 1, 'front', { life: 1.2 });
+export const linkFx = (effect, fromX, fromY) => spec('pokemon/link-orbs', { mode: LINK[effect][0], palette: LINK[effect][1], fromX, fromY, ...(LINK[effect][2] ?? {}) }, 1, 'front', { life: 1.2 });
 export const PRESENT_FX = spec('pokemon/present-box', {}, 1, 'front', { life: 1.3 });
 export const GYARADOS_FX = spec('pokemon/gyarados-burst', {}, 1, 'front', { life: 1.9 });
 const MOVE_EFFECT_FX = {

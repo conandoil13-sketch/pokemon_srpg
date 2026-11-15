@@ -162,6 +162,8 @@ import { LINK_EFFECTS, linkFx } from '../src/data/moveFx.js';
 test('swap-type moves use link orbs; other recent status moves have their own effect', () => {
   for (const e of ['powerSwap', 'guardSwap', 'heartSwap', 'psychUp', 'psychoShift', 'painSplit', 'memento']) assert.ok(LINK_EFFECTS.has(e), e);
   assert.equal(linkFx('psychUp', -48, 0).opts.mode, 'take');
+  assert.equal(linkFx('painSplit', -48, 0).opts.hurt, true);
+  assert.ok(linkFx('painSplit', -48, 0).opts.fly < 0.7); // 파워스왑(기본 0.7)보다 빠름
   assert.equal(fxForEffect('stockpile', 'stockpile').id, 'pokemon/stockpile-gulp');
   assert.equal(fxForEffect('bellyDrum', 'belly-drum').id, 'pokemon/drum-beat');
   assert.equal(fxForEffect('wish', 'wish').id, 'pokemon/wish-star');
