@@ -165,7 +165,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   else if (reward) awardShare(state, d);
   if (reward && d.side === 'enemy' && (!by || by.side === 'ally')) {
     state.log.coins += 3 + Math.floor(d.level / 3);
-    (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.ability, boss: !!d.boss }); // 메타몽 캡슐
+    (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.suppressedAbility ?? d.ability, boss: !!d.boss }); // 메타몽 캡슐 (위액으로 꺼졌으면 원래 특성)
   }
   if (d.side === 'ally' && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
   return expGained;
@@ -251,7 +251,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const moldBreaker = has(a, 'mold-breaker'); // 틀깨기: 상대의 방어 특성(클리어바디·유연·습기 …) 무시
   // 특성 흡수 결과 적용: 회복·랭크·타오르는불꽃
   const absorb = (u, ab) => {
-    if (ab.heal) u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * ab.heal)));
+    if (ab.heal && canHeal(u)) u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * ab.heal)));
     if (ab.boost) for (const [k, v] of Object.entries(ab.boost)) changeStats(u, [{ stat: Object.keys(API_STAT).find((s) => API_STAT[s] === k), change: v }], stageChanges);
     if (ab.flashFire) u.flashFire = true;
     abilityEvents.push({ unitId: u.id, ability: ab.ability });
@@ -322,8 +322,9 @@ export function applyMove(state, userId, moveId, aim, rng) {
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
-    if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); } // 고스트 저주로 쓰러짐
-    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds };
+    let selfFainted = null;
+    if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); selfFainted = a.id; } // 고스트 저주로 쓰러짐
+    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...(selfFainted ? { selfFainted } : {}) };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번

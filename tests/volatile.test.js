@@ -435,3 +435,24 @@ test('destiny bond takes the attacker down, once, not a boss', () => {
   endPhase(p.s);
   assert.ok(p.s.units.includes(p.f));
 });
+
+test('review fix: gastro acid turns off abilities read directly (levitate, insomnia, static)', () => {
+  const g = duel('grimer', 'gastly', { foe: { ability: 'levitate', hp: 999, maxHp: 999 } });
+  applyMove(g.s, g.a.id, 'gastro-acid', g.f.id, hit);
+  g.a.acted = false;
+  assert.ok(applyMove(g.s, g.a.id, 'mud-slap', g.f.id, hit).damage > 0);
+  const i = duel('slowpoke', 'hoothoot', { fx: 3, fy: 1, foe: { ability: 'insomnia' } });
+  applyMove(i.s, i.a.id, 'gastro-acid', i.f.id, hit);
+  i.a.acted = false;
+  assert.equal(applyMove(i.s, i.a.id, 'yawn', i.f.id, hit).effects[0].ok, true);
+  const p = duel('grimer', 'pikachu', { foe: { ability: 'static' } });
+  applyMove(p.s, p.a.id, 'gastro-acid', p.f.id, hit);
+  assert.equal(p.f.ability, null);
+  assert.equal(p.f.suppressedAbility, 'static');
+});
+
+test('review fix: heal block stops water absorb healing', () => {
+  const { s, a, f } = duel('squirtle', 'vaporeon', { foe: { ability: 'water-absorb', hp: 10, healBlock: 3 } });
+  applyMove(s, a.id, 'water-gun', f.id, hit);
+  assert.equal(f.hp, 10);
+});

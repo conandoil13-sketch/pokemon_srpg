@@ -64,10 +64,11 @@ function effectLines(result, get) {
     if (e.ok && EFFECT_TEXT[e.effect]) say(u, EFFECT_TEXT[e.effect](label(u)), e.effect);
     else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
   }
+  if (result.selfFainted) { const u = get(result.selfFainted); if (u) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, selfFaint: true }); } // 고스트 저주
   return out;
 }
 export const effectMessages = (result, get) => effectLines(result, get).map((l) => l.text);
-const effectSteps = (result, get) => effectLines(result, get).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT ? 'Normal' : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id } : null }));
+const effectSteps = (result, get) => effectLines(result, get).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT || l.selfFaint ? (l.selfFaint ? 'Pain' : 'Normal') : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id } : null, selfFaint: !!l.selfFaint }));
 const spawnEffectFx = (fx, s, get) => { if (s?.efx) { const u = get(s.efx.unitId); if (u) onBody(fx, EFFECT_FX[s.efx.effect], u); } };
 
 // 랭크 변화 대사 (changes: applyMove 의 stageChanges, byId: 유닛 찾기 객체/함수)
@@ -272,6 +273,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     unitPose(u) {
       const s = step();
       if (!s || u !== attacker) return null;
+      if (steps.slice(0, i + 1).some((x) => x.selfFaint)) return { hidden: true }; // 저주로 쓰러짐
       const hop = s.k === 'act' ? -Math.round(4 * Math.sin(Math.PI * Math.min(1, t / 0.45))) : 0;
       return { anim: 'Idle', t: total, loop: true, dir: dir ?? undefined, dy: hop };
     },

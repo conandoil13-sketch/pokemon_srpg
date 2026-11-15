@@ -564,3 +564,26 @@ test('move menu greys out blocked moves with a reason', () => {
   assert.equal(sd.why, '도발당해서 변화기를 쓸 수 없다!');
   assert.equal(game.menu.find((i) => i.moveId === 'scratch').why, undefined); // 공격기는 도발과 무관 (여기선 닿는 적이 없어 회색일 뿐)
 });
+
+test('review fix: a ghost ally can curse an enemy through the menu', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state;
+  const c = st.units.find((u) => u.id === 'ally-chimchar');
+  c.types = ['ghost']; c.moves = ['curse'];
+  const foe = st.units.find((u) => u.side === 'enemy');
+  foe.x = c.x + 1; foe.y = c.y; foe.hp = foe.maxHp = 999;
+  const at = (x, y) => [{ type: 'cursor', px: x * 24 + 12 - Math.round(game.camera.x), py: y * 24 + 12 - Math.round(game.camera.y) }, { type: 'confirm' }];
+  for (const e of at(c.x, c.y)) game.handle(e);
+  for (const e of at(c.x, c.y)) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  game.handle({ type: 'confirm' }); // 저주 (유일한 기술)
+  assert.equal(game.mode, 'target');
+  game.handle({ type: 'confirm' });
+  assert.equal(foe.cursed, true);
+});
+
+test('review fix: ghost curse that knocks out its user says so', () => {
+  const units = { a: { id: 'a', species: 'gastly', side: 'ally' } };
+  assert.ok(effectMessages({ effects: [], selfFainted: 'a' }, (id) => units[id]).includes('고오스는 쓰러졌다!'));
+});

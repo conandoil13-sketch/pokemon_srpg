@@ -343,7 +343,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 공격기·변화기 공통. 자신·범위형 변화기는 target 을 무시한다
   function doAttack(attacker, target, moveId, then, aim) {
-    const mv = MOVES[moveId];
+    const mv = moveFor(attacker, moveId); // 저주: 고스트면 적 하나
     if (isAttack(mv)) { attackWith(attacker, target, mv, then, aim); return; }
     const pulled = pickOne(mv) && target && target !== attacker ? redirectTarget(st, attacker.id, moveId, target.id) : null; // 피뢰침·마중물
     const one = pulled ?? (pickOne(mv) && target && target !== attacker ? target : null);

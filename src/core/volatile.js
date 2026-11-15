@@ -98,7 +98,9 @@ export function applyEffect(state, user, target, move, rng, weather) {
       target[move.effect] = LOCK_TURNS; return out(true);
     case 'abilityOff': // 위액
       if (target.abilityOff) return out(false, 'already');
-      target.abilityOff = true; return out(true);
+      // 특성을 직접 읽는 곳(부유·불면·정전기 …)도 꺼지도록 비워 두고, 원래 특성은 따로 (메타몽 캡슐용)
+      target.suppressedAbility = target.ability; target.ability = null; target.abilityOff = true;
+      return out(true);
     case 'worrySeed': // 고민씨: 특성이 불면 (잠들어 있으면 깸)
       if (['truant', 'insomnia', 'multitype'].includes(target.ability)) return out(false, 'immune');
       target.ability = 'insomnia';
