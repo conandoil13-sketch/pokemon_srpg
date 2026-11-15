@@ -298,23 +298,29 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   };
   if (move.effect === 'push') { // 울부짖기·날려버리기: 대상(밀렸으면 원래 칸) 쪽으로 바로
     const to = result.pushed?.from ?? (defender && defender !== attacker ? defender : null);
-    if (to) spawnSafe(fx, pushFx(move.id, Math.abs(to.x - attacker.x) + Math.abs(to.y - attacker.y)), feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
+    if (to) spawnSafe(fx, pushFx(move.id, Math.max(Math.abs(to.x - attacker.x), Math.abs(to.y - attacker.y))), // 대각선: 큰 축 거리 (그 축 방향으로 불어 대상과 나란히)
+       feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
   }
   const laid = result.trapsLaid ?? [];
   let tossAt = null; // 던지기 시작 시각 (total 기준)
   const burstAt = steps.findIndex((x) => x.k === 'wburst');
+  const TOSS_HOLD = 0.25; // 마지막 압정이 떨어진 뒤 잠깐 (적 압정도 보이게)
+  const tossing = () => tossAt !== null && total - tossAt < TOSS_GAP * (laid.length - 1) + TOSS_FLIGHT + TOSS_HOLD;
+  const live = () => i < steps.length || tossing(); // 대사를 넘겨도 압정이 다 떨어질 때까지
   return {
     defender: target,
-    get done() { return i >= steps.length; },
+    get done() { return !live(); },
     update(dt) {
+      if (!live()) return;
+      total += dt;
       if (i >= steps.length) return;
-      t += dt; total += dt;
+      t += dt;
       if (t >= step().d) { t = 0; i++; const s = step(); enter(s); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
-    get trapsShown() { return i < steps.length ? result.trapsLaid ?? [] : []; }, // 적이 깐 압정도 까는 동안은 보인다
+    get trapsShown() { return live() ? laid : []; }, // 적이 깐 압정도 까는 동안은 보인다
     get trapsHidden() { // 던진 압정이 아직 안 떨어진 칸
-      if (!laid.length || i >= steps.length) return [];
+      if (!laid.length || !live()) return [];
       if (tossAt === null) return laid;
       return laid.filter((_, k) => total - tossAt < TOSS_GAP * k + TOSS_FLIGHT);
     },

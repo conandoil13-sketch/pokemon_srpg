@@ -762,3 +762,24 @@ test('push moves blow toward the target even when it does not budge', () => {
   statusAnim('roar', { effects: [{ unitId: 'e', effect: 'push', ok: true }], pushed: { unitId: 'e', from: { x: 4, y: 2 }, to: { x: 7, y: 2 }, path: [] } }, [me, foe], fx);
   assert.deepEqual(made.find((m) => m.id === 'pokemon/sound-wave'), { id: 'pokemon/sound-wave', dir: 'right' }); // 밀린 칸의 원래 위치 쪽
 });
+
+test('skipping the spikes message still waits for every caltrop to land', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'enemy', x: 2, y: 2 };
+  const laid = [{ x: 5, y: 2 }, { x: 6, y: 2 }, { x: 4, y: 2 }, { x: 5, y: 3 }, { x: 5, y: 1 }];
+  const anim = statusAnim('spikes', { effects: [{ unitId: 'a', effect: 'spikes', ok: true }], trapsLaid: laid }, [me]);
+  runFor(anim, 0.5); // 던지기 시작
+  anim.advance(); anim.update(0.05); // 대사 넘김
+  assert.equal(anim.done, false);
+  assert.ok(anim.trapsHidden.length > 0);
+  assert.equal(anim.trapsShown.length, 5);
+  runFor(anim, TOSS_GAP * 4 + TOSS_FLIGHT + 0.5);
+  assert.equal(anim.trapsHidden.length, 0);
+  assert.equal(anim.done, true);
+});
+test('a diagonal push target gets a gust that reaches level with it', () => {
+  const made = [];
+  const fx = { spawn: (spec, at, o) => { made.push({ id: spec.id, reach: spec.opts?.reach, dir: o?.dir }); return {}; } };
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 }, foe = { id: 'e', species: 'geodude', side: 'enemy', x: 3, y: 3 };
+  statusAnim('whirlwind', { effects: [{ unitId: 'e', effect: 'push', ok: false, reason: 'immune' }] }, [me, foe], fx);
+  assert.equal(made.find((m) => m.id === 'pokemon/gust-blast').reach, 24);
+});
