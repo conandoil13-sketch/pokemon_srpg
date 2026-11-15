@@ -4,6 +4,7 @@ import OVERRIDES from './moveShapes.json' with { type: 'json' };
 import { shapeFor } from './moveShapes.js';
 import { coverage } from '../core/shapes.js';
 import { TARGET_KIND, AREA_RADIUS } from './moveTargets.js';
+import { EFFECT_MOVES, KIND_OVERRIDES } from './moveEffects.js';
 
 export const defaultRange = (category) => (category === 'physical' ? [1, 1] : [1, 2]);
 
@@ -34,3 +35,7 @@ for (const [id, v] of Object.entries(FIXED_DAMAGE)) if (MOVES[id]) Object.assign
 const HEAL_MOVES = { recover: {}, 'soft-boiled': {}, 'milk-drink': {}, roost: {}, synthesis: { weather: true }, 'morning-sun': { weather: true }, moonlight: { weather: true } };
 for (const [id, v] of Object.entries(HEAL_MOVES)) if (MOVES[id]) Object.assign(MOVES[id], { heal: v, learnable: true, kind: 'self', range: [0, 0] });
 if (MOVES['dream-eater']) MOVES['dream-eater'].dreamOnly = true;
+
+// 포켓몬에 붙는 효과 변화기 (core/volatile.js)
+for (const [id, effect] of Object.entries(EFFECT_MOVES)) if (MOVES[id]) Object.assign(MOVES[id], { effect, learnable: true });
+for (const [id, v] of Object.entries(KIND_OVERRIDES)) if (MOVES[id]) Object.assign(MOVES[id], v);

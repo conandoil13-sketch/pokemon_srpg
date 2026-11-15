@@ -14,6 +14,7 @@ import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILME
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
+import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
 
@@ -37,6 +38,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss, ability,
     ability: ability ?? SPECIES[species].abilities[Math.floor(hash(species, x, y, level) * SPECIES[species].abilities.length)],
     ...newStages(),
     ...newStatus(),
+    ...newVolatile(),
     ...(boss ? { boss: true } : {}),
     ...(memberKey !== undefined ? { memberKey } : {}), // 동료: 파티 멤버 열쇠(uid) — 경험치·기절 기록용
   };
@@ -168,7 +170,7 @@ const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
 // 기술이 실제로 닿는 유닛들 (move: id 또는 기술 객체, focus: 고른 대상)
 export function targetsOf(state, user, move, focus) {
-  const m = typeof move === 'string' ? MOVES[move] : move;
+  const m = typeof move === 'string' ? moveFor(user, move) : move;
   const [lo, hi] = m.range ?? [1, 1];
   switch (m.kind) {
     case 'self': return [user];
@@ -233,6 +235,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const a = byId(state, userId), move = MOVES[moveId];
   if (a.sealed) return { kind: move.category === 'status' ? 'status' : 'attack', blocked: 'sealed', stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; // 풀죽음: 이번 차례 기술 불가
   a.acted = true;
+  const restrict = moveBlock(a, moveId);
+  if (restrict) { a.moved = true; return { kind: move.category === 'status' ? 'status' : 'attack', blocked: restrict, stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; } // 도발·앙코르 …
   if (has(a, 'truant')) a.loafNext = true; // 게으름: 다음 자기 차례는 쉰다
   a.moved = true;
   const stageChanges = [], statusChanges = [], thawed = [];
@@ -272,6 +276,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     }
     return out;
   }
+  a.lastMove = moveId; // 앙코르·사슬묶기·트집용 (기술이 실제로 나갔을 때)
 
   // 습기: 주변 2칸에 습기가 있으면 자폭·대폭발 불발
   if (SELF_KO.includes(move.id) && !moldBreaker && state.units.some((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2)) {
@@ -299,17 +304,18 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
 
   if (kind === 'status') {
-    const missed = [];
+    const missed = [], effects = [];
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
       const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
       if (ab) { absorb(t, ab); continue; }
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
       if (move.id === 'captivate' && !(t.gender && a.gender && t.gender !== a.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
+      if (move.effect) { effects.push(applyEffect(state, a, t, move, rng, W)); continue; } // 포켓몬에 붙는 효과
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
-    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents };
+    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const spread = targets.length >= 2 ? 0.75 : 1;
@@ -480,6 +486,7 @@ export function endPhase(state, rng = Math.random) {
     }
     if (has(u, 'speed-boost')) { applyStageChange(u, 'spe', 1); abilityLog.push({ unitId: u.id, ability: 'speed-boost' }); }
     if (u.slowTurns > 0) u.slowTurns -= 1;
+    tickEnd(state, u, events, rng); // 도발·이동 불가 … 턴 감소
     if (u.status && ((has(u, 'shed-skin') && rng() < 1 / 3) || (has(u, 'hydration') && W === 'rain'))) { cure(u); abilityLog.push({ unitId: u.id, ability: u.ability }); }
   }
   // 나이트메어: 끝나는 편에 있으면 주변 2칸 안 잠든 상대 1/8
@@ -506,6 +513,7 @@ export function endPhase(state, rng = Math.random) {
   for (const u of state.units) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false;
+    tickStart(u);
     u.spent = 0; u.retreatReady = false; u.retreated = false; // 치고 빠지기
     if (u.flinch) { u.flinch = false; u.sealed = true; events.push({ unitId: u.id, kind: 'sealed' }); } // 풀죽음 → 이번 차례 기술 봉인
     u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
