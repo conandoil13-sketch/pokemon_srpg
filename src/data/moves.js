@@ -35,8 +35,9 @@ for (const [id, v] of Object.entries(FIXED_DAMAGE)) if (MOVES[id]) Object.assign
 // 위력이 상황에 따라 바뀌는 기술 (power 는 메뉴·예상 창용 기준값, 실제는 damage.js varPower / 매그니튜드·프레젠트는 전투에서 굴림)
 const VAR_POWER = { flail: ['lowHp', 20], reversal: ['lowHp', 20], 'wring-out': ['targetHp', 121], 'crush-grip': ['targetHp', 121], 'gyro-ball': ['speed', 25], 'trump-card': ['lastStand', 40], magnitude: ['magnitude', 71], present: ['present', 52] };
 for (const [id, [varPower, power]] of Object.entries(VAR_POWER)) if (MOVES[id]) Object.assign(MOVES[id], { varPower, power, learnable: true });
+if (MOVES['spit-up']) Object.assign(MOVES['spit-up'], { varPower: 'stock', power: 100, learnable: true }); // 토해내기: 비축 1개당 100
 for (const id of ['frustration', 'return']) if (MOVES[id]) Object.assign(MOVES[id], { power: 60, learnable: true }); // 위력 60 + 화풀이는 한 칸 돌진, 은혜갚기는 한 칸 물러남
-const HEAL_MOVES = { recover: {}, 'soft-boiled': {}, 'milk-drink': {}, roost: {}, synthesis: { weather: true }, 'morning-sun': { weather: true }, moonlight: { weather: true } };
+const HEAL_MOVES = { 'slack-off': {}, 'heal-order': {}, recover: {}, 'soft-boiled': {}, 'milk-drink': {}, roost: {}, synthesis: { weather: true }, 'morning-sun': { weather: true }, moonlight: { weather: true } };
 for (const [id, v] of Object.entries(HEAL_MOVES)) if (MOVES[id]) Object.assign(MOVES[id], { heal: v, learnable: true, kind: 'self', range: [0, 0] });
 if (MOVES['dream-eater']) MOVES['dream-eater'].dreamOnly = true;
 

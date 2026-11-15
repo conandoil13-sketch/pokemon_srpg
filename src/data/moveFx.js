@@ -31,7 +31,11 @@ const TIER = {
   strong: { light: 1.4, reach: 56, life: 1.4 },
 };
 
+// 일격필살: 기술마다 전용 연출 (맞았을 때만, 대상에게)
+export const OHKO_FX = { 'sheer-cold': 'pokemon/ohko-freeze', fissure: 'pokemon/ohko-fissure', guillotine: 'pokemon/ohko-guillotine', 'horn-drill': 'pokemon/ohko-drill' };
+
 function rule(move, distance) {
+  if (OHKO_FX[move.id]) return { hit: spec(OHKO_FX[move.id], {}, 1, 'front', { noEcho: true, life: 1.7 }) };
   if (SELF_KO[move.id]) return { selfKO: spec(SELF_KO[move.id], {}, 2, 'front') }; // 원래 색, 크게
   const p = pal(move.type), type = move.shape?.type ?? 'single';
   const tier = powerTier(move.power), T = TIER[tier];
@@ -150,6 +154,11 @@ export const EFFECT_FX = {
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
+  refresh: HEAL_FX, teamCure: HEAL_FX, wish: fxOn('holy/blessing', {}, 2), stockpile: fxOn('status/rage', { palette: PAL.gold }, 1.5), swallow: HEAL_FX,
+  sacrificeHeal: HEAL_FX, memento: fxOn('status/cursed', { palette: PAL.water }, 1.5), painSplit: fxOn('shadow/soul-drain', {}, 2.5), bellyDrum: fxOn('status/rage', {}, 1.5),
+  acupressure: fxOn('impacts/hit-spark', { palette: PAL.gold }, 1), psychUp: fxOn('arcane/rune-circle', { palette: PAL.arcane }), powerSwap: fxOn('arcane/rune-circle', { palette: PAL.ember }),
+  guardSwap: fxOn('arcane/rune-circle', { palette: PAL.ice }), heartSwap: fxOn('arcane/rune-circle', { palette: PAL.candy }), psychoShift: fxOn('arcane/rune-circle', { palette: PAL.neon }),
+  nightmare: fxOn('shadow/curse', {}, 2.5), teeterDance: fxOn('status/confused', {}, 1.5), splash: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
   counterStance: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5), // 반격 자세
   bide: fxOn('status/rage', {}, 1.5), // 참기
   bind: spec('pokemon/bind-coil', {}, 1, 'front', { life: 1.3 }), // 속박기 (기술별로는 bindFx)

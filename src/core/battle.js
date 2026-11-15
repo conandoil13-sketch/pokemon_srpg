@@ -158,7 +158,7 @@ function awardExp(state, attacker, defender) {
   const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
   gained[unitKey(attacker)] = full;
   for (const u of state.units) {
-    if (u.side === 'ally' && u !== attacker && u.hp > 0) gained[unitKey(u)] = (gained[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+    if (u.side === 'ally' && !u.bot && u !== attacker && u.hp > 0) gained[unitKey(u)] = (gained[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
   }
   for (const [sp, n] of Object.entries(gained)) state.log.exp[sp] = (state.log.exp[sp] ?? 0) + n;
   return gained;
@@ -169,7 +169,7 @@ function awardShare(state, defender) {
   if (defender.side !== 'enemy') return;
   const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
   for (const u of state.units) {
-    if (u.side === 'ally' && u.hp > 0) state.log.exp[unitKey(u)] = (state.log.exp[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+    if (u.side === 'ally' && !u.bot && u.hp > 0) state.log.exp[unitKey(u)] = (state.log.exp[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
   }
 }
 
@@ -191,7 +191,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
     state.log.coins += 3 + Math.floor(d.level / 3);
     (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.suppressedAbility ?? d.ability, boss: !!d.boss }); // 메타몽 캡슐 (위액으로 꺼졌으면 원래 특성)
   }
-  if (d.side === 'ally' && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
+  if (d.side === 'ally' && !d.bot && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
   refreshField(state); // 오라 주인이 쓰러지면 오라도 사라진다
   return expGained;
 }
@@ -253,6 +253,91 @@ export function retreatMove(state, id, x, y, cost = 0) {
 // 울부짖기·날려버리기: 쓴 포켓몬 반대쪽으로 3칸 (차이가 큰 축, 같으면 x). 못 서는 칸·다른 포켓몬·맵 끝 앞에서 멈춤.
 // 보스·뿌리박기는 안 밀림. 밀려난 포켓몬은 랭크 변화가 지워지고, 지난 압정은 밟은 것
 export const PUSH_TILES = 3;
+// ---- 회복·상태 조작 (SRPG식) ----
+const SUPPORT = new Set(['refresh', 'teamCure', 'wish', 'stockpile', 'swallow', 'sacrificeHeal', 'memento', 'painSplit', 'bellyDrum', 'acupressure', 'psychUp', 'powerSwap', 'guardSwap', 'heartSwap', 'psychoShift', 'nightmare', 'teeterDance', 'splash']);
+const FLOOR_TURNS = 9999; // 그 층 동안 유지되는 랭크 (비축하기·추억의선물·배북)
+const SWAP_RESET = 3; // 스왑: 바꾼 랭크 변화는 남은 턴이 3으로
+export const SPLASH_GYARADOS = 0.02; // 튀어오르기 이스터에그: 아군 갸라도스 등장 확률
+const SWAP_KEYS = { powerSwap: ['atk', 'spa'], guardSwap: ['def', 'spd'], heartSwap: ['atk', 'def', 'spa', 'spd', 'spe', 'acc', 'eva'], psychUp: ['atk', 'def', 'spa', 'spd', 'spe', 'acc', 'eva'] };
+function moveLayers(to, from, keys, swap) { // 랭크 층을 바꾸거나(swap) 복사
+  const take = (u, k) => (u.layers ?? []).filter((l) => l.key === k).map((l) => ({ ...l }));
+  for (const k of keys) {
+    const lt = take(to, k), lf = take(from, k);
+    to.layers = (to.layers ?? []).filter((l) => l.key !== k).concat(lf);
+    if (swap) from.layers = (from.layers ?? []).filter((l) => l.key !== k).concat(lt);
+    for (const u of swap ? [to, from] : [to]) for (const l of u.layers) if (l.key === k && swap && l.turns < FLOOR_TURNS) l.turns = SWAP_RESET; // 스왑: 3턴으로 리셋
+    for (const u of swap ? [to, from] : [to]) { const ls = u.layers.filter((l) => l.key === k); u.stages[k] = Math.max(-6, Math.min(6, ls.reduce((s, l) => s + l.amount, 0))); u.turns[k] = ls.reduce((m, l) => Math.max(m, l.turns), 0); }
+  }
+}
+const healPart = (u, frac) => { if (!canHeal(u)) return 0; const b = u.hp; u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * frac))); return u.hp - b; };
+// 비축 해제 (토해내기·꿀꺽): 비축으로 오른 방어·특방 층을 없앰
+function releaseStock(u) {
+  for (const k of ['def', 'spd']) {
+    let n = u.stockpile ?? 0;
+    u.layers = (u.layers ?? []).filter((l) => { if (n > 0 && l.key === k && l.amount > 0 && l.turns > FLOOR_TURNS - 200) { n--; return false; } return true; });
+    const ls = u.layers.filter((l) => l.key === k);
+    u.stages[k] = Math.max(-6, Math.min(6, ls.reduce((sum, l) => sum + l.amount, 0))); u.turns[k] = ls.reduce((m, l) => Math.max(m, l.turns), 0);
+  }
+  u.stockpile = 0;
+}
+function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out) {
+  const res = (ok, extra = {}) => ({ unitId: t.id, effect: move.effect, ok, ...extra });
+  switch (move.effect) {
+    case 'refresh': if (!['burn', 'poison', 'toxic', 'paralysis'].includes(t.status)) return res(false); cure(t); return res(true); // 리프레시: 독·화상·마비
+    case 'teamCure': if (!t.status) return res(false); cure(t); return res(true); // 아로마테라피·치료방울: 주변 2칸 아군
+    case 'wish': if (t.wish) return res(false); t.wish = true; return res(true); // 희망사항: 다음 자기 차례 시작에 1/2 회복
+    case 'stockpile': // 비축하기: 최대 3, 방어·특방 +1
+      if ((t.stockpile ?? 0) >= 3) return res(false);
+      t.stockpile = (t.stockpile ?? 0) + 1; changeStats(t, [{ stat: 'defense', change: 1 }, { stat: 'special-defense', change: 1 }], stageChanges, FLOOR_TURNS); return res(true); // 그 층 동안 유지
+    case 'swallow': { // 꿀꺽: 비축 1/2/3 → 1/4·1/2·전부 회복
+      const n = t.stockpile ?? 0;
+      if (!n || t.hp >= t.maxHp) return res(false);
+      releaseStock(t); return res(true, { healed: healPart(t, [0, 0.25, 0.5, 1][n]) });
+    }
+    case 'sacrificeHeal': // 치유소원·초승달춤: 내가 쓰러지고 아군 하나를 완전히 회복
+      t.hp = t.maxHp; cure(t); a.hp = 0; knockOut(state, a, null); out.selfFainted = a.id; return res(true);
+    case 'memento': // 추억의선물: 내가 쓰러지고 상대 공격·특공 −2
+      changeStats(t, [{ stat: 'attack', change: -2 }, { stat: 'special-attack', change: -2 }], stageChanges, FLOOR_TURNS, true); a.hp = 0; knockOut(state, a, null); out.selfFainted = a.id; return res(true); // 그 층 동안
+    case 'painSplit': { // 아픔나누기: 둘의 HP 를 평균으로 (보스는 1/4 만큼만)
+      const avg = Math.floor((a.hp + t.hp) / 2);
+      const tNew = t.boss ? Math.max(1, t.hp - Math.max(0, t.hp - avg) / 4 | 0) : avg;
+      a.hp = Math.min(a.maxHp, avg); t.hp = Math.min(t.maxHp, Math.max(1, tNew)); return res(true);
+    }
+    case 'bellyDrum': // 배북: HP 1/2 를 써서 공격 최대
+      if (a.hp <= a.maxHp / 2) return res(false);
+      a.hp -= Math.floor(a.maxHp / 2); changeStats(a, [{ stat: 'attack', change: 12 }], stageChanges, FLOOR_TURNS); return res(true); // 그 층 동안
+    case 'acupressure': { // 경혈찌르기: 무작위 능력 +2
+      const keys = ['attack', 'defense', 'special-attack', 'special-defense', 'speed', 'accuracy', 'evasion'];
+      changeStats(t, [{ stat: keys[Math.floor(rng() * keys.length) % keys.length], change: 2 }], stageChanges); return res(true);
+    }
+    case 'psychUp': moveLayers(a, t, SWAP_KEYS.psychUp, false); return res(true); // 자기암시: 상대 랭크 복사
+    case 'powerSwap': case 'guardSwap': case 'heartSwap': moveLayers(a, t, SWAP_KEYS[move.effect], true); return res(true); // 스왑
+    case 'psychoShift': { // 사이코시프트: 내 상태이상을 상대에게 옮김
+      if (!a.status || t.status) return res(false);
+      const r = inflict(t, a.status, rng, null, state.weather);
+      if (!r.ok) return res(false);
+      statusChanges.push({ unitId: t.id, ailment: t.status, ...r }); cure(a); return res(true);
+    }
+    case 'nightmare': if (t.status !== 'sleep' || t.nightmare) return res(false); t.nightmare = true; return res(true); // 악몽: 자는 동안 페이즈 끝 1/4
+    case 'teeterDance': { // 흔들흔들댄스: 옆의 모든 포켓몬(아군 포함) 혼란
+      for (const u of state.units.filter((u) => u !== a && dist(u, a) === 1)) { const r = inflict(u, 'confusion', rng, null, state.weather); statusChanges.push({ unitId: u.id, ailment: 'confusion', ...r }); }
+      return res(true);
+    }
+    case 'splash': { // 튀어오르기: 아무 일도… 가끔 아군 갸라도스가 도우러 온다 (이스터에그)
+      if (rng() >= SPLASH_GYARADOS || a.side !== 'ally') return res(false, { reason: 'splash' });
+      const spot = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]].map(([dx, dy]) => ({ x: a.x + dx, y: a.y + dy }))
+        .find((p) => canEnter(state.grid[p.y]?.[p.x], 'gyarados') && !state.units.some((u) => u.x === p.x && u.y === p.y));
+      if (!spot) return res(false, { reason: 'splash' });
+      const g = makeUnit({ species: 'gyarados', side: 'ally', x: spot.x, y: spot.y, level: a.level, moves: startingMoves(SPECIES.gyarados.learnset, a.level, MOVES, 'gyarados'), id: uniqueId(state.units, 'ally', 'gyarados') });
+      Object.assign(g, newVolatile(), { bot: true, acted: true, moved: true });
+      state.units.push(g);
+      out.summoned = g.id;
+      return res(true, { summoned: g.id });
+    }
+    default: return res(false);
+  }
+}
+
 function pushAway(state, a, t, out) {
   const res = (ok, reason) => ({ unitId: t.id, effect: 'push', ok, ...(reason ? { reason } : {}) });
   if (t.boss || t.rooted || has(t, 'suction-cups')) return res(false, 'immune'); // 흡반: 밀리지 않음
@@ -415,6 +500,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
       if (move.id === 'captivate' && !(t.gender && a.gender && t.gender !== a.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
       if (move.effect === 'push') { effects.push(pushAway(state, a, t, out2)); continue; } // 울부짖기·날려버리기
+      if (SUPPORT.has(move.effect)) { effects.push(supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out2)); continue; } // 회복·상태 조작
     if (move.effect === 'haze') { // 흑안개: 주변 2칸 모두 (자신 포함) 랭크 초기화
       out2.hazed = state.units.filter((u) => dist(u, a) <= 2).map((u) => { Object.assign(u, newStages()); return u.id; });
       effects.push({ unitId: a.id, effect: 'haze', ok: true });
@@ -431,6 +517,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const ranged = RANGED_CHARGE.has(move.id) && a.charging?.moveId === move.id ? byId(state, a.charging.targetId) : null; // 원거리 준비 기술 발사: 기억한 대상만
   const targets = ranged ? (canTarget(move, ranged) ? [ranged] : []) : unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   // 준비 기술: 처음 쓰면 모으기만 (솔라빔은 쾌청이면 바로). 같은 기술을 모아 둔 상태면 발사
+  if (move.id === 'spit-up' && !(a.stockpile > 0)) return { kind, blocked: 'nostock', stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; // 토해내기: 비축 없음
   if (CHARGE_MOVES.has(move.id) && a.charging?.moveId !== move.id && !(move.id === 'solar-beam' && W === 'sun')) {
     const foe = targets.filter((d) => d.side !== a.side).sort((p, q) => dist(p, a) - dist(q, a))[0] ?? (focusId ? byId(state, focusId) : null); // 가장 가까운 상대
     a.charging = { moveId: move.id, targetId: foe?.id ?? null };
@@ -574,6 +661,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 사용자 부가효과(인파이트류): 한 명이라도 맞으면 한 번
   // 숨기: 맞든 안 맞든 숨는다 (다음 자기 차례는 봉인)
   if (HIDE_MOVES[move.id] && state.units.includes(a)) { a.burrow = { kind: HIDE_MOVES[move.id], moveId: move.id }; a.recharge = 'hide'; }
+  if (move.id === 'spit-up') releaseStock(a); // 토해내기: 비축을 다 씀
   // 프레젠트 회복: 맞은 대상 HP 1/4
   const presentHealed = [];
   if (presentHeal) for (const d of targets) if (state.units.includes(d) && d.guard !== 'protect' && canHeal(d) && d.hp < d.maxHp) { const b = d.hp; d.hp = Math.min(d.maxHp, d.hp + Math.max(1, Math.floor(d.maxHp / 4))); presentHealed.push({ unitId: d.id, amount: d.hp - b }); }
@@ -735,6 +823,7 @@ export function endPhase(state, rng = Math.random) {
         }
       } else events.push({ unitId: u.id, kind: 'bideFail' });
     } else if (u.bide) u.sealed = true; // 참는 중: 기술 없이 이동만
+    if (u.wish) { u.wish = false; const healed = healPart(u, 0.5); if (healed) events.push({ unitId: u.id, kind: 'wish', healed }); } // 희망사항
     if (u.recharge) { events.push({ unitId: u.id, kind: 'recharge', ...(u.recharge === 'hide' ? { hide: true } : {}) }); u.recharge = false; u.sealed = true; } // 파괴광선류 반동 · 숨기 뒤
     u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
     u.trapped = state.units.some((o) => o.side !== u.side && dist(o, u) === 1 && traps(o, u)); // 묶기
@@ -754,7 +843,7 @@ export function checkResult(state) {
   if (state.result === 'stairs') return state.result; // 계단 클리어는 덮어쓰지 않음
   if (state.bossFloor && !state.units.some((u) => u.boss)) { state.result = 'win'; return state.result; }
   const enemies = state.units.some((u) => u.side === 'enemy');
-  const allies = state.units.some((u) => u.side === 'ally');
+  const allies = state.units.some((u) => u.side === 'ally' && !u.bot); // 갸라도스 봇만 남으면 패배
   state.result = !enemies ? 'win' : !allies ? 'lose' : null;
   return state.result;
 }

@@ -13,7 +13,7 @@ import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
-import { drawUnitSprite, drawShadow, hasAnim, idleFrameSource, DIR } from '../render/sprites.js';
+import { drawUnitSprite, drawShadow, hasAnim, idleFrameSource, DIR, requestSprites } from '../render/sprites.js';
 import { actorFor, bodyAt } from '../render/fxActor.js';
 import { fxForAilment, HEAL_FX, MOVE_MARKER, markerAt } from '../data/moveFx.js';
 import { dirFromDelta } from '../render/pmdData.js';
@@ -88,7 +88,7 @@ const STATUS_LINE = {
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
-const HEAL_EVENTS = { aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
+const HEAL_EVENTS = { wish: (e) => e.unitId, aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
 // 압정 밟기 알림 (이동·밀려나기 뒤). fainted 면 쓰러짐 줄을 하나 더
 export function trapNotices(events = [], get) {
   const out = [];
@@ -118,6 +118,8 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
       : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
       : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
+      : e.kind === 'wish' ? `${who(e.unitId)}의 소원이 이루어졌다!`
+      : e.kind === 'nightmare' ? `${josa(who(e.unitId), '은/는')} 악몽에 시달리고 있다!`
       : e.kind === 'bideRelease' ? `${josa(who(e.unitId), '은/는')} 참았던 힘을 터뜨렸다!`
       : e.kind === 'bideHit' ? `${josa(who(e.unitId), '은/는')} 큰 피해를 입었다!`
       : e.kind === 'bideFail' ? `${who(e.unitId)}의 참기는 아무것도 모으지 못했다...`
@@ -305,12 +307,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 대사 뒤: 결과가 났으면 결과 화면, 아군이 전원 쉬면(잠듦·얼음) 바로 상대 턴
   const weatherTag = () => (st.weather ? ` · ${WEATHER_KO[st.weather]}${st.weatherTimer ? ` (${st.weatherTimer.turns})` : ''}` : ''); // 날씨 부르기 남은 턴
   const playerPhase = (lines = []) => showBanner('아군 턴', (floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`) + weatherTag(), '#4080f8',
-    () => noticeChain(lines, () => runCharges('ally', () => {
+    () => noticeChain(lines, () => runCharges('ally', () => runBots(() => {
       focus = null;
       if (st.result) { mode = 'result'; return; }
       if (allyUnits().every((u) => u.acted)) { enemyPhase(); return; }
       mode = 'idle';
-    })));
+    }))));
 
   function enemyPhase() {
     sel = null;
@@ -395,6 +397,27 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     next();
   }
 
+  // 아군 봇(튀어오르기 갸라도스): 아군 차례 시작에 적 AI 와 같은 판단으로 혼자 움직인다
+  function runBots(then) {
+    const queue = st.units.filter((u) => u.side === 'ally' && u.bot && !u.acted);
+    const next = () => {
+      if (st.result) { mode = 'result'; return; }
+      const u = queue.shift();
+      if (!u) { then(); return; }
+      if (!st.units.includes(u) || u.acted) { next(); return; }
+      const plan = planEnemyAction(st, u);
+      if (u.sealed) plan.attack = null;
+      focus = u; cursor = { x: u.x, y: u.y };
+      startWalk(u, pathTo(st.grid, st.units, u, plan.moveTo.x, plan.moveTo.y), () => {
+        const done = () => { u.moved = true; u.acted = true; next(); };
+        if (!plan.attack) { done(); return; }
+        const target = st.units.find((o) => o.id === plan.attack.targetId);
+        doAttack(u, target, plan.attack.moveId, done, plan.attack.aim);
+      }, () => next());
+    };
+    next();
+  }
+
   function afterTrapFaint(unit) {
     if (st.result) { mode = 'result'; return; }
     if (unit.side === 'ally') {
@@ -423,6 +446,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const hpBefore = one?.hp;
     const lookup = (id) => st.units.find((u) => u.id === id) ?? [attacker, one].find((u) => u?.id === id);
     const result = applyMove(st, attacker.id, moveId, aim ?? (pulled ? target.id : one?.id) ?? null, rng); // 끌어오기는 원래 대상으로 넘겨야 다시 판정됨
+    if (result.summoned) requestSprites(['gyarados']); // 튀어오르기 이스터에그
     // 마비 실패·혼란 자해: 기술이 나가지 않으므로 대상은 돌아보지 않고 카메라는 사용자에게
     if (one && !result.blocked) {
       facing[attacker.id] = dirFromDelta(one.x - attacker.x, one.y - attacker.y);
@@ -607,7 +631,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           if (ev.type === 'endTurn') { enemyPhase(); return; }
           if (!pick) return;
           const u = unitAt(st, cursor.x, cursor.y);
-          if (u && u.side === 'ally' && !u.acted) select(u);
+          if (u && u.side === 'ally' && !u.acted && !u.bot) select(u); // 갸라도스 봇은 스스로 움직임
           else if (!u) openEndMenu();
           return;
         }

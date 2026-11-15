@@ -49,6 +49,12 @@ const EFFECT_TEXT = {
   reflect: () => '리플렉터로 물리 공격에 강해졌다!', lightScreen: () => '빛의장막으로 특수 공격에 강해졌다!', mudSport: () => '전기의 위력이 약해졌다!', waterSport: () => '불꽃의 위력이 약해졌다!',
   spikes: () => '발밑에 압정이 뿌려졌다!', toxicSpikes: () => '발밑에 독압정이 뿌려졌다!',
   haze: () => '모든 랭크 변화가 원래대로 돌아왔다!',
+  refresh: (w) => `${W_(w, '은/는')} 몸이 개운해졌다!`, teamCure: (w) => `${w}의 상태이상이 나았다!`, wish: (w) => `${W_(w, '은/는')} 소원을 빌었다!`,
+  stockpile: (w) => `${W_(w, '은/는')} 힘을 비축했다!`, swallow: (w) => `${W_(w, '은/는')} 비축한 힘을 삼켜 회복했다!`,
+  sacrificeHeal: (w) => `${W_(w, '은/는')} 완전히 회복했다!`, memento: (w) => `${w}의 힘이 크게 빠졌다!`, painSplit: () => '서로의 아픔을 나눴다!',
+  bellyDrum: (w) => `${W_(w, '은/는')} 체력을 깎아 공격을 최대로 올렸다!`, acupressure: (w) => `${w}의 경혈을 찔렀다!`,
+  psychUp: () => '상대의 능력 변화를 따라 했다!', powerSwap: () => '공격·특공 변화를 바꿨다!', guardSwap: () => '방어·특방 변화를 바꿨다!', heartSwap: () => '모든 능력 변화를 바꿨다!',
+  psychoShift: () => '상태이상을 옮겼다!', splash: () => '어디선가 갸라도스가 나타나 도우러 왔다!', nightmare: (w) => `${W_(w, '은/는')} 악몽을 꾸기 시작했다!`, teeterDance: () => '흔들흔들 춤을 췄다!',
   counterStance: (w) => `${W_(w, '은/는')} 반격 자세를 취했다!`,
   bide: (w) => `${W_(w, '은/는')} 참기 시작했다!`,
 };
@@ -91,6 +97,7 @@ function effectLines(result, get, moveId = null) {
     else if (e.ok && e.effect === 'push') say(u, `${W_(label(u), '은/는')} 날려가 버렸다!`, null);
     else if (e.ok && EFFECT_TEXT[e.effect]) say(u, EFFECT_TEXT[e.effect](label(u)), e.effect);
     else if (!e.ok && e.effect === 'push' && (e.reason === 'stuck' || e.reason === 'immune')) say(u, `${W_(label(u), '은/는')} 꿈쩍도 하지 않았다!`);
+    else if (!e.ok && e.reason === 'splash') say(u, '하지만 아무 일도 일어나지 않았다!');
     else if (!e.ok && e.reason === 'safeguard') say(u, `${W_(label(u), '은/는')} 신비의 베일이 지켜 주고 있다!`);
     else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
   }
@@ -229,6 +236,8 @@ function createBlockedAnim({ attacker, result, fx }) {
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 헤롱헤롱해서 기술을 쓸 수 없었다!`), emo: 'Normal' }]
     : result.blocked === 'sealed'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 풀이 죽어 기술을 쓸 수 없다!`), emo: 'Pain' }]
+    : result.blocked === 'nostock'
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage('그러나 비축한 힘이 없다!'), emo: 'Normal' }]
     : result.blocked === 'charged'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} ${result.charged.moveId === 'solar-beam' ? '빛을' : '힘을'} 모으고 있다!`), emo: 'Determined' },
       ...(result.stageChanges?.some((c) => c.applied) ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${who}의 방어가 올라갔다!`), emo: 'Determined' }] : [])]
@@ -419,6 +428,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     else if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
     else if (!h.hit) mid.push({ text: `${name}에게는 맞지 않았다!`, who: d });
     else {
+      if (move.fixedDamage === 'ohko' && h.damage > 0) mid.push({ text: '일격필살!', who: d }); // 일격필살
       if (h.crit) mid.push({ text: many ? `${name}의 급소에 맞았다!` : '급소에 맞았다!', who: d });
       if (h.typeMult > 1) mid.push({ text: many ? `${name}에게 효과가 굉장했다!` : '효과가 굉장했다!', who: d });
       else if (h.typeMult < 1) mid.push({ text: many ? `${name}에게는 효과가 별로인 듯하다...` : '효과가 별로인 듯하다...', who: d });
