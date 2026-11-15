@@ -255,7 +255,7 @@ export function retreatMove(state, id, x, y, cost = 0) {
 export const PUSH_TILES = 3;
 function pushAway(state, a, t, out) {
   const res = (ok, reason) => ({ unitId: t.id, effect: 'push', ok, ...(reason ? { reason } : {}) });
-  if (t.boss || t.rooted) return res(false, 'immune');
+  if (t.boss || t.rooted || has(t, 'suction-cups')) return res(false, 'immune'); // 흡반: 밀리지 않음
   const dx = t.x - a.x, dy = t.y - a.y;
   const [sx, sy] = Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dy)];
   const path = [{ x: t.x, y: t.y }];
@@ -287,6 +287,7 @@ const SCREENS = ['reflect', 'lightScreen'];
 export const CHARGE_MOVES = new Set(['solar-beam', 'razor-wind', 'skull-bash', 'sky-attack']); // 모으고 다음 차례 발사
 const RANGED_CHARGE = new Set(['solar-beam', 'razor-wind']); // 원거리: 그 자리에서 쏨 (사거리 밖 1칸마다 위력 −5%), 근접은 돌진
 const RANGE_FALLOFF = 0.05;
+const PRESSURE_SHIELD = 2, STENCH_FLINCH = 10;
 export const HIDE_MOVES = { fly: 'sky', bounce: 'sky', dig: 'ground', dive: 'water', 'shadow-force': 'shadow' }; // 숨기: 상대 다음 페이즈 끝까지
 
 // 준비 기술 발사 경로: 이동력 무시, 대상을 맞힐 수 있는 가장 가까운 칸 (불발이면 null)
@@ -437,6 +438,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
   if (a.charging?.moveId === move.id) a.charging = null;
   let dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
+  if (has(a, 'reckless') && dmgMove.power && (move.drain < 0 || CRASH_MOVES.has(move.id))) dmgMove = { ...dmgMove, power: dmgMove.power * 1.2 }; // 이판사판: 반동기 1.2배
   if (ranged && dmgMove.power) dmgMove = { ...dmgMove, power: dmgMove.power * Math.max(0, 1 - RANGE_FALLOFF * Math.max(0, dist(a, ranged) - move.range[1])) }; // 사거리 밖
   a.helped = false;
   if (RECHARGE_MOVES.has(move.id)) a.recharge = true; // 파괴광선류: 기술이 나갔으면 다음 차례 반동
@@ -448,6 +450,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const breaksDef = has(a, 'mold-breaker');
   let dealt = 0; // 실제로 깎인 HP 합 (흡수·반동 기준)
   const flinched = [], bound = [], screensBroken = [];
+  if (targets.length && move.power) a.ncTouched = true; // 자연회복: 공격함
+  const flinchChance = move.flinchChance || (has(a, 'stench') && move.power ? STENCH_FLINCH : 0); // 악취: 풀죽음 10%
   if (move.id === 'brick-break') { // 깨뜨리다: 피해 전에 대상을 덮는 상대 편 장벽을 부숨
     state.zones = (state.zones ?? []).filter((z) => {
       const hitIt = SCREENS.includes(z.kind) && targets.some((d) => d.side === z.side && d.side !== a.side && dist(d, z) <= FIELD_RADIUS && d.guard !== 'protect' && typeEffect(a, d, move, W) > 0); // 방어·무효면 안 깨짐
@@ -469,6 +473,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
       const r = move.dreamOnly && d.status !== 'sleep' ? { hit: true, crit: false, typeMult: 0, damage: 0, failed: true } // 꿈먹기: 잠든 상대만
         : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
       if (r.absorbed) absorb(d, r.absorbed);
+      if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
+      if (r.damage > 0) d.ncTouched = true; // 자연회복: 맞음
       d.hp = Math.max(0, d.hp - r.damage);
       const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김
       if (endured) d.hp = 1;
@@ -514,9 +520,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
     if (landed && !fainted && !dust && move.effectKind === 'damage-lower' && move.statChanges?.length && roll(move.statChance)) changeStats(d, move.statChanges, stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, true, breaksDef);
     if (landed && !fainted && !dust && move.ailment && roll(move.ailmentChance)) ail(d);
     // 풀죽음: 다음 자기 차례 기술 봉인 (정신력·보스 면역, 봉인 중 재풀죽음 없음, 속이다는 대상마다 한 층 한 번)
-    if (landed && !fainted && !dust && move.flinchChance && !d.flinch && !d.sealed && !d.boss && !(has(d, 'inner-focus') && !breaksDef)
-      && !(move.id === 'fake-out' && d.fakedOut) && roll(move.flinchChance)) {
+    if (landed && !fainted && !dust && flinchChance && !d.flinch && !d.sealed && !d.boss && !(has(d, 'inner-focus') && !breaksDef)
+      && !(move.id === 'fake-out' && d.fakedOut) && roll(flinchChance)) {
       d.flinch = true;
+      if (has(d, 'steadfast')) changeStats(d, [{ stat: 'speed', change: 1 }], stageChanges); // 불굴의마음: 풀죽으면 스피드 +1
       if (move.id === 'fake-out') d.fakedOut = true;
       flinched.push(d.id);
     }
@@ -644,6 +651,8 @@ export function endPhase(state, rng = Math.random) {
     if (has(u, 'speed-boost')) { applyStageChange(u, 'spe', 1); abilityLog.push({ unitId: u.id, ability: 'speed-boost' }); }
     if (u.slowTurns > 0) u.slowTurns -= 1;
     tickEnd(state, u, events, rng); // 도발·이동 불가 … 턴 감소, 지속 회복·저주
+    if (u.hp > 0 && has(u, 'natural-cure') && u.status && !u.ncTouched) { cure(u); events.push({ unitId: u.id, kind: 'naturalCure' }); } // 자연회복: 조용한 한 바퀴
+    u.ncTouched = false;
     if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     if (u.status && ((has(u, 'shed-skin') && rng() < 1 / 3) || (has(u, 'hydration') && W === 'rain'))) { cure(u); abilityLog.push({ unitId: u.id, ability: u.ability }); }
   }

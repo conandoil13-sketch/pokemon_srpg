@@ -409,6 +409,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     const h = hitOf(d); if (!h) continue;
     const name = label(d);
     if (h.protected) { mid.push({ text: `${josa(name, '은/는')} 몸을 지켰다!`, who: d, effect: 'protect' }); continue; } // 방어
+    if (h.shielded) mid.push({ text: `${name}의 프레셔가 공격을 막았다!`, who: d }); // 프레셔
     if (h.failed) mid.push({ text: '그러나 실패하고 말았다!', who: d }); // 꿈먹기: 깨어 있음
     else if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
     else if (!h.hit) mid.push({ text: `${name}에게는 맞지 않았다!`, who: d });

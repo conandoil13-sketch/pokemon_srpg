@@ -32,7 +32,8 @@ const GUARD_HP = 0.5;          // 방어·판별·버티기: HP 비율 이하이
 const REST_HP = 0.4;           // 잠자기: HP 비율 이하
 const REST_WEIGHT = 0.8;       // 잠자기 회복량 가중치 (2턴 잠듦 감점)
 const BOND_HP = 0.25;          // 길동무: HP 비율 이하이고 맞을 칸일 때
-export const HINDER_SCORE = 8;        // 앙코르·사슬묶기·트집·이동 불가·특성 끄기 등 기본 점수
+export const HINDER_SCORE = 8;
+const ILLUMINATE_LURE = 6; // 발광 상대를 노리는 가산점        // 앙코르·사슬묶기·트집·이동 불가·특성 끄기 등 기본 점수
 const IDLE_EFFECTS = ['focusEnergy', 'aquaRing', 'ingrain'];
 // 변화기 묶음 2차 (전장) 점수
 const FIELD_UNIT_SCORE = 10;   // 오라·장판: 덮는 아군 한 마리당
@@ -54,7 +55,7 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
     const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W);
     const ko = e >= t.hp;
     if (t.side !== unit.side && unseen.has(t.id)) continue; // 안 보이는 상대는 노리지 않는다
-    if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0) + (ko ? 0 : bindValue(move, t)); }
+    if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0) + (ko ? 0 : bindValue(move, t)) + (t.ability === 'illuminate' && e > 0 ? ILLUMINATE_LURE : 0); } // 발광: 먼저 노림
     else { mates++; score -= e * FRIENDLY_WEIGHT + (ko ? KO_BONUS : 0); }
   }
   if (!enemies) return null;

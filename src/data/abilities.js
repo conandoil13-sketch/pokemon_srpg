@@ -37,11 +37,18 @@ export const SRPG_ABILITY_TEXT = {
   'swift-swim': '비가 오면 스피드가 2배, 이동력이 1 늘어난다.',
   chlorophyll: '햇살이 강하면 스피드가 2배, 이동력이 1 늘어난다.',
   'quick-feet': '상태이상이면 스피드가 1.5배, 이동력이 1 늘어난다.',
+  'run-away': '상대가 거는 이동 제한(그림자밟기·개미지옥·자력, 검은눈빛·블록·거미집, 속박기)을 무시하고 움직일 수 있다. 속박 피해는 받는다.',
+  illuminate: '안개 속에서 2칸 더 멀리 본다. 상대가 이 포켓몬을 먼저 노리기 쉽다.',
+  steadfast: '풀이 죽으면 스피드가 1랭크 오른다.',
+  stench: '공격 기술이 10% 확률로 상대를 풀죽게 한다.',
+  reckless: '반동이 있는 기술(점프킥·무릎차기 포함)의 위력이 1.2배.',
+  'natural-cure': '자기 차례 끝에, 직전 상대 차례부터 공격하지도 공격받지도 않았으면 상태이상이 낫는다 (속박은 안 풀림).',
+  pressure: '층마다 처음 2번, 공격 기술의 피해를 막는다 (독·속박 같은 지속 피해는 막지 않음).',
+  'suction-cups': '울부짖기·날려버리기에 밀려나지 않는다.',
 };
 
 // 지금 게임에 해당 시스템이 없어 효과가 없는 특성 (스펙 §4-②)
-export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk', 'multitype', 'run-away', 'suction-cups', 'natural-cure',
-  'pressure', 'steadfast', 'stench', 'reckless', 'illuminate'];
+export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk', 'multitype', 'stall']; // 도구 시스템과 함께 할 것 · 지구력
 
 export const ABILITIES = Object.fromEntries(Object.values(POKEDEX.abilities).map((a) => [a.id, {
   ...a,

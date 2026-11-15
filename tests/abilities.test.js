@@ -237,6 +237,7 @@ test('lightning rod pulls single electric moves within 2 tiles and boosts specia
 
 test('arena trap pins adjacent foes to 1 tile of movement', () => {
   const { s, c, r } = duel(null, 'arena-trap');
+  c.ability = 'guts'; // 도주가 아닌 특성으로 고정 (도주는 묶기를 무시)
   endPhase(s, seq([])); endPhase(s, seq([])); // 아군 차례 시작: 옆의 개미지옥
   const g = Array.from({ length: 12 }, () => '.'.repeat(16));
   const steps = [...reachable(g, s.units, c).keys()].map((k) => k.split(',').map(Number)).map(([x, y]) => Math.abs(x - 5) + Math.abs(y - 5));
