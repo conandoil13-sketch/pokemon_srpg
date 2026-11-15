@@ -7,7 +7,7 @@ import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js'
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
-import { aimsOf, unitsHit, tilesOf, bestAim, canTarget } from '../core/shapes.js';
+import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
@@ -200,6 +200,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function reset() {
     st = createBattle(map, party, { hpRatio });
+    st.grid.trees = (theme ?? 'field') !== 'cave'; // 벽이 나무인 맵: 유연이 지나갈 수 있음
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     mode = 'banner';
@@ -236,7 +237,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function targetsFor(unit, moveId) {
     const mv = moveFor(unit, moveId); // 저주: 고스트면 적 하나
     if (!pickOne(mv)) return targetsOf(st, unit, mv);
-    const [min, max] = mv.range;
+    const [min, max0] = mv.range, max = max0 + sniperBonus(unit, max0); // 스나이퍼
     const want = mv.kind === 'ally' ? (o) => o.side === unit.side && o !== unit : (o) => o.side !== unit.side;
     return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max && canTarget(mv, o)); // 숨은 포켓몬 제외
   }
@@ -280,7 +281,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function attackTilesFrom(unit, tiles) {
-    const maxR = Math.max(1, ...unit.moves.filter((m) => MOVES[m].category !== 'status').map((m) => MOVES[m].range[1])); // 공격 범위만
+    const maxR = Math.max(1, ...unit.moves.filter((m) => MOVES[m].category !== 'status').map((m) => MOVES[m].range[1] + sniperBonus(unit, MOVES[m].range[1]))); // 공격 범위만 (스나이퍼 +1)
     const set = new Map();
     for (const k of tiles.keys()) {
       const [x, y] = k.split(',').map(Number);
@@ -720,7 +721,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
-        const cost = path.slice(1).reduce((c, p) => c + (TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용
+        const cost = path.slice(1).reduce((c, p) => c + (st.grid[p.y][p.x] === '#' ? 1 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용
         moveUnit(st, unit.id, end.x, end.y, cost, path);
         const get = (id) => everyone.get(id);
         const arriveLines = st.units.includes(unit) ? abilityNotices(st.log.arriveAbilityEvents, get) : [];

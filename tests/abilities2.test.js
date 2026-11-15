@@ -70,3 +70,30 @@ test('these abilities are no longer marked as name only', () => {
   for (const id of ['run-away', 'illuminate', 'steadfast', 'stench', 'reckless', 'natural-cure', 'pressure', 'suction-cups']) assert.equal(ABILITIES[id].inactive, false, id);
   assert.equal(ABILITIES.stall.inactive, true);
 });
+
+// ---- 지형·사거리 특성 ----
+import { reachable, canEnter } from '../src/core/pathfind.js';
+import { aimsOf } from '../src/core/shapes.js';
+import { MOVES } from '../src/data/moves.js';
+test('levitate crosses water like a flier', () => {
+  assert.equal(canEnter('~', { species: 'gastly', types: ['ghost', 'poison'] }), false);
+  assert.equal(canEnter('~', { species: 'gastly', types: ['ghost', 'poison'], ability: 'levitate' }), true);
+});
+test('limber walks through trees but cannot stop in them; rock walls still block', () => {
+  const grid = ['.#.', '...', '...']; grid.trees = true;
+  const u = { id: 'u', species: 'ditto', side: 'ally', x: 0, y: 0, types: ['normal'], ability: 'limber', hp: 1 };
+  const r = reachable(grid, [u], u, 2);
+  assert.ok(r.has('2,0')); // 나무를 지나
+  assert.ok(!r.has('1,0')); // 나무 위엔 못 섬
+  const cave = ['.#.', '###', '...'];
+  assert.ok(!reachable(cave, [u], u, 2).has('2,0'));
+});
+test('sniper adds a tile to moves that reach 2 or more', () => {
+  const { s, a, f } = duel('pidgey', 'geodude', { fx: 1, fy: 5 }); // 거리 4
+  const far = { ...MOVES['aura-sphere'] }; // 사거리 2~3
+  assert.equal(aimsOf(s, a, far).some((x) => x.unitId === f.id), false);
+  a.ability = 'sniper';
+  assert.equal(aimsOf(s, a, far).some((x) => x.unitId === f.id), true);
+  f.y = 2; // 거리 1: 사거리 1 기술은 그대로
+  assert.equal(aimsOf(s, a, MOVES.tackle).length >= 1, true);
+});

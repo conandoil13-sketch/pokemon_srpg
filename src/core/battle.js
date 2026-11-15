@@ -8,7 +8,7 @@ import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage, rollHits } from './damage.js';
-import { unitsHit, canTarget, hideDouble, aimsOf } from './shapes.js';
+import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
@@ -204,7 +204,7 @@ export function targetsOf(state, user, move, focus) {
   return targetsOfRaw(state, user, m, focus).filter((u) => u === user || canTarget(m, u)); // 숨은 포켓몬 제외
 }
 function targetsOfRaw(state, user, m, focus) {
-  const [lo, hi] = m.range ?? [1, 1];
+  const [lo, hi0] = m.range ?? [1, 1], hi = hi0 + sniperBonus(user, hi0); // 스나이퍼
   switch (m.kind) {
     case 'self': return [user];
     case 'enemies': return state.units.filter((u) => u.side !== user.side && dist(u, user) <= AREA_RADIUS);
