@@ -29,10 +29,16 @@ const MOTIF = {
     const tip = ease.outCubic(clamp(t / 0.25, 0, 1)), fade = 1 - clamp((t - 0.72) / 0.18, 0, 1), level = 1 - clamp((t - 0.25) / 0.45, 0, 1) * 0.8;
     const ang = -tip * 0.75; // 입 쪽으로 기울임
     const BOT = ['.cc.', '.cc.', 'gwwg', 'gwwg', 'gwwg', 'gLLg', 'gLLg', 'gwwg', 'gwwg', '.gg.']; // c 뚜껑 · g 유리 · w 우유 · L 상표
-    BOT.forEach((row, j) => [...row].forEach((ch, q) => { if (ch === '.') return; for (const [ex, ey] of [[0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]]) { const lx = (q - 1.5 + ex) * 2, ly = (j - 5 + ey) * 2;
-      const x = cx + lx * Math.cos(ang) - ly * Math.sin(ang), y = my + lx * Math.sin(ang) + ly * Math.cos(ang);
-      const milkHere = ch === 'w' && (j - 2) / 7 > 1 - level; const col = ch === 'c' ? C[4] : ch === 'L' ? C[5] : ch === 'w' ? (milkHere ? C[3] : C[1]) : q === 0 ? C[2] : C[0];
-      p.dot(x, y, col, fade); } }));
+    // 화면 픽셀마다 거꾸로 돌려서 병 그림을 읽는다 (돌려도 빈 픽셀이 생기지 않게)
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    p.each(cx - 14, my - 14, cx + 14, my + 14, (x, y, sx, sy) => {
+      const dx = x - cx, dy = y - my, lx = dx * ca + dy * sa, ly = -dx * sa + dy * ca; // 병 기준 좌표 (2배 크기)
+      const q = Math.floor(lx / 2 + 2), j = Math.floor(ly / 2 + 5);
+      const ch = BOT[j]?.[q]; if (!ch || ch === '.') return;
+      const milkHere = ch === 'w' && (j - 2) / 7 > 1 - level;
+      const col = ch === 'c' ? C[4] : ch === 'L' ? C[5] : ch === 'w' ? (milkHere ? C[3] : C[1]) : q === 0 ? C[2] : C[0];
+      p.put(sx, sy, col, fade);
+    });
     for (const [hx, hy] of [[-3, -4], [-3, -2], [-3, 0]]) p.dot(cx + hx * Math.cos(ang) - hy * Math.sin(ang), my + hx * Math.sin(ang) + hy * Math.cos(ang), C[3], 0.85 * fade); // 유리 반짝
     const gulp = Math.floor((t - 0.3) / 0.12); if (t > 0.3 && t < 0.7 && gulp % 2 === 0) { p.blend(b.x + b.w / 2 + 3, my + 4, C[3], 0.7); p.blend(b.x + b.w / 2 + 4, my + 4, C[3], 0.5); } // 꿀꺽
     const sat = clamp((t - 0.62) / 0.28, 0, 1); if (sat > 0 && sat < 1) for (let k = 0; k < 3; k++) { p.disc(b.x + b.w / 2 - 4 + k * 3, b.y - 4 - sat * 10 - k, 2 + sat * 2, C[3], 0.5 * (1 - sat)); p.glow(b.x + b.w / 2, b.y - 6 - sat * 10, 6, C[3], 0.2 * (1 - sat)); } }, // 하아~ 김
