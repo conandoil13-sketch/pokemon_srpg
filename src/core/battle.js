@@ -14,7 +14,8 @@ import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILME
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
-import { newField, refreshField, tickField } from './field.js';
+import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE } from './field.js';
+import { pathTo } from './pathfind.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -113,9 +114,26 @@ export const unitAt = (state, x, y) => state.units.find((u) => u.x === x && u.y 
 const byId = (state, id) => state.units.find((u) => u.id === id);
 
 // cost: 이번 이동의 경로 비용 (치고 빠지기에서 남은 이동력 계산)
-export function moveUnit(state, id, x, y, cost = 0) {
+// path: 지나온 칸들 (처음 = 출발 칸). 없으면 경로를 계산한다. 지나는 칸마다 압정 판정, 쓰러지면 그 칸에서 멈춤
+export function moveUnit(state, id, x, y, cost = 0, path = null) {
   const u = byId(state, id);
   const stayed = u.x === x && u.y === y;
+  state.log.trapEvents = [];
+  if (!stayed && state.spikes?.length) {
+    let route = path;
+    if (!route) { const p = pathTo(state.grid, state.units, u, x, y); route = p.length > 1 && p.at(-1).x === x && p.at(-1).y === y ? p : [{ x: u.x, y: u.y }, { x, y }]; }
+    for (const p of route.slice(1)) {
+      const evs = stepOn(state, u, p.x, p.y);
+      state.log.trapEvents.push(...evs);
+      if (u.hp === 0) { // 압정에 쓰러짐: 그 칸에서 멈춘다
+        u.x = p.x; u.y = p.y; u.moved = true;
+        state.log.trapEvents.at(-1).fainted = true;
+        knockOut(state, u, null);
+        checkResult(state);
+        return;
+      }
+    }
+  }
   u.spent = (u.spent ?? 0) + cost;
   u.x = x; u.y = y; u.moved = true;
   refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
@@ -316,6 +334,11 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, healed: { unitId: a.id, amount: a.hp - before } };
   }
 
+  if (kind === 'status' && move.aimTile) { // 압정: 칸 조준 (사거리 1~3)
+    const ok = aim && aim.x !== undefined && state.grid[aim.y]?.[aim.x] !== undefined && dist(a, aim) >= TRAP_RANGE[0] && dist(a, aim) <= TRAP_RANGE[1];
+    const r = ok ? layTraps(state, a, move.effect, aim) : { ok: false, tiles: [] };
+    return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, effects: [{ unitId: a.id, effect: move.effect, ok: r.ok, ...(ok ? {} : { reason: 'range' }) }], protectedIds: [], trapsLaid: r.tiles };
+  }
   if (kind === 'status') {
     const missed = [], effects = [], protectedIds = [];
     const acc = { ...move, accuracy: move.accuracy ?? 100 };

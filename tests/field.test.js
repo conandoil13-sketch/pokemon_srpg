@@ -151,3 +151,80 @@ test('weather move fails on the same weather and on a fog floor; overrides an ab
   endPhase(s, () => 0.9);
   assert.equal(s.weather, 'sun');
 });
+
+// ---- Task 3: 압정뿌리기 · 독압정 ----
+const P = (...xy) => xy.map(([x, y]) => ({ x, y }));
+test('spikes lay on the aimed tile and its 4 neighbours, walls skipped, no duplicates', () => {
+  const { s, a } = field([['cloyster', 1, 1]], [['geodude', 11, 7]]);
+  s.grid[3] = s.grid[3].slice(0, 3) + '#' + s.grid[3].slice(4); // (3,3) 벽
+  assert.equal(MOVES.spikes.learnable, true);
+  const r = applyMove(s, a[0].id, 'spikes', { x: 3, y: 2 }, hit);
+  assert.equal(r.effects[0].ok, true);
+  assert.equal(r.trapsLaid.length, 4);
+  assert.ok(!s.spikes.some((t) => t.x === 3 && t.y === 3));
+  a[0].acted = false;
+  applyMove(s, a[0].id, 'spikes', { x: 3, y: 2 }, hit);
+  assert.equal(s.spikes.length, 4);
+  a[0].acted = false;
+  assert.equal(applyMove(s, a[0].id, 'spikes', { x: 9, y: 1 }, hit).effects[0].reason, 'range');
+});
+
+test('a foe walking through spikes takes 1/8 per tile; flying and levitate are immune; own side is safe', () => {
+  const { s, a, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  applyMove(s, a[0].id, 'spikes', { x: 4, y: 1 }, hit); // (3,1)(4,1)(5,1)(4,0)(4,2)
+  const hp = f[0].hp, d = Math.max(1, Math.floor(f[0].maxHp / 8));
+  moveUnit(s, f[0].id, 2, 1, 0, P([6, 1], [5, 1], [4, 1], [3, 1], [2, 1]));
+  assert.equal(f[0].hp, hp - 3 * d);
+  assert.equal(s.log.trapEvents.length, 3);
+  const fly = field([['cloyster', 1, 1]], [['pidgey', 6, 1]]);
+  applyMove(fly.s, fly.a[0].id, 'spikes', { x: 4, y: 1 }, hit);
+  const fh = fly.f[0].hp;
+  moveUnit(fly.s, fly.f[0].id, 3, 1, 0, P([6, 1], [5, 1], [4, 1], [3, 1]));
+  assert.equal(fly.f[0].hp, fh);
+  const lev = field([['cloyster', 1, 1]], [['gastly', 6, 1]]);
+  applyMove(lev.s, lev.a[0].id, 'spikes', { x: 4, y: 1 }, hit);
+  lev.f[0].ability = 'levitate';
+  const lh = lev.f[0].hp;
+  moveUnit(lev.s, lev.f[0].id, 3, 1, 0, P([6, 1], [5, 1], [4, 1], [3, 1]));
+  assert.equal(lev.f[0].hp, lh);
+  const own = a[0].hp;
+  moveUnit(s, a[0].id, 4, 2, 0, P([1, 1], [2, 1], [3, 1], [3, 2], [4, 2]));
+  assert.equal(a[0].hp, own);
+});
+
+test('toxic spikes poison; a poison-type foe clears them; steel is immune', () => {
+  const { s, a, f } = field([['roselia', 1, 1]], [['meowth', 6, 1]]);
+  applyMove(s, a[0].id, 'toxic-spikes', { x: 4, y: 1 }, hit);
+  moveUnit(s, f[0].id, 4, 1, 0, P([6, 1], [5, 1], [4, 1]));
+  assert.equal(f[0].status, 'poison');
+  const c = field([['roselia', 1, 1]], [['grimer', 6, 1]]);
+  applyMove(c.s, c.a[0].id, 'toxic-spikes', { x: 4, y: 1 }, hit);
+  moveUnit(c.s, c.f[0].id, 5, 1, 0, P([6, 1], [5, 1]));
+  assert.ok(!c.s.spikes.some((t) => t.x === 5 && t.y === 1));
+  assert.equal(c.s.log.trapEvents[0].kind, 'cleared');
+  const st = field([['roselia', 1, 1]], [['steelix', 6, 1]]);
+  applyMove(st.s, st.a[0].id, 'toxic-spikes', { x: 4, y: 1 }, hit);
+  moveUnit(st.s, st.f[0].id, 5, 1, 0, P([6, 1], [5, 1]));
+  assert.equal(st.f[0].status, null);
+});
+
+test('enemy traps stay hidden until an ally steps on that tile', () => {
+  const { s, a, f } = field([['snorlax', 8, 1]], [['cloyster', 1, 1]]);
+  endPhase(s);
+  applyMove(s, f[0].id, 'spikes', { x: 4, y: 1 }, hit);
+  assert.ok(s.spikes.every((t) => t.side === 'enemy' && !t.revealed));
+  endPhase(s);
+  moveUnit(s, a[0].id, 5, 1, 0, P([8, 1], [7, 1], [6, 1], [5, 1]));
+  assert.deepEqual(s.spikes.filter((t) => t.revealed).map((t) => [t.x, t.y]), [[5, 1]]);
+});
+
+test('a foe that faints on spikes stops on that tile', () => {
+  const { s, a, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  applyMove(s, a[0].id, 'spikes', { x: 4, y: 1 }, hit);
+  f[0].hp = 1;
+  moveUnit(s, f[0].id, 2, 1, 0, P([6, 1], [5, 1], [4, 1], [3, 1], [2, 1]));
+  assert.ok(!s.units.includes(f[0]));
+  assert.deepEqual([f[0].x, f[0].y], [5, 1]);
+  assert.equal(s.log.trapEvents.at(-1).fainted, true);
+  assert.equal(s.log.trapEvents.length, 1);
+});

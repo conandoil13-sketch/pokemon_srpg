@@ -1,7 +1,8 @@
 // 전장에 놓이는 것 (순수): 오라(쓴 포켓몬을 따라다님) · 장판(칸에 고정) · 압정 · 날씨 부르기 타이머.
 // 위치가 바뀔 때마다 refreshField 가 유닛마다 u.field 플래그를 다시 계산하고, 데미지·상태이상·랭크·이동 계산은 그 플래그만 읽는다.
 // 스펙 docs/superpowers/specs/2026-11-15-status-moves-batch-design.md (2차)
-import { moveTypeOf } from './abilities.js';
+import { moveTypeOf, typesOf, has, magicGuard } from './abilities.js';
+import { inflict } from './status.js';
 import { effectiveWeather } from './weather.js';
 
 export const FIELD_TURNS = 5, FIELD_RADIUS = 2;
@@ -43,6 +44,42 @@ export function refreshField(state) {
     }
     u.field = f;
   }
+}
+
+// ---- 압정뿌리기 · 독압정: 고른 칸 + 4방 칸 (벽 제외), 같은 칸 같은 종류는 겹치지 않음 ----
+export const TRAP_RANGE = [1, 3];
+export function layTraps(state, user, effect, aim) {
+  state.spikes ??= [];
+  const tiles = [];
+  for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const x = aim.x + dx, y = aim.y + dy, tile = state.grid[y]?.[x];
+    if (tile === undefined || tile === '#') continue;
+    if (state.spikes.some((t) => t.x === x && t.y === y && t.kind === effect)) continue;
+    state.spikes.push({ x, y, kind: effect, side: user.side, revealed: false });
+    tiles.push({ x, y });
+  }
+  return { ok: true, tiles };
+}
+
+// 상대 편이 (x, y) 칸에 들어옴: 압정 1/8 피해, 독압정 독 (독 타입은 치움). 비행·부유 면역. 아군이 밟은 적 함정은 드러남
+export function stepOn(state, unit, x, y) {
+  const out = [];
+  for (const t of (state.spikes ?? []).filter((s) => s.x === x && s.y === y && s.side !== unit.side)) {
+    if (unit.side === 'ally') t.revealed = true;
+    if (typesOf(unit).includes('flying') || has(unit, 'levitate')) continue;
+    if (t.kind === 'spikes') {
+      if (magicGuard(unit)) continue;
+      const hpBefore = unit.hp, damage = Math.min(unit.hp, Math.max(1, Math.floor(unit.maxHp / 8)));
+      unit.hp -= damage;
+      out.push({ unitId: unit.id, kind: 'spikes', damage, hpBefore, maxHp: unit.maxHp, x, y });
+    } else if (typesOf(unit).includes('poison')) {
+      state.spikes = state.spikes.filter((s) => s !== t);
+      out.push({ unitId: unit.id, kind: 'cleared', x, y });
+    } else if (inflict(unit, 'poison', () => 0.5, null, unit.fieldWeather ?? null).ok) {
+      out.push({ unitId: unit.id, kind: 'toxicSpikes', x, y });
+    }
+  }
+  return out;
 }
 
 // 날씨 부르기: 5턴 동안 그 날씨, 끝나면 층 시작 날씨(state.baseWeather). 같은 날씨·안개 층이면 실패

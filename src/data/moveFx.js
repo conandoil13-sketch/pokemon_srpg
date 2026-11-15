@@ -149,6 +149,8 @@ export const EFFECT_FX = {
   mudSport: fxOn('nature/acid-splash', { palette: PAL.earth }, 2),
   waterSport: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
   weather: fxOn('arcane/spell-charge', { palette: PAL.holy }, 1.5), // 날씨 부르기 (기술별 색은 아래)
+  spikes: fxOn('impacts/ground-slam', { palette: PAL.stone }, 2), // 압정: 사용자 발밑 (깔린 칸은 맵에 그림)
+  toxicSpikes: fxOn('impacts/ground-slam', { palette: POISON_PAL }, 2),
 };
 // 같은 효과라도 기술마다 인상이 다른 것: 거미집 = 실로 감은 고치, 블록 = 쌓이는 장난감 벽돌 (검은눈빛은 위 손 그대로)
 const MOVE_EFFECT_FX = {
