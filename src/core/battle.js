@@ -320,6 +320,8 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
+  const dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
+  a.helped = false;
   const spread = targets.length >= 2 ? 0.75 : 1;
   const roll = (chance) => !chance || rng() * 100 < chance * (has(a, 'serene-grace') ? 2 : 1); // 확률 0 = 100%, 하늘의은총 2배
   const hits = [], expGained = {}, knocked = [];
@@ -338,7 +340,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (!state.units.includes(d) || !state.units.includes(a)) break; // 쓰러지면 멈춤
       const hpBefore = d.hp;
       const r = move.dreamOnly && d.status !== 'sleep' ? { hit: true, crit: false, typeMult: 0, damage: 0, failed: true } // 꿈먹기: 잠든 상대만
-        : calcDamage(a, d, move, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
+        : calcDamage(a, d, dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
       if (r.absorbed) absorb(d, r.absorbed);
       d.hp = Math.max(0, d.hp - r.damage);
       const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김

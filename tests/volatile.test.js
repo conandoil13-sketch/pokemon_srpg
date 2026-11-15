@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createBattle, applyMove, endPhase } from '../src/core/battle.js';
-import { critRate } from '../src/core/abilities.js';
+import { critRate, typeEffect } from '../src/core/abilities.js';
+import { accuracyShift } from '../src/core/stages.js';
+import { typeMultiplier } from '../src/data/types.js';
 import { moveBudget } from '../src/core/status.js';
 import { moveBlock, moveFor } from '../src/core/volatile.js';
 import { newMember } from '../src/core/progress.js';
@@ -209,4 +211,103 @@ test('curse: ghost pays half hp and curses, others boost', () => {
   assert.equal(moveFor(g.a, 'curse').kind, 'enemy');
   applyMove(n.s, n.a.id, 'curse', n.a.id, hit);
   assert.deepEqual([n.a.stages.spe, n.a.stages.atk, n.a.stages.def], [-1, 1, 1]);
+});
+
+// ---- Task 3: 상대·아군에게 ----
+test('yawn sleeps the target at its next phase end if within 3 tiles', () => {
+  const { s, a, f } = duel('slowpoke', 'pidgey', { fx: 3, fy: 1 }); // 사거리 2 에서 걸고
+  assert.equal(applyMove(s, a.id, 'yawn', f.id, hit).effects[0].ok, true);
+  endPhase(s, () => 0.9); // 아군 끝: 아직
+  f.x = 4; // 거리 3 까지 물러나도 잠든다
+  assert.equal(f.status, null);
+  endPhase(s, () => 0.9); // 적 끝
+  assert.equal(f.status, 'sleep');
+  assert.ok(s.log.statusEvents.some((e) => e.kind === 'yawnSleep' && e.unitId === f.id));
+  const far = duel('slowpoke', 'pidgey', { fx: 3, fy: 1 });
+  applyMove(far.s, far.a.id, 'yawn', far.f.id, hit);
+  endPhase(far.s, () => 0.9);
+  far.f.x = 5; // 거리 4
+  endPhase(far.s, () => 0.9);
+  assert.equal(far.f.status, null);
+  assert.equal(far.f.yawnBy, null);
+  assert.ok(far.s.log.statusEvents.some((e) => e.kind === 'yawnFizzle'));
+});
+
+test('yawn fizzles if the user faints first or the target gets another status', () => {
+  const g = duel('slowpoke', 'pidgey', { fx: 3, fy: 1 });
+  applyMove(g.s, g.a.id, 'yawn', g.f.id, hit);
+  endPhase(g.s, () => 0.9);
+  g.s.units = g.s.units.filter((u) => u !== g.a);
+  endPhase(g.s, () => 0.9);
+  assert.equal(g.f.status, null);
+  assert.equal(g.f.yawnBy, null);
+  const p = duel('slowpoke', 'pidgey', { fx: 3, fy: 1 });
+  applyMove(p.s, p.a.id, 'yawn', p.f.id, hit);
+  p.f.status = 'poison';
+  endPhase(p.s, () => 0.9); endPhase(p.s, () => 0.9);
+  assert.equal(p.f.status, 'poison');
+  assert.equal(p.f.yawnBy, null);
+  const im = duel('slowpoke', 'pidgey', { fx: 3, fy: 1, foe: { ability: 'insomnia' } });
+  assert.equal(applyMove(im.s, im.a.id, 'yawn', im.f.id, hit).effects[0].reason, 'immune');
+  const st = duel('slowpoke', 'pidgey', { fx: 3, fy: 1, foe: { status: 'burn' } });
+  assert.equal(applyMove(st.s, st.a.id, 'yawn', st.f.id, hit).effects[0].ok, false);
+});
+
+test('leech seed drains 1/8 to the seeder, grass is immune', () => {
+  const { s, a, f } = duel('bulbasaur', 'snorlax', { foe: { hp: 400, maxHp: 400 } });
+  assert.equal(applyMove(s, a.id, 'leech-seed', f.id, hit).effects[0].ok, true);
+  a.hp = 10;
+  round(s);
+  assert.equal(f.hp, 350);
+  assert.equal(a.hp, Math.min(a.maxHp, 60));
+  assert.ok(s.log.statusEvents.some((e) => e.kind === 'leech' && e.damage === 50));
+  a.acted = false;
+  assert.equal(applyMove(s, a.id, 'leech-seed', f.id, hit).effects[0].reason, 'already');
+  s.units = s.units.filter((u) => u !== a);
+  endPhase(s); endPhase(s);
+  assert.equal(f.hp, 300); // 쓴 쪽이 없어도 빼앗긴다
+  const gr = duel('bulbasaur', 'oddish');
+  assert.equal(applyMove(gr.s, gr.a.id, 'leech-seed', gr.f.id, hit).effects[0].reason, 'immune');
+  const mg = duel('bulbasaur', 'clefairy', { foe: { ability: 'magic-guard' } });
+  applyMove(mg.s, mg.a.id, 'leech-seed', mg.f.id, hit);
+  const hp = mg.f.hp;
+  round(mg.s);
+  assert.equal(mg.f.hp, hp);
+});
+
+test('helping hand boosts the ally next attack once by 1.5x', () => {
+  const ms = [newMember('pikachu', 40, createRng(1)), newMember('machop', 40, createRng(2))];
+  const map = { tiles: Array.from({ length: 6 }, () => '.'.repeat(6)), allySlots: [{ x: 1, y: 1 }, { x: 1, y: 2 }], enemies: [{ species: 'snorlax', x: 2, y: 2, level: 60 }] };
+  const make = () => { const s = createBattle(map, ms); const [a, b, f] = s.units; f.hp = f.maxHp = 9999; return { s, a, b, f }; };
+  const base = make();
+  const plain = applyMove(base.s, base.b.id, 'karate-chop', base.f.id, () => 0.5).damage;
+  const t = make();
+  assert.equal(applyMove(t.s, t.a.id, 'helping-hand', t.b.id, hit).effects[0].ok, true);
+  const boosted = applyMove(t.s, t.b.id, 'karate-chop', t.f.id, () => 0.5).damage;
+  assert.ok(Math.abs(boosted - Math.floor(plain * 1.5)) <= 1, `${plain} → ${boosted}`);
+  t.b.acted = false;
+  assert.equal(applyMove(t.s, t.b.id, 'karate-chop', t.f.id, () => 0.5).damage, plain);
+  const late = make();
+  late.b.acted = true;
+  assert.equal(applyMove(late.s, late.a.id, 'helping-hand', late.b.id, hit).effects[0].reason, 'already');
+  const clear = make();
+  applyMove(clear.s, clear.a.id, 'helping-hand', clear.b.id, hit);
+  endPhase(clear.s);
+  assert.equal(clear.b.helped, false);
+});
+
+test('foresight lets normal and fighting hit ghosts and ignores evasion boosts', () => {
+  const { s, a, f } = duel('meowth', 'gastly');
+  assert.equal(typeEffect(a, f, MOVES.tackle), 0);
+  applyMove(s, a.id, 'foresight', f.id, hit);
+  assert.equal(typeEffect(a, f, MOVES.tackle), 1);
+  assert.equal(typeEffect(a, f, MOVES['karate-chop']), typeMultiplier('fighting', ['poison']));
+  f.stages.eva = 2;
+  assert.equal(accuracyShift(a, f), 0);
+  f.stages.eva = -1;
+  assert.ok(accuracyShift(a, f) > 0);
+  const m = duel('abra', 'murkrow');
+  assert.equal(typeEffect(m.a, m.f, MOVES.confusion), 0);
+  applyMove(m.s, m.a.id, 'miracle-eye', m.f.id, hit);
+  assert.equal(typeEffect(m.a, m.f, MOVES.confusion), typeMultiplier('psychic', ['flying']));
 });

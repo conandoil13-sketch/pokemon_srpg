@@ -23,7 +23,8 @@ export const moveTypeOf = (attacker, move) => (has(attacker, 'normalize') ? 'nor
 export function typeEffect(attacker, defender, move, weather = null) {
   const type = moveTypeOf(attacker, move);
   let types = typesOf(defender, weather);
-  if (has(attacker, 'scrappy') && (type === 'normal' || type === 'fighting')) types = types.filter((t) => t !== 'ghost');
+  if ((has(attacker, 'scrappy') || defender.identNormal) && (type === 'normal' || type === 'fighting')) types = types.filter((t) => t !== 'ghost'); // 배짱·꿰뚫어보기
+  if (defender.identPsychic && type === 'psychic') types = types.filter((t) => t !== 'dark'); // 미라클아이
   return types.length ? typeMultiplier(type, types) : 1;
 }
 

@@ -2,9 +2,11 @@
 // 남은 턴은 그 포켓몬 편 페이즈 끝에 줄어든다 (tickEnd). 스펙 docs/superpowers/specs/2026-11-15-status-moves-batch-design.md
 import { MOVES } from '../data/moves.js';
 import { typesOf, blocksAilment, magicGuard } from './abilities.js';
-import { cure } from './status.js';
+import { cure, canInflict, inflict } from './status.js';
 
 export const TAUNT_TURNS = 3, NO_MOVE_TURNS = 2;
+export const YAWN_RANGE = 3; // 하품: 쓴 포켓몬에게서 3칸 이내면 잠듦, 4칸 이상이면 풀림
+const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
 export const newVolatile = () => ({
   guard: null, guardPrev: false, bond: false, bondPrev: false,
@@ -65,6 +67,22 @@ export function applyEffect(state, user, target, move, rng, weather) {
       if (target.cursed) return out(false, 'already');
       user.hp = Math.max(0, user.hp - Math.floor(user.maxHp / 2));
       target.cursed = true; return out(true);
+    case 'yawn': {
+      if (target.yawnBy) return out(false, 'already');
+      const r = canInflict(target, 'sleep', null, weather);
+      if (!r.ok) return out(false, r.reason === 'already' ? 'already' : 'immune');
+      target.yawnBy = user.id; return out(true);
+    }
+    case 'leechSeed':
+      if (typesOf(target).includes('grass')) return out(false, 'immune');
+      if (target.leechBy) return out(false, 'already');
+      target.leechBy = user.id; return out(true);
+    case 'helpingHand': // 그 아군의 이번 페이즈 다음 공격기 ×1.5
+      if (target.helped || target.acted) return out(false, 'already');
+      target.helped = true; return out(true);
+    case 'identNormal': case 'identPsychic': // 꿰뚫어보기·냄새구별 / 미라클아이
+      if (target[move.effect]) return out(false, 'already');
+      target[move.effect] = true; return out(true);
     default:
       return out(false, 'blocked');
   }
@@ -84,6 +102,24 @@ export function tickEnd(state, unit, events, rng) {
     unit.hp = Math.max(0, unit.hp - damage);
     events.push({ unitId: unit.id, kind: 'curse', damage, hpBefore, maxHp: unit.maxHp, x: unit.x, y: unit.y });
   }
+  // 씨뿌리기: 1/8 을 빼앗아 쓴 포켓몬 회복 (쓴 쪽이 없으면 빼앗기만)
+  if (unit.leechBy && !magicGuard(unit)) {
+    const hpBefore = unit.hp, damage = Math.min(unit.hp, quarter(unit, 8));
+    unit.hp -= damage;
+    const by = state.units.find((u) => u.id === unit.leechBy);
+    let healed = 0;
+    if (by) { const b = by.hp; by.hp = Math.min(by.maxHp, by.hp + damage); healed = by.hp - b; }
+    events.push({ unitId: unit.id, kind: 'leech', by: unit.leechBy, damage, healed, hpBefore, maxHp: unit.maxHp, x: unit.x, y: unit.y });
+  }
+  // 하품: 쓴 포켓몬이 살아 있고 3칸 이내이며 아직 잠들 수 있으면 잠듦
+  if (unit.yawnBy && unit.hp > 0) {
+    const by = state.units.find((u) => u.id === unit.yawnBy);
+    unit.yawnBy = null;
+    const ok = by && dist(by, unit) <= YAWN_RANGE && canInflict(unit, 'sleep', null, unit.fieldWeather ?? null).ok;
+    if (ok) inflict(unit, 'sleep', rng, null, unit.fieldWeather ?? null);
+    events.push({ unitId: unit.id, kind: ok ? 'yawnSleep' : 'yawnFizzle' });
+  }
+  unit.helped = false; // 도우미는 그 페이즈만
   for (const key of ['taunt', 'noMove']) {
     if (unit[key] > 0 && --unit[key] === 0) events.push({ unitId: unit.id, kind: 'effectEnd', effect: key });
   }

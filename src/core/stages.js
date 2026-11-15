@@ -17,7 +17,11 @@ export const stageMultiplier = (n) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
 export const effectiveStat = (unit, key) => unit.stats[key] * stageMultiplier(unit.stages?.[key] ?? 0)
   * (key === 'spe' ? (unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? 0.5 : 1) * speedMult(unit) : 1);
 
-export const accuracyShift = (attacker, defender) => ACC_PER_STAGE * ((attacker.stages?.acc ?? 0) - (defender.stages?.eva ?? 0));
+// 꿰뚫어보기·미라클아이: 회피 상승은 무시 (하락은 그대로)
+export const accuracyShift = (attacker, defender) => {
+  const eva = defender.stages?.eva ?? 0;
+  return ACC_PER_STAGE * ((attacker.stages?.acc ?? 0) - (defender.identNormal || defender.identPsychic ? Math.min(0, eva) : eva));
+};
 
 // 랭크 변화 하나하나가 따로 시간을 갖는 '층'. 수치는 합쳐지지만(±6 한계) 각자 자기 턴이 다 되면 사라진다.
 // 그래서 버프를 다시 써도 이전 버프가 연장되지 않는다 (무한 유지 불가).

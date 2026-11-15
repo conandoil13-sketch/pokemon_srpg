@@ -5,6 +5,8 @@ export const EFFECT_MOVES = {
   'mean-look': 'noMove', block: 'noMove', 'spider-web': 'noMove',
   protect: 'protect', detect: 'protect', endure: 'endure', rest: 'rest',
   'aqua-ring': 'aquaRing', ingrain: 'ingrain', curse: 'curse',
+  yawn: 'yawn', 'leech-seed': 'leechSeed', 'helping-hand': 'helpingHand',
+  foresight: 'identNormal', 'odor-sleuth': 'identNormal', 'miracle-eye': 'identPsychic',
 };
 
 // PokeAPI 대상 덮어쓰기: 방해·견제는 사거리 1~2 적 하나
