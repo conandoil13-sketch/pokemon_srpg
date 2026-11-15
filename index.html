@@ -2,16 +2,60 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <title>Pokémon Tactics Demo</title>
   <style>
     html, body { margin: 0; height: 100%; background: #101018; }
     body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
     canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+    #console { display: contents; }
+    #screen { display: contents; }
+    #pad { display: none; }
+
+    /* ---- 터치 기기: 세로 휴대용 게임기 (위 화면 · 아래 버튼) ---- */
+    body.touch { --pad-h: min(42dvh, 340px); --gap: max(10px, env(safe-area-inset-bottom)); align-items: stretch; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+    body.touch #console { display: flex; flex-direction: column; width: 100vw; height: 100dvh; background: linear-gradient(#2b2f3c, #1c1f29); }
+    body.touch #screen { display: flex; flex: 1 1 auto; min-height: 0; align-items: center; justify-content: center; padding: max(8px, env(safe-area-inset-top)) 8px 4px; box-sizing: border-box; }
+    body.touch #screen canvas { border-radius: 4px; box-shadow: 0 0 0 4px #0c0d12, 0 6px 18px rgba(0, 0, 0, 0.5); touch-action: none; }
+    body.touch #pad { display: block; position: relative; flex: 0 0 var(--pad-h); padding-bottom: var(--gap); }
+
+    .pad-dpad { position: absolute; left: 7vw; top: 12%; width: min(38vw, 170px); aspect-ratio: 1; touch-action: none; }
+    .pad-dpad .arm { position: absolute; background: #3c4150; box-shadow: inset 0 -3px 0 #23262f, 0 2px 0 #0f1015; }
+    .pad-dpad .arm.up, .pad-dpad .arm.down { left: 33.3%; width: 33.4%; height: 36%; }
+    .pad-dpad .arm.left, .pad-dpad .arm.right { top: 33.3%; height: 33.4%; width: 36%; }
+    .pad-dpad .arm.up { top: 0; border-radius: 8px 8px 0 0; } .pad-dpad .arm.down { bottom: 0; border-radius: 0 0 8px 8px; }
+    .pad-dpad .arm.left { left: 0; border-radius: 8px 0 0 8px; } .pad-dpad .arm.right { right: 0; border-radius: 0 8px 8px 0; }
+    .pad-dpad .hub { position: absolute; left: 33.3%; top: 33.3%; width: 33.4%; height: 33.4%; background: #3c4150; }
+    .pad-dpad.on-up .arm.up, .pad-dpad.on-down .arm.down, .pad-dpad.on-left .arm.left, .pad-dpad.on-right .arm.right { background: #5a6072; box-shadow: inset 0 2px 0 #23262f; }
+
+    .pad-ab { position: absolute; right: 6vw; top: 14%; width: min(40vw, 180px); height: min(30vw, 130px); }
+    .pad-ab button, .pad-sys button { font: 700 18px system-ui, sans-serif; color: #f4f4f8; border: 0; touch-action: none; }
+    .pad-ab button { position: absolute; width: min(17vw, 76px); aspect-ratio: 1; border-radius: 50%; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35), 0 3px 0 #0f1015; }
+    .pad-a { right: 0; top: 0; background: #d23a4a; } .pad-b { left: 0; bottom: 0; background: #3a6ad2; }
+    .pad-ab button.on { transform: translateY(2px); box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35); filter: brightness(0.9); }
+
+    .pad-sys { position: absolute; left: 0; right: 0; bottom: var(--gap); display: flex; justify-content: center; gap: 22px; }
+    .pad-sys button { font-size: 11px; letter-spacing: 1px; padding: 7px 14px; border-radius: 999px; background: #3c4150; color: #b8bccb; box-shadow: 0 2px 0 #0f1015; }
+    .pad-sys button.on { transform: translateY(2px); box-shadow: none; }
+
+    /* 가로: 화면 가운데 · 십자키 왼쪽 · A·B 오른쪽 · START·SELECT 아래 */
+    @media (orientation: landscape) {
+      body.touch #console { flex-direction: row; justify-content: center; }
+      body.touch #screen { flex: 0 1 auto; width: calc(100vw - 2 * min(30vw, 230px)); padding: 6px 0 44px; }
+      body.touch #pad { position: absolute; inset: 0; flex: none; pointer-events: none; }
+      body.touch #pad > * { pointer-events: auto; }
+      .pad-dpad { left: max(3vw, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); width: min(22vw, 170px); }
+      .pad-ab { right: max(3vw, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); width: min(24vw, 180px); height: min(18vw, 130px); }
+      .pad-ab button { width: min(10vw, 76px); }
+      .pad-sys { bottom: 8px; }
+    }
   </style>
 </head>
 <body>
-  <canvas id="game" width="256" height="192"></canvas>
+  <div id="console">
+    <div id="screen"><canvas id="game" width="256" height="192"></canvas></div>
+    <div id="pad"></div>
+  </div>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

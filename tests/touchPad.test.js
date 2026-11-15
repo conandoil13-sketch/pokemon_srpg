@@ -42,3 +42,10 @@ test('fitScale uses whole numbers when 2x or more fits, otherwise fits exactly',
   assert.equal(fitScale(390, 400), 390 / 256);
   assert.equal(fitScale(320, 140), 140 / 192);
 });
+
+import { touchToEvents } from '../src/game/input.js';
+test('touch on the screen: down picks the tile, move only moves the cursor, outside does nothing', () => {
+  assert.deepEqual(touchToEvents('down', { px: 10, py: 20 }), [{ type: 'cursor', px: 10, py: 20 }, { type: 'click', px: 10, py: 20 }]);
+  assert.deepEqual(touchToEvents('move', { px: 10, py: 20 }), [{ type: 'cursor', px: 10, py: 20 }]);
+  assert.deepEqual(touchToEvents('down', null), []);
+});
