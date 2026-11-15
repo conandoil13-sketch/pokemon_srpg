@@ -3,7 +3,7 @@ import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, a
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
-import { moveBlock, moveFor } from '../core/volatile.js';
+import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js';
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
@@ -101,6 +101,8 @@ export function trapNotices(events = [], get) {
   return out;
 }
 const FIELD_NAME = { tailwind: '순풍', safeguard: '신비의부적', mist: '흰안개', luckyChant: '주술', reflect: '리플렉터', lightScreen: '빛의장막', mudSport: '흙놀이', waterSport: '물놀이' };
+// 공격 예상 창: 속박기 한 줄
+export const bindNote = (moveId) => (BIND_MOVES.has(moveId) ? `맞으면 ${BIND_TURNS}턴 속박` : null);
 const EFFECT_END = { taunt: '도발이 풀렸다!', noMove: '발이 풀려 다시 움직일 수 있다!', encore: '앙코르가 풀렸다!', disable: '사슬묶기가 풀렸다!', torment: '트집이 풀렸다!', healBlock: '회복봉인이 풀렸다!' };
 
 // 페이즈 전환 알림 목록 (순수). events: log.statusEvents, expired: log.expired, get: id → 유닛
@@ -116,6 +118,8 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
       : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
       : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
+      : e.kind === 'bind' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}의 데미지를 입고 있다!`
+      : e.kind === 'bindEnd' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}에서 풀려났다!`
       : e.kind === 'aquaRing' ? `${josa(who(e.unitId), '은/는')} 아쿠아링으로 체력을 회복했다!`
       : e.kind === 'ingrain' ? `${josa(who(e.unitId), '은/는')} 뿌리로 양분을 흡수했다!`
       : e.kind === 'effectEnd' ? `${who(e.unitId)}의 ${EFFECT_END[e.effect] ?? '효과'}`
@@ -828,6 +832,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, `${spec(a).name} → ${spec(d).name}`, 10, y + 5);
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     drawText(ctx, mv.name, 10, y + 20);
+    const bn = bindNote(moveId);
+    if (bn) drawText(ctx, bn, 16 + textWidth(mv.name), y + 22, '#5848a0', null, 'small'); // 속박기
     const tm = min.typeMult;
     const eff = tm === 0 ? ['효과 없음', '#808080'] : tm > 1 ? ['효과 굉장', '#20a020'] : tm < 1 ? ['효과 별로', '#c07020'] : null;
     if (eff) drawText(ctx, eff[0], W - 12 - textWidth(eff[0]), y + 20, eff[1]);

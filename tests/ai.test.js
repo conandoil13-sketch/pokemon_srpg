@@ -320,3 +320,10 @@ test('review fix: an enemy with spikes walks toward far foes instead of camping'
   assert.notEqual(plan.attack?.moveId, 'spikes');
   assert.ok(plan.moveTo.x < 28 || plan.moveTo.y !== 8);
 });
+
+import { bindValue, HINDER_SCORE } from '../src/core/ai.js';
+test('binding an unbound foe is worth a little more than hitting a bound one', () => {
+  assert.equal(bindValue(MV.wrap, { bound: null, hp: 50 }), HINDER_SCORE / 2);
+  assert.equal(bindValue(MV.wrap, { bound: { by: 'x' }, hp: 50 }), 0);
+  assert.equal(bindValue(MV.tackle, { bound: null, hp: 50 }), 0);
+});

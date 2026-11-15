@@ -783,3 +783,19 @@ test('a diagonal push target gets a gust that reaches level with it', () => {
   statusAnim('whirlwind', { effects: [{ unitId: 'e', effect: 'push', ok: false, reason: 'immune' }] }, [me, foe], fx);
   assert.equal(made.find((m) => m.id === 'pokemon/gust-blast').reach, 24);
 });
+
+// ---- 속박기 표시 ----
+import { bindLine } from '../src/render/mapAttack.js';
+import { bindNote } from '../src/game/states.js';
+test('bind tag, catch lines, forecast note and phase notices', () => {
+  assert.ok(volatileTags({ bound: { by: 'a', moveId: 'wrap', turns: 2, reach: 1 } }).includes('속박2'));
+  assert.equal(bindLine('꼬마돌', 'wrap'), '꼬마돌은 김밥말이에 묶였다!');
+  assert.equal(bindLine('꼬마돌', 'fire-spin'), '꼬마돌은 회오리불꽃에 갇혔다!');
+  assert.equal(bindNote('wrap'), '맞으면 3턴 속박');
+  assert.equal(bindNote('tackle'), null);
+  const u = { id: 'e', species: 'geodude', side: 'ally', x: 1, y: 1 };
+  const out = phaseNotices([{ unitId: 'e', kind: 'bind', moveId: 'wrap', damage: 3, hpBefore: 20, maxHp: 40, x: 1, y: 1 }, { unitId: 'e', kind: 'bindEnd', moveId: 'wrap' }], [], () => u);
+  assert.equal(out[0].lines.join(' '), '꼬마돌은 김밥말이의 데미지를 입고 있다!');
+  assert.ok(out[0].hp);
+  assert.equal(out[1].lines.join(' '), '꼬마돌은 김밥말이에서 풀려났다!');
+});
