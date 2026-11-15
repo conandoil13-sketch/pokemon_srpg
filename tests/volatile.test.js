@@ -456,3 +456,73 @@ test('review fix: heal block stops water absorb healing', () => {
   applyMove(s, a.id, 'water-gun', f.id, hit);
   assert.equal(f.hp, 10);
 });
+
+// ---- 속박기 ----
+import { BIND_TURNS, BIND_MOVES } from '../src/core/volatile.js';
+const miss = () => 0.99;
+test('a binding move holds the target in place for 3 turns and chips 1/8 each phase end', () => {
+  const { s, a, f } = duel('ekans', 'geodude');
+  assert.equal(BIND_MOVES.size, 7);
+  const r = applyMove(s, a.id, 'wrap', f.id, hit);
+  assert.deepEqual(r.bound, [{ unitId: f.id, moveId: 'wrap' }]);
+  assert.equal(f.bound.turns, BIND_TURNS);
+  assert.equal(f.bound.reach, 1);
+  assert.equal(moveBudget(f), 0);
+  const hp = f.hp;
+  round(s);
+  assert.equal(hp - f.hp, Math.max(1, Math.floor(f.maxHp / 8)));
+  assert.ok(s.log.statusEvents.some((e) => e.kind === 'bind' && e.unitId === f.id && e.moveId === 'wrap'));
+  round(s); assert.ok(f.bound);
+  round(s);
+  assert.equal(f.bound, null);
+  assert.ok(s.log.statusEvents.some((e) => e.kind === 'bindEnd' && e.unitId === f.id));
+  assert.ok(moveBudget(f) > 0);
+});
+test('a miss or protect does not bind; an already bound target keeps its first binder', () => {
+  const { s, a, f } = duel('ekans', 'geodude');
+  assert.deepEqual(applyMove(s, a.id, 'wrap', f.id, miss).bound ?? [], []);
+  assert.equal(f.bound ?? null, null);
+  applyMove(s, f.id, 'protect', f.id, hit);
+  applyMove(s, a.id, 'wrap', f.id, hit);
+  assert.equal(f.bound ?? null, null);
+  round(s);
+  applyMove(s, a.id, 'wrap', f.id, hit);
+  f.bound.turns = 1;
+  assert.deepEqual(applyMove(s, a.id, 'bind', f.id, hit).bound, []);
+  assert.equal(f.bound.moveId, 'wrap');
+  assert.equal(f.bound.turns, 1);
+});
+test('the binder fainting frees the target at once', () => {
+  const { s, a, f } = duel('ekans', 'geodude');
+  applyMove(s, a.id, 'wrap', f.id, hit);
+  a.hp = 1;
+  applyMove(s, f.id, 'tackle', a.id, hit);
+  assert.ok(!s.units.includes(a));
+  assert.equal(f.bound, null);
+  assert.ok(moveBudget(f) > 0);
+});
+test('a ranged bind holds at its reach and lets go out of reach at the target phase start', () => {
+  const { s, a, f } = duel('charmander', 'geodude', { fx: 3, fy: 1 }); // 거리 2
+  applyMove(s, a.id, 'fire-spin', f.id, hit);
+  assert.equal(f.bound.reach, 2);
+  endPhase(s, () => 0.9); // 아군 끝 → 적 페이즈 시작: 거리 2 그대로
+  assert.ok(f.bound);
+  endPhase(s, () => 0.9);
+  a.x = 0; // 거리 3
+  endPhase(s, () => 0.9); // 적 페이즈 시작
+  assert.equal(f.bound, null);
+  assert.ok(s.log.statusEvents.some((e) => e.kind === 'bindEnd' && e.unitId === f.id));
+});
+test('magic guard takes no bind damage but still cannot move', () => {
+  const { s, a, f } = duel('ekans', 'geodude', { foe: { ability: 'magic-guard' } });
+  applyMove(s, a.id, 'wrap', f.id, hit);
+  const hp = f.hp; round(s);
+  assert.equal(f.hp, hp);
+  assert.equal(moveBudget(f), 0);
+});
+test('bind damage that faints the target leaves no bind behind', () => {
+  const { s, a, f } = duel('ekans', 'geodude');
+  applyMove(s, a.id, 'wrap', f.id, hit);
+  f.hp = 1; round(s);
+  assert.ok(!s.units.includes(f));
+});

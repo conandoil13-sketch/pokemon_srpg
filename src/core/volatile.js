@@ -6,6 +6,9 @@ import { cure, canInflict, inflict } from './status.js';
 import { castField, castWeather, AURAS, ZONES } from './field.js';
 
 export const TAUNT_TURNS = 3, NO_MOVE_TURNS = 2, LOCK_TURNS = 3; // 도발 · 이동 불가 · 앙코르·사슬묶기·트집·회복봉인
+// 속박기: 맞고 살아남으면 3턴 이동 불가 + 페이즈 끝 1/8. 묶은 쪽이 쓰러지거나 기술 사거리보다 멀어지면 풀림
+export const BIND_MOVES = new Set(['bind', 'clamp', 'fire-spin', 'magma-storm', 'sand-tomb', 'whirlpool', 'wrap']);
+export const BIND_TURNS = 3;
 export const YAWN_RANGE = 3; // 하품: 쓴 포켓몬에게서 3칸 이내면 잠듦, 4칸 이상이면 풀림
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
@@ -13,7 +16,7 @@ export const newVolatile = () => ({
   guard: null, guardPrev: false, bond: false, bondPrev: false,
   focusEnergy: false, aquaRing: false, rooted: false, cursed: false,
   leechBy: null, yawnBy: null, helped: false, identNormal: false, identPsychic: false, abilityOff: false,
-  taunt: 0, encore: null, disable: null, torment: 0, healBlock: 0, noMove: 0, lastMove: null,
+  taunt: 0, encore: null, disable: null, torment: 0, healBlock: 0, noMove: 0, lastMove: null, bound: null,
 });
 
 // 쓰는 유닛 기준 기술. 저주: 고스트면 적 하나(사거리 1~2), 아니면 자신 랭크(스피드 −1·공격 +1·방어 +1)
@@ -117,8 +120,29 @@ export function applyEffect(state, user, target, move, rng, weather) {
   }
 }
 
+// 속박 풀림 확인: 묶은 쪽이 없거나 사거리 밖이면 풀림 (대사용 bindEnd)
+export function bindCheck(state, unit, events) {
+  const b = unit.bound;
+  if (!b) return;
+  const by = state.units.find((u) => u.id === b.by);
+  if (by && dist(by, unit) <= b.reach) return;
+  unit.bound = null;
+  events.push({ unitId: unit.id, kind: 'bindEnd', moveId: b.moveId });
+}
+
 // 그 유닛 편 페이즈 끝: 턴 감소 (끝나면 effectEnd 이벤트)
 export function tickEnd(state, unit, events, rng) {
+  // 속박: 풀림 확인 → 피해 1/8 → 턴 감소
+  bindCheck(state, unit, events);
+  if (unit.bound) {
+    const b = unit.bound;
+    if (!magicGuard(unit)) {
+      const hpBefore = unit.hp, damage = Math.min(unit.hp, quarter(unit, 8));
+      unit.hp -= damage;
+      events.push({ unitId: unit.id, kind: 'bind', moveId: b.moveId, damage, hpBefore, maxHp: unit.maxHp, x: unit.x, y: unit.y });
+    }
+    if (unit.hp > 0 && --b.turns <= 0) { unit.bound = null; events.push({ unitId: unit.id, kind: 'bindEnd', moveId: b.moveId }); }
+  }
   // 지속 회복 (아쿠아링·뿌리박기 각 1/16), 저주 피해 1/4
   for (const [flag, kind] of [['aquaRing', 'aquaRing'], ['rooted', 'ingrain']]) {
     if (!unit[flag] || unit.hp >= unit.maxHp || !canHeal(unit)) continue;

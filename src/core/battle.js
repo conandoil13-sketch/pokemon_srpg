@@ -16,7 +16,7 @@ import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_ST
 import { statsAt, expYield } from './stats.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE } from './field.js';
 import { pathTo, canEnter } from './pathfind.js';
-import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal } from './volatile.js';
+import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal, BIND_MOVES, BIND_TURNS, bindCheck } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
 
@@ -183,6 +183,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
     knockOut(state, by, null);
   }
   for (const u of state.units) if (u.infatuatedBy === d.id) { u.infatuation = 0; u.infatuatedBy = null; } // 건 상대가 쓰러지면 헤롱헤롱이 풀린다
+  for (const u of state.units) if (u.bound?.by === d.id) u.bound = null; // 묶은 쪽이 쓰러지면 속박이 바로 풀린다
   let expGained = {};
   if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
   else if (reward) awardShare(state, d);
@@ -396,7 +397,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const contactBase = move.category === 'physical';
   const breaksDef = has(a, 'mold-breaker');
   let dealt = 0; // 실제로 깎인 HP 합 (흡수·반동 기준)
-  const flinched = [];
+  const flinched = [], bound = [];
   for (const d of targets) {
     if (d !== a && d.guard === 'protect') { hits.push({ unitId: d.id, hit: false, protected: true, crit: false, typeMult: 1, damage: 0, fainted: false, hpBefore: d.hp, strike: 0 }); continue; } // 방어
     const contact = contactBase && dist(a, d) === 1;
@@ -459,6 +460,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (move.id === 'fake-out') d.fakedOut = true;
       flinched.push(d.id);
     }
+    if (landed && !fainted && last?.damage > 0 && BIND_MOVES.has(move.id) && !d.bound && state.units.includes(a)) { // 속박기
+      d.bound = { by: a.id, moveId: move.id, turns: BIND_TURNS, reach: move.range?.[1] ?? 1 };
+      bound.push({ unitId: d.id, moveId: move.id });
+    }
     if (landed && !fainted && last?.damage > 0) {
       if (has(d, 'color-change') && d.typeOverride !== moveTypeOf(a, move)) { d.typeOverride = moveTypeOf(a, move); abilityEvents.push({ unitId: d.id, ability: 'color-change' }); }
       if (hits.some((h) => h.unitId === d.id && h.crit) && has(d, 'anger-point')) { changeStats(d, [{ stat: 'attack', change: 12 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'anger-point' }); }
@@ -490,7 +495,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, flinched, retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, flinched, bound, retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];
@@ -591,6 +596,7 @@ export function endPhase(state, rng = Math.random) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false;
     tickStart(u);
+    bindCheck(state, u, events); // 속박: 묶은 쪽이 멀어졌으면 풀림
     u.spent = 0; u.retreatReady = false; u.retreated = false; // 치고 빠지기
     if (u.flinch) { u.flinch = false; u.sealed = true; events.push({ unitId: u.id, kind: 'sealed' }); } // 풀죽음 → 이번 차례 기술 봉인
     u.intimPrev = u.intimNow ?? []; u.intimNow = []; // 위협: 직전 차례 대상 기억
