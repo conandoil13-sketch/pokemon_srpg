@@ -2,6 +2,7 @@
 // 위치가 바뀔 때마다 refreshField 가 유닛마다 u.field 플래그를 다시 계산하고, 데미지·상태이상·랭크·이동 계산은 그 플래그만 읽는다.
 // 스펙 docs/superpowers/specs/2026-11-15-status-moves-batch-design.md (2차)
 import { moveTypeOf } from './abilities.js';
+import { effectiveWeather } from './weather.js';
 
 export const FIELD_TURNS = 5, FIELD_RADIUS = 2;
 export const AURAS = ['tailwind', 'safeguard', 'mist', 'luckyChant'];
@@ -44,8 +45,26 @@ export function refreshField(state) {
   }
 }
 
-// 그 편이 놓은 오라·장판 턴 감소 (그 편 페이즈 끝)
+// 날씨 부르기: 5턴 동안 그 날씨, 끝나면 층 시작 날씨(state.baseWeather). 같은 날씨·안개 층이면 실패
+export const WEATHER_OF = { 'rain-dance': 'rain', 'sunny-day': 'sun', sandstorm: 'sand', hail: 'hail' };
+export function castWeather(state, user, moveId) {
+  const w = WEATHER_OF[moveId];
+  if (state.weather === 'fog') return { ok: false, reason: 'fog' };
+  if (state.weather === w) return { ok: false, reason: 'already' };
+  state.weather = w;
+  state.weatherTimer = { side: user.side, turns: FIELD_TURNS };
+  const W = effectiveWeather(state);
+  for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 이동력 바로 반영
+  return { ok: true };
+}
+
+// 그 편이 놓은 오라·장판·날씨 턴 감소 (그 편 페이즈 끝)
 export function tickField(state, side, events) {
+  if (state.weatherTimer?.side === side && --state.weatherTimer.turns <= 0) {
+    state.weatherTimer = null;
+    state.weather = state.baseWeather ?? null;
+    events.push({ kind: 'weatherEnd' });
+  }
   for (const key of ['auras', 'zones']) {
     state[key] = (state[key] ?? []).filter((x) => {
       if (x.side !== side) return true;

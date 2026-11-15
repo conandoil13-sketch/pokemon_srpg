@@ -148,10 +148,15 @@ export const EFFECT_FX = {
   lightScreen: fxOn('holy/divine-shield', { palette: PAL.gold, radius: 20 }, 1.5),
   mudSport: fxOn('nature/acid-splash', { palette: PAL.earth }, 2),
   waterSport: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
+  weather: fxOn('arcane/spell-charge', { palette: PAL.holy }, 1.5), // 날씨 부르기 (기술별 색은 아래)
 };
 // 같은 효과라도 기술마다 인상이 다른 것: 거미집 = 실로 감은 고치, 블록 = 쌓이는 장난감 벽돌 (검은눈빛은 위 손 그대로)
 const MOVE_EFFECT_FX = {
   'spider-web': spec('pokemon/silk-wrap', {}, 1.2, 'front', { life: 1.3 }),
   block: spec('pokemon/brick-stack', {}, 1.3, 'front', { life: 1.3 }),
+  'rain-dance': fxOn('arcane/spell-charge', { palette: PAL.water }, 1.5),
+  'sunny-day': fxOn('arcane/spell-charge', { palette: PAL.fire }, 1.5),
+  sandstorm: fxOn('arcane/spell-charge', { palette: PAL.earth }, 1.5),
+  hail: fxOn('arcane/spell-charge', { palette: PAL.ice }, 1.5),
 };
 export const fxForEffect = (effect, moveId) => MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect];

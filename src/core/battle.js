@@ -81,6 +81,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     ...newField(), // 오라 · 장판 · 압정 · 날씨 부르기 (층마다 새로)
   };
   floorStartAbilities(state);
+  state.baseWeather = state.weather; // 날씨 부르기가 끝나면 돌아갈 날씨 (날씨 특성 반영 후)
   for (const u of units) u.fieldWeather = effectiveWeather(state); // 날씨 특성(쓱쓱 등)이 처음부터 이동력에 반영
   refreshField(state);
   return state;

@@ -12,6 +12,7 @@ export const EFFECT_MOVES = {
   // 2차: 오라 (쓴 포켓몬 주변 2칸, 따라다님) · 장판 (쓴 자리 주변 2칸, 고정)
   tailwind: 'tailwind', safeguard: 'safeguard', mist: 'mist', 'lucky-chant': 'luckyChant',
   reflect: 'reflect', 'light-screen': 'lightScreen', 'mud-sport': 'mudSport', 'water-sport': 'waterSport',
+  'rain-dance': 'weather', 'sunny-day': 'weather', sandstorm: 'weather', hail: 'weather', // 날씨 부르기 5턴
 };
 const SELF = { kind: 'self', range: [0, 0], area: false };
 
@@ -22,5 +23,6 @@ export const PLAIN_MOVES = ['swagger', 'flatter'];
 export const KIND_OVERRIDES = {
   'heal-block': { kind: 'enemy', range: [1, 2], area: false },
   curse: { type: 'ghost', kind: 'self', range: [0, 0] },
-  tailwind: SELF, safeguard: SELF, mist: SELF, 'lucky-chant': SELF, reflect: SELF, 'light-screen': SELF, 'mud-sport': SELF, 'water-sport': SELF, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
+  tailwind: SELF, safeguard: SELF, mist: SELF, 'lucky-chant': SELF, reflect: SELF, 'light-screen': SELF, 'mud-sport': SELF, 'water-sport': SELF,
+  'rain-dance': SELF, 'sunny-day': SELF, sandstorm: SELF, hail: SELF, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
 };

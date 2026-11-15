@@ -118,3 +118,36 @@ test('mud sport and water sport halve electric and fire if either side stands in
   assert.ok(Math.abs(run(8, 3) - 0.5) < 0.1); // 대상만 안
   assert.equal(run(8, 10), 1); // 둘 다 밖
 });
+
+// ---- Task 2: 날씨 부르기 ----
+test('weather moves set the weather for 5 turns of the user side, then the floor weather returns', () => {
+  const { s, a } = field([['squirtle', 1, 1]], [['geodude', 11, 7]]);
+  assert.equal(MOVES['rain-dance'].learnable, true);
+  assert.equal(applyMove(s, a[0].id, 'rain-dance', a[0].id, hit).effects[0].ok, true);
+  assert.equal(s.weather, 'rain');
+  for (let i = 0; i < 4; i++) round(s);
+  assert.equal(s.weather, 'rain');
+  endPhase(s, () => 0.9);
+  assert.equal(s.weather, null);
+  assert.ok(s.log.statusEvents.some((e) => e.kind === 'weatherEnd'));
+});
+
+test('weather move fails on the same weather and on a fog floor; overrides an ability weather and returns to it', () => {
+  const r = field([['squirtle', 1, 1]], [['geodude', 11, 7]], { weather: 'rain' });
+  assert.equal(applyMove(r.s, r.a[0].id, 'rain-dance', r.a[0].id, hit).effects[0].reason, 'already');
+  const f = field([['squirtle', 1, 1]], [['geodude', 11, 7]], { weather: 'fog' });
+  assert.equal(applyMove(f.s, f.a[0].id, 'rain-dance', f.a[0].id, hit).effects[0].reason, 'fog');
+  assert.equal(f.s.weather, 'fog');
+  const d = field([['squirtle', 1, 1]], [['vulpix', 11, 7]]);
+  // 가뭄 특성 적: 층 시작 때 쾌청 (createBattle 뒤 특성을 바꾸면 반영되지 않으므로 맵에 특성을 넣어 다시 만든다)
+  const ms = [newMember('squirtle', 40, createRng(1))];
+  const map = { tiles: Array.from({ length: 8 }, () => '.'.repeat(12)), allySlots: [{ x: 1, y: 1 }], enemies: [{ species: 'vulpix', x: 11, y: 7, level: 40, ability: 'drought' }] };
+  const s = createBattle(map, ms);
+  void d;
+  assert.equal(s.weather, 'sun');
+  applyMove(s, s.units[0].id, 'rain-dance', s.units[0].id, hit);
+  assert.equal(s.weather, 'rain');
+  for (let i = 0; i < 4; i++) round(s);
+  endPhase(s, () => 0.9);
+  assert.equal(s.weather, 'sun');
+});

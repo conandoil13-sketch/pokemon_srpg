@@ -3,7 +3,7 @@
 import { MOVES } from '../data/moves.js';
 import { typesOf, blocksAilment, magicGuard } from './abilities.js';
 import { cure, canInflict, inflict } from './status.js';
-import { castField, AURAS, ZONES } from './field.js';
+import { castField, castWeather, AURAS, ZONES } from './field.js';
 
 export const TAUNT_TURNS = 3, NO_MOVE_TURNS = 2, LOCK_TURNS = 3; // 도발 · 이동 불가 · 앙코르·사슬묶기·트집·회복봉인
 export const YAWN_RANGE = 3; // 하품: 쓴 포켓몬에게서 3칸 이내면 잠듦, 4칸 이상이면 풀림
@@ -110,6 +110,7 @@ export function applyEffect(state, user, target, move, rng, weather) {
     case 'bond': // 길동무: 다음 내 편 페이즈 시작까지. 연속 사용 실패
       if (target.bondPrev) return out(false, 'chain');
       target.bond = true; return out(true);
+    case 'weather': { const r = castWeather(state, user, move.id); return out(r.ok, r.reason); }
     default:
       if (AURAS.includes(move.effect) || ZONES.includes(move.effect)) { const r = castField(state, user, move.effect); return out(r.ok, r.reason); } // 오라·장판
       return out(false, 'blocked');
