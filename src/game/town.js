@@ -1,5 +1,5 @@
 // 로비 마을 장면: 리더 포켓몬을 걸어서 움직이고, 출격 게시판에서 전투로 나간다
-import { TOWN } from '../data/town.js';
+import { TOWN, WATER_GIFT_SPOT } from '../data/town.js';
 import { SPECIES } from '../data/species.js';
 import { drawMap, TILE } from '../render/tiles.js';
 import { drawUnitSprite, drawShadow, DIR } from '../render/sprites.js';
@@ -14,7 +14,7 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
+export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
   let turtwigTalks = 0; // 이스터에그: 모부기에게 5번 말 걸기
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null }); // 톡·클릭 목적지 표시
   const map = TOWN;
@@ -49,6 +49,11 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, s
   function interact() {
     const [dx, dy] = DIRS[player.facing];
     const o = objectAt(player.x + dx, player.y + dy);
+    if (!o && onWaterGift && player.x === WATER_GIFT_SPOT.x && player.y === WATER_GIFT_SPOT.y && player.facing === WATER_GIFT_SPOT.facing) { // 물속의 선물
+      msg = onWaterGift() ? { lines: ['…물속에서 무언가 반짝인다!', '10연속 뽑기 바우처를 손에 넣었다!'], who: null, then: null }
+        : { lines: ['물결이 잔잔하게 일렁인다…'], who: null, then: null };
+      return;
+    }
     if (!o) return;
     if (o.kind === 'npc') npcFacing[o.id] = nameOf(-dx, -dy);
     if (o.kind === 'npc' && o.species === 'turtwig' && onTurtwigGift && ++turtwigTalks === 5 && onTurtwigGift()) {

@@ -252,7 +252,7 @@ test('v6 → v7: ditto gets a default build, bag is empty, a run in progress kee
   assert.equal(back.version, 9);
   const d = back.party.find((m) => m.species === 'ditto');
   assert.deepEqual(d.build, { types: ['normal'], bonus: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, ability: 'limber' });
-  assert.deepEqual(back.items, { evoStone: 2, powders: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, capsules: [] });
+  assert.deepEqual(back.items, { evoStone: 2, tenVoucher: 0, powders: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, capsules: [] });
   assert.equal(back.run.loot.coins, 40);
   assert.deepEqual(back.run.loot.capsules, []);
   assert.deepEqual(back.run.loot.powders, { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 });
@@ -342,4 +342,13 @@ test('loading keeps obtained genders the current form cannot use', async () => {
   const m = loadGame(st).party.find((x) => x.uid === 6);
   assert.equal(m.gender, 'male');
   assert.deepEqual([...m.genders].sort(), ['female', 'male']);
+});
+
+test('the ten-pull voucher and the water gift flag survive save and load', () => {
+  const s = memStore(), g = newGame();
+  g.items.tenVoucher = 2; g.eggs = { turtwig: true, water: true };
+  saveGame(s, g);
+  const back = loadGame(s);
+  assert.equal(back.items.tenVoucher, 2);
+  assert.deepEqual(back.eggs, { turtwig: true, water: true });
 });

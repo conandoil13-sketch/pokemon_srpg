@@ -75,6 +75,7 @@ export function claimBall(game, ball, rng) {
 
 // 10연속: 한 번에 결제하고 순서대로 받는다 (같은 계열 두 번째부터 결정)
 export function claimBalls(game, balls, rng) {
+  if ((game.items?.tenVoucher ?? 0) > 0) { game.items.tenVoucher -= 1; return { ok: true, voucher: true, results: balls.map((b) => applyBall(game, b, rng)) }; } // 바우처가 있으면 코인 대신
   if ((game.coins ?? 0) < GACHA_TEN_COST) return { ok: false, reason: 'coins' };
   game.coins -= GACHA_TEN_COST;
   return { ok: true, results: balls.map((b) => applyBall(game, b, rng)) };
