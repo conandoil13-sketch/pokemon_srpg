@@ -273,3 +273,44 @@ test('enemy rooted by ingrain stays put', () => {
   const plan = planEnemyAction(state(9, 5, [foe, mk('luxray', 'ally', 1, 2)]), foe);
   assert.deepEqual(plan.moveTo, { x: 6, y: 2 });
 });
+
+// ---- 변화기 묶음 2차: 전장 기술 ----
+const en = (species, x, y, moves, extra = {}) => Object.assign(makeUnit({ species, side: 'enemy', x, y, level: 30, moves }), extra);
+test('enemy sets reflect when allies are near and not already covered', () => {
+  const run = (mates, zones = []) => {
+    const u = en('mr-mime', 6, 2, ['reflect'], zones.length ? { noMove: 2 } : {}); // 덮인 경우: 제자리 (걸어 나가 새 장판을 까는 건 정상)
+    const s = state(12, 6, [u, ...mates, mk('luxray', 'ally', 1, 2)]);
+    s.zones = zones;
+    return planEnemyAction(s, u);
+  };
+  assert.equal(run([en('pidgey', 7, 2, ['tackle']), en('rattata', 6, 3, ['tackle'])]).attack?.moveId, 'reflect');
+  assert.notEqual(run([]).attack?.moveId, 'reflect'); // 혼자면 안 씀
+  assert.notEqual(run([en('pidgey', 7, 2, ['tackle'])], [{ kind: 'reflect', side: 'enemy', x: 6, y: 2, turns: 3 }]).attack?.moveId, 'reflect');
+});
+
+test('a water enemy calls rain only when it is not already raining', () => {
+  const run = (weather) => {
+    const u = en('squirtle', 6, 2, ['rain-dance']);
+    const s = state(12, 6, [u, mk('luxray', 'ally', 1, 2)]);
+    s.weather = weather;
+    return planEnemyAction(s, u);
+  };
+  assert.equal(run(null).attack?.moveId, 'rain-dance');
+  assert.notEqual(run('rain').attack?.moveId, 'rain-dance');
+  assert.notEqual(run('fog').attack?.moveId, 'rain-dance');
+});
+
+test('enemy roars an adjacent foe', () => {
+  const u = en('growlithe', 3, 2, ['roar']);
+  const plan = planEnemyAction(state(9, 5, [u, mk('luxray', 'ally', 2, 2)]), u);
+  assert.equal(plan.attack?.moveId, 'roar');
+});
+
+test('enemy lays spikes on a tile, not a unit', () => {
+  const u = en('cloyster', 6, 2, ['spikes']);
+  const plan = planEnemyAction(state(12, 6, [u, mk('luxray', 'ally', 1, 2)]), u);
+  assert.equal(plan.attack?.moveId, 'spikes');
+  assert.ok(Number.isInteger(plan.attack.aim?.x) && Number.isInteger(plan.attack.aim?.y));
+  const d = Math.abs(plan.attack.aim.x - plan.moveTo.x) + Math.abs(plan.attack.aim.y - plan.moveTo.y);
+  assert.ok(d >= 1 && d <= 3);
+});

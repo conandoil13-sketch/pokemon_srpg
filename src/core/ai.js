@@ -12,6 +12,7 @@ import { aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
 import { moveBlock, moveFor, isHealMove } from './volatile.js';
 import { typesOf } from './abilities.js';
+import { AURAS, ZONES, WEATHER_OF, FIELD_RADIUS, TRAP_RANGE } from './field.js';
 
 const KO_BONUS = 100;
 const THREAT_WEIGHT = 0.5;
@@ -33,6 +34,11 @@ const REST_WEIGHT = 0.8;       // 잠자기 회복량 가중치 (2턴 잠듦 감
 const BOND_HP = 0.25;          // 길동무: HP 비율 이하이고 맞을 칸일 때
 const HINDER_SCORE = 8;        // 앙코르·사슬묶기·트집·이동 불가·특성 끄기 등 기본 점수
 const IDLE_EFFECTS = ['focusEnergy', 'aquaRing', 'ingrain'];
+// 변화기 묶음 2차 (전장) 점수
+const FIELD_UNIT_SCORE = 10;   // 오라·장판: 덮는 아군 한 마리당
+const WEATHER_SCORE = 25;      // 자기 타입에 유리한 날씨 부르기
+const HAZE_STAGE_SCORE = 6;    // 흑안개: 지우는 (상대 양의 랭크 − 아군 양의 랭크) 1단계당
+const WEATHER_FOR = { water: 'rain', fire: 'sun', rock: 'sand', ground: 'sand', steel: 'sand', ice: 'hail' };
 
 // 조준 하나의 점수 (위험도 제외). 적이 하나도 안 맞으면 null
 function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
@@ -131,10 +137,10 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
         }
         continue;
       }
-      if (isStatus(move) && moveFor(unit, mid).effect) { // 포켓몬에 붙는 효과
+      if (isStatus(move) && moveFor(unit, mid).effect) { // 포켓몬에 붙는 효과 · 전장
         const threat = risk / THREAT_WEIGHT;
         const cand = effectCandidate(state, unit, ghost, moveFor(unit, mid), foes, threat, risk);
-        if (cand && (!bestStatus || cand.score > bestStatus.score)) bestStatus = { score: cand.score, moveTo: p, attack: { moveId: mid, targetId: cand.targetId } };
+        if (cand && (!bestStatus || cand.score > bestStatus.score)) bestStatus = { score: cand.score, moveTo: p, attack: { moveId: mid, ...(cand.aim ? { aim: cand.aim } : { targetId: cand.targetId }) } };
         continue;
       }
       if (isStatus(move)) {
@@ -302,6 +308,30 @@ function effectCandidate(state, unit, ghost, move, foes, threat, risk) {
     case 'rest':
       if (hpRate > REST_HP || (unit.healUses ?? 0) <= 0 || unit.healBlock > 0) return null;
       return self((unit.maxHp - unit.hp) * HEAL_WEIGHT * REST_WEIGHT - risk);
+    case 'weather': { // 자기 타입에 유리하고 아직 그 날씨가 아닐 때
+      const w = WEATHER_OF[move.id];
+      if (state.weather === 'fog' || state.weather === w || !typesOf(unit).some((t) => WEATHER_FOR[t] === w)) return null;
+      return self(WEATHER_SCORE - risk);
+    }
+    case 'haze': {
+      const pos = (u) => Object.values(u.stages ?? {}).reduce((s, n) => s + Math.max(0, n), 0);
+      const near = state.units.filter((u) => manhattan(ghost, u) <= FIELD_RADIUS);
+      const v = near.filter((u) => u.side !== unit.side).reduce((s, u) => s + pos(u), 0) - near.filter((u) => u.side === unit.side).reduce((s, u) => s + pos(u), 0);
+      return v > 0 ? self(v * HAZE_STAGE_SCORE - risk) : null;
+    }
+    case 'spikes': case 'toxicSpikes': { // 가장 가까운 상대 쪽으로 사거리 안 가장 가까운 빈 칸
+      const f = foes.slice().sort((p, q) => manhattan(ghost, p) - manhattan(ghost, q))[0];
+      if (!f) return null;
+      let best = null;
+      for (let y = ghost.y - TRAP_RANGE[1]; y <= ghost.y + TRAP_RANGE[1]; y++) for (let x = ghost.x - TRAP_RANGE[1]; x <= ghost.x + TRAP_RANGE[1]; x++) {
+        const d = manhattan(ghost, { x, y });
+        if (d < TRAP_RANGE[0] || d > TRAP_RANGE[1] || state.grid[y]?.[x] === undefined || state.grid[y][x] === '#') continue;
+        if (state.units.some((u) => u.x === x && u.y === y) || (state.spikes ?? []).some((t) => t.x === x && t.y === y && t.kind === move.effect)) continue;
+        const k = manhattan({ x, y }, f);
+        if (!best || k < best.k) best = { k, x, y };
+      }
+      return best ? { score: HINDER_SCORE - risk, aim: { x: best.x, y: best.y } } : null;
+    }
     case 'helpingHand': {
       let top = null;
       for (const m of state.units) {
@@ -311,6 +341,14 @@ function effectCandidate(state, unit, ghost, move, foes, threat, risk) {
       }
       return top;
     }
+  }
+  if (AURAS.includes(move.effect) || ZONES.includes(move.effect)) { // 주변 2칸에 다른 아군이 있고, 같은 종류가 아직 덮고 있지 않을 때
+    const mates = state.units.filter((m) => m.side === unit.side && m !== unit && manhattan(ghost, m) <= FIELD_RADIUS);
+    if (!mates.length) return null;
+    const covered = AURAS.includes(move.effect)
+      ? (state.auras ?? []).some((a) => a.kind === move.effect && a.side === unit.side)
+      : (state.zones ?? []).some((z) => z.kind === move.effect && z.side === unit.side && manhattan(z, ghost) <= FIELD_RADIUS);
+    return covered ? null : self((mates.length + 1) * FIELD_UNIT_SCORE - risk);
   }
   if (move.kind !== 'enemy') return null;
   const acc = { ...move, accuracy: move.accuracy ?? 100 };
@@ -339,6 +377,7 @@ function hinderValue(state, user, r, move) {
     case 'identNormal': return r.identNormal || !typesOf(r).includes('ghost') || !user.moves.some((m) => ['normal', 'fighting'].includes(MOVES[m].type) && !isStatus(MOVES[m])) ? 0 : HINDER_SCORE;
     case 'identPsychic': return r.identPsychic || !typesOf(r).includes('dark') || !user.moves.some((m) => MOVES[m].type === 'psychic' && !isStatus(MOVES[m])) ? 0 : HINDER_SCORE;
     case 'abilityOff': return r.abilityOff ? 0 : HINDER_SCORE / 2;
+    case 'push': return r.boss || r.rooted || manhattan(user, r) !== 1 ? 0 : HINDER_SCORE + bestDamage(r, [user]) * 0.3; // 붙어 있는 상대를 떼어 냄
     case 'worrySeed': return r.ability === 'insomnia' || r.ability === 'truant' ? 0 : HINDER_SCORE / 2;
     default: return 0;
   }
