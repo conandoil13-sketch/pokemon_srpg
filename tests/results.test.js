@@ -10,6 +10,7 @@ const toLevel = (m, lv) => expForLevel(SPECIES[m.species].growth, lv) - m.exp;
 
 test('bars → events → onDone once with evolutions', () => {
   const game = newGame();
+  game.party[1].moves = ['scratch', 'ember']; // Lv9 도발·Lv15 마구할퀴기를 고르기 없이 배우도록 (도발이 배울 수 있게 된 뒤)
   const done = [];
   const r = createResults({ game, result: 'win', log: { exp: { 2: toLevel(game.party[1], 15) } }, firstClear: true, onDone: (ev) => done.push(ev) });
   assert.equal(game.items.evoStone, 1);

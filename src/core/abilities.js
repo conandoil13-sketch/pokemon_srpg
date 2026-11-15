@@ -6,7 +6,7 @@ export const PUNCH = ['ice-punch', 'fire-punch', 'thunder-punch', 'mach-punch', 
 export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell'];
 const PINCH = { overgrow: 'grass', blaze: 'fire', torrent: 'water', swarm: 'bug' };
 
-export const has = (u, id) => u?.ability === id;
+export const has = (u, id) => u?.ability === id && !u.abilityOff; // 위액: 특성 꺼짐
 const breaks = (attacker) => has(attacker, 'mold-breaker'); // 틀깨기: 방어 쪽 특성 무시
 const def = (attacker, defender, id) => !breaks(attacker) && has(defender, id);
 
@@ -23,7 +23,8 @@ export const moveTypeOf = (attacker, move) => (has(attacker, 'normalize') ? 'nor
 export function typeEffect(attacker, defender, move, weather = null) {
   const type = moveTypeOf(attacker, move);
   let types = typesOf(defender, weather);
-  if (has(attacker, 'scrappy') && (type === 'normal' || type === 'fighting')) types = types.filter((t) => t !== 'ghost');
+  if ((has(attacker, 'scrappy') || defender.identNormal) && (type === 'normal' || type === 'fighting')) types = types.filter((t) => t !== 'ghost'); // 배짱·꿰뚫어보기
+  if (defender.identPsychic && type === 'psychic') types = types.filter((t) => t !== 'dark'); // 미라클아이
   return types.length ? typeMultiplier(type, types) : 1;
 }
 
@@ -100,7 +101,7 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
 // 급소 단계: 0 → 1/16, 1 → 1/8, 2 이상 → 1/4 (기술 급소율 + 대운). 전투무장·조가비갑옷이 우선
 export function critRate(attacker, defender, move = null) {
   if (def(attacker, defender, 'battle-armor') || def(attacker, defender, 'shell-armor')) return 0;
-  const stage = (move?.critRate ?? 0) + (has(attacker, 'super-luck') ? 1 : 0);
+  const stage = (move?.critRate ?? 0) + (has(attacker, 'super-luck') ? 1 : 0) + (attacker.focusEnergy ? 2 : 0); // 기충전 +2
   return stage >= 2 ? 1 / 4 : stage === 1 ? 1 / 8 : 1 / 16;
 }
 export const critMult = (attacker) => (has(attacker, 'sniper') ? 2.25 : 1.5);

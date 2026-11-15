@@ -109,3 +109,29 @@ const AILMENT_FX = {
 };
 AILMENT_FX.infatuation = { inflict: spec('status/charmed', {}, 1, 'front', { life: 1.2 }), loop: AILMENT_FX.confusion.loop }; // 헤롱헤롱: 하트
 export const fxForAilment = (ailment) => AILMENT_FX[ailment] ?? { loop: null };
+
+// 포켓몬에 붙는 효과 (변화기 묶음 1차): 걸릴 때 몸에 한 번. 큰 이펙트는 빠르게(timeScale) 짧게(life)
+const fxOn = (id, opts = {}, timeScale = 2) => spec(id, opts, timeScale, 'front', { life: 1.2 });
+export const EFFECT_FX = {
+  protect: fxOn('holy/divine-shield', { palette: PAL.holy, radius: 14 }, 1.5),
+  endure: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5),
+  focusEnergy: fxOn('status/rage', {}, 1.5),
+  rest: fxOn('status/sleep', {}, 1),
+  aquaRing: fxOn('nature/healing-bloom', { palette: PAL.water }),
+  ingrain: fxOn('nature/root-snare', { palette: PAL.leaf }),
+  curse: fxOn('shadow/curse', {}, 2.5),
+  yawn: fxOn('status/sleep', {}, 1),
+  leechSeed: fxOn('nature/spore-burst', { palette: PAL.leaf }, 2.5),
+  helpingHand: fxOn('holy/blessing', {}, 2),
+  identNormal: fxOn('arcane/rune-circle', { palette: PAL.holy }),
+  identPsychic: fxOn('arcane/rune-circle', { palette: PAL.arcane }),
+  taunt: fxOn('shadow/hex-sigil', { palette: PAL.blood }, 3),
+  encore: fxOn('holy/blessing', { palette: PAL.candy }, 2),
+  disable: fxOn('shadow/hex-sigil', { palette: PAL.arcane }, 3),
+  torment: fxOn('status/slowed', {}, 1.5),
+  healBlock: fxOn('shadow/hex-sigil', { palette: PAL.heal }, 3),
+  noMove: fxOn('shadow/grasping-hands', {}, 2.5),
+  abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
+  worrySeed: fxOn('nature/spore-burst', { palette: PAL.leaf }, 2.5),
+  bond: fxOn('shadow/soul-drain', {}, 2.5),
+};

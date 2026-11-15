@@ -44,10 +44,24 @@ export function drawStatusDot(ctx, unit, cx, cy) {
 
 export const STAT_SHORT = { atk: '공', def: '방', spa: '특공', spd: '특방', spe: '스피', acc: '명중', eva: '회피' };
 
-// "공+2(3) 방-1(2)" — 0 단계는 생략, 괄호는 남은 턴
+// 포켓몬에 붙는 효과 (변화기 묶음 1차): 짧은 이름 + 남은 턴
+const TAG_TURNS = { taunt: '도발', noMove: '이동불가', torment: '트집', healBlock: '회복봉인' };
+const TAG_LOCK = { encore: '앙코르', disable: '사슬묶기' };
+const TAG_FLAG = { focusEnergy: '기충전', aquaRing: '아쿠아링', rooted: '뿌리박기', cursed: '저주', leechBy: '씨뿌리기', yawnBy: '하품', identNormal: '꿰뚫림', identPsychic: '꿰뚫림', abilityOff: '특성꺼짐', bond: '길동무' };
+export function volatileTags(unit) {
+  const out = [];
+  if (unit.guard === 'protect') out.push('방어');
+  if (unit.guard === 'endure') out.push('버티기');
+  for (const [k, name] of Object.entries(TAG_TURNS)) if (unit[k] > 0) out.push(`${name}${unit[k]}`);
+  for (const [k, name] of Object.entries(TAG_LOCK)) if (unit[k]) out.push(`${name}${unit[k].turns}`);
+  for (const [k, name] of Object.entries(TAG_FLAG)) if (unit[k] && !out.includes(name)) out.push(name);
+  return out;
+}
+
+// "공+2(3) 방-1(2)" — 0 단계는 생략, 괄호는 남은 턴. 뒤에 붙는 효과 표시
 export function stageLine(unit) {
   return ((unit.confusion > 0 ? '혼란 ' : '') + STAT_KEYS.filter((k) => unit.stages?.[k]).map((k) => `${STAT_SHORT[k]}${unit.stages[k] > 0 ? '+' : '-'}${Math.abs(unit.stages[k])}(${unit.turns[k]})`)
-    .join(' ')).trim();
+    .concat(volatileTags(unit)).join(' ')).trim();
 }
 
 const BORDER = '#384050', INNER = '#a8c0d8', FILL = '#f8f8f8';

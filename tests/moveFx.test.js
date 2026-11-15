@@ -79,3 +79,13 @@ test('every move in a family exists and is learnable', async () => {
   const { BITE, KICK, SLASH, STAB } = await import('../src/data/moveFamilies.js');
   for (const id of [...BITE, ...KICK, ...SLASH, ...STAB]) assert.ok(MOVES[id]?.learnable, id);
 });
+
+// ---- 변화기 묶음 1차 ----
+import { EFFECT_FX } from '../src/data/moveFx.js';
+import { EFFECT_MOVES } from '../src/data/moveEffects.js';
+test('every effect has an fx that is registered', () => {
+  for (const e of new Set(Object.values(EFFECT_MOVES))) {
+    assert.ok(EFFECT_FX[e], e);
+    assert.ok(FX[EFFECT_FX[e].id], `${e}: ${EFFECT_FX[e].id}`);
+  }
+});

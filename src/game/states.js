@@ -2,7 +2,8 @@
 import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
-import { wrapMessage } from '../render/mapAttack.js';
+import { wrapMessage, blockedText } from '../render/mapAttack.js';
+import { moveBlock, moveFor } from '../core/volatile.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
@@ -84,6 +85,7 @@ const STATUS_LINE = {
   sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!',
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
+const EFFECT_END = { taunt: '도발이 풀렸다!', noMove: '발이 풀려 다시 움직일 수 있다!', encore: '앙코르가 풀렸다!', disable: '사슬묶기가 풀렸다!', torment: '트집이 풀렸다!', healBlock: '회복봉인이 풀렸다!' };
 
 // 페이즈 전환 알림 목록 (순수). events: log.statusEvents, expired: log.expired, get: id → 유닛
 export function phaseNotices(events, expired, get) {
@@ -94,6 +96,13 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'infatuationEnd' ? `${who(e.unitId)}의 헤롱헤롱이 풀렸다!`
       : e.kind === 'sealed' ? `${josa(who(e.unitId), '은/는')} 풀이 죽어 기술을 쓸 수 없다!`
       : e.kind === 'thawed' ? `${who(e.unitId)}의 얼음이 녹았다!`
+      : e.kind === 'yawnSleep' ? `${josa(who(e.unitId), '은/는')} 졸음을 못 이기고 잠들었다!`
+      : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
+      : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
+      : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
+      : e.kind === 'aquaRing' ? `${josa(who(e.unitId), '은/는')} 아쿠아링으로 체력을 회복했다!`
+      : e.kind === 'ingrain' ? `${josa(who(e.unitId), '은/는')} 뿌리로 양분을 흡수했다!`
+      : e.kind === 'effectEnd' ? `${who(e.unitId)}의 ${EFFECT_END[e.effect] ?? '효과'}`
       : `${josa(who(e.unitId), '은/는')} ${STATUS_LINE[e.kind]}`;
     const w = wrapMessage(text);
     return {
@@ -198,8 +207,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const toTile = (ev) => ({ x: Math.floor((ev.px + Math.round(cam.x)) / TILE), y: Math.floor((ev.py + Math.round(cam.y)) / TILE) });
 
   // 고를 수 있는 대상(적 하나·아군 하나) 또는 기술이 닿는 유닛들(자신·범위형)
+  const MV = (id) => moveFor(sel, id); // 고르는 중인 유닛 기준 기술 (저주)
   function targetsFor(unit, moveId) {
-    const mv = MOVES[moveId];
+    const mv = moveFor(unit, moveId); // 저주: 고스트면 적 하나
     if (!pickOne(mv)) return targetsOf(st, unit, mv);
     const [min, max] = mv.range;
     const want = mv.kind === 'ally' ? (o) => o.side === unit.side && o !== unit : (o) => o.side !== unit.side;
@@ -215,7 +225,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 조준의 대표 칸 (커서 위치)
   function aimPoint(aim) {
     if (aim.unitId) { const u = st.units.find((o) => o.id === aim.unitId); return { x: u.x, y: u.y }; }
-    if (aim.dir) return tilesOf(st, sel, MOVES[move], aim)[0] ?? { x: sel.x, y: sel.y };
+    if (aim.dir) return tilesOf(st, sel, MV(move), aim)[0] ?? { x: sel.x, y: sel.y };
     if (aim.self) return { x: sel.x, y: sel.y };
     return { x: aim.x, y: aim.y };
   }
@@ -333,7 +343,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 공격기·변화기 공통. 자신·범위형 변화기는 target 을 무시한다
   function doAttack(attacker, target, moveId, then, aim) {
-    const mv = MOVES[moveId];
+    const mv = moveFor(attacker, moveId); // 저주: 고스트면 적 하나
     if (isAttack(mv)) { attackWith(attacker, target, mv, then, aim); return; }
     const pulled = pickOne(mv) && target && target !== attacker ? redirectTarget(st, attacker.id, moveId, target.id) : null; // 피뢰침·마중물
     const one = pulled ?? (pickOne(mv) && target && target !== attacker ? target : null);
@@ -405,11 +415,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function openAction() {
-    menu = sel.moves.map((m) => ({
-      label: MOVES[m].name, moveId: m,
-      enabled: !sel.sealed && (MOVES[m].heal ? sel.hp < sel.maxHp && (sel.healUses ?? 0) > 0 : true) && (isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MOVES[m].kind === 'self' || targetsFor(sel, m).length > 0), // 풀죽음 봉인
-      ...(MOVES[m].category === 'status' ? { tag: '변화' } : {}),
-    }));
+    menu = sel.moves.map((m) => {
+      const block = moveBlock(sel, m); // 도발·앙코르·사슬묶기·트집·회복봉인
+      return {
+        label: MOVES[m].name, moveId: m,
+        enabled: !sel.sealed && !block && (MOVES[m].heal ? sel.hp < sel.maxHp && (sel.healUses ?? 0) > 0 : true) && (isAttack(MOVES[m]) ? attackAims(sel, MOVES[m]).length > 0 : MV(m).kind === 'self' || targetsFor(sel, m).length > 0), // 풀죽음 봉인
+        ...(block ? { why: blockedText(block) } : {}),
+        ...(MOVES[m].category === 'status' ? { tag: '변화' } : {}),
+      };
+    });
     menu.push({ label: '대기', enabled: true });
     const firstAttack = menu.findIndex((i) => i.enabled && i.moveId && !i.tag);
     menuSel = firstAttack >= 0 ? firstAttack : Math.max(0, menu.findIndex((i) => i.enabled));
@@ -442,6 +456,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function chooseMenu() {
     const it = menu[menuSel];
+    if (it && !it.enabled && it.why) { const w = wrapMessage(it.why); showNotice(Array.isArray(w) ? w : [w], () => { mode = 'action'; }); return; } // 못 쓰는 이유
     if (!it?.enabled) return;
     if (mode === 'endMenu') {
       if (menuSel === 0) enemyPhase(); else mode = 'idle';
@@ -453,9 +468,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       return;
     }
     move = it.moveId;
-    if (isAttack(MOVES[move])) { // 공격기: 가장 많이 맞는 조준부터
-      aims = attackAims(sel, MOVES[move]);
-      const b = bestAim(st, sel, MOVES[move]);
+    if (isAttack(MV(move))) { // 공격기: 가장 많이 맞는 조준부터
+      aims = attackAims(sel, MV(move));
+      const b = bestAim(st, sel, MV(move));
       aIdx = Math.max(0, aims.findIndex((a) => sameAim(a, b)));
       cursor = aimPoint(curAim());
       mode = 'target';
@@ -464,7 +479,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     aims = null;
     targets = targetsFor(sel, move);
     tIdx = 0;
-    const t0 = pickOne(MOVES[move]) ? targets[0] : sel; // 자신·범위형: 커서는 사용자, 확인 한 번
+    const t0 = pickOne(MV(move)) ? targets[0] : sel; // 자신·범위형: 커서는 사용자, 확인 한 번
     cursor = { x: t0.x, y: t0.y };
     mode = 'target';
   }
@@ -556,7 +571,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           }
           if (tile && (ev.type === 'cursor' || ev.type === 'click')) {
             // 그 칸이 중심인 조준 → 지금 조준이 그 칸을 덮으면 유지 → 그 칸을 덮는 첫 조준
-            const covers = (a) => tilesOf(st, sel, MOVES[move], a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y);
+            const covers = (a) => tilesOf(st, sel, MV(move), a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y);
             const centred = aims.findIndex((a) => { const p = aimPoint(a); return p.x === tile.x && p.y === tile.y; });
             const i = centred >= 0 ? centred : covers(curAim()) ? aIdx : aims.findIndex(covers);
             if (i < 0) return;
@@ -566,8 +581,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           }
           return;
         }
-        if (!pickOne(MOVES[move])) {
-          const inArea = tile && manhattan(tile, sel) <= MOVES[move].range[1];
+        if (!pickOne(MV(move))) {
+          const inArea = tile && manhattan(tile, sel) <= MV(move).range[1];
           if (ev.type === 'confirm' || (ev.type === 'click' && inArea)) doAttack(sel, sel, move, finishAllyAction);
           if (ev.type === 'cancel') { cursor = { x: sel.x, y: sel.y }; mode = 'action'; }
           return;
@@ -842,10 +857,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     };
     if (mode === 'action' && menu[menuSel]?.moveId) area(MOVES[menu[menuSel].moveId]);
     if (mode === 'target' && aims) {
-      const mv = MOVES[move], tiles = tilesOf(st, sel, mv, curAim());
+      const mv = MV(move), tiles = tilesOf(st, sel, mv, curAim());
       ui.drawHighlights(ctx, tiles, RED);
       for (const u of unitsHit(st, sel, mv, curAim())) if (u.side === sel.side) ui.drawOutline(ctx, u.x, u.y, '#f89020');
-    } else if (mode === 'target') area(MOVES[move]);
+    } else if (mode === 'target') area(MV(move));
     fxm.draw(ctx, 'back', { x: cx, y: cy });
     drawUnits(ctx);
     fxm.draw(ctx, 'front', { x: cx, y: cy });
@@ -865,8 +880,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (mode === 'action' && menu[menuSel]?.moveId) drawMoveInfo(ctx, menu[menuSel].moveId);
     }
     if (mode === 'target') {
-      if (MOVES[move].category === 'status') drawStatusForecast(ctx, sel, MOVES[move], targets);
-      else drawAttackForecast(ctx, sel, MOVES[move], curAim());
+      if (MV(move).category === 'status') drawStatusForecast(ctx, sel, MV(move), targets);
+      else drawAttackForecast(ctx, sel, MV(move), curAim());
     }
     if (banner) ui.drawBanner(ctx, banner.text, banner.sub, banner.color, Math.min(1, banner.t));
     if (anim) anim.drawScreen(ctx);

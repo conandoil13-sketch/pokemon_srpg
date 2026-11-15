@@ -235,3 +235,41 @@ test('in fog the AI does not attack allies it has not seen', () => {
   assert.equal(planEnemyAction(s, foe, { unseen: new Set(['ally-pikachu']) }).attack, null);
   assert.ok(planEnemyAction(s, foe).attack);
 });
+
+// ---- 변화기 묶음 1차: 새 변화기 ----
+test('enemy protects only when threatened and hurt', () => {
+  const plan = (hpRate, extra = {}) => {
+    const foe = makeUnit({ species: 'pidgey', side: 'enemy', x: 4, y: 2, level: 30, moves: ['tackle', 'protect'] });
+    foe.hp = Math.floor(foe.maxHp * hpRate); Object.assign(foe, extra);
+    const ally = mk('garchomp', 'ally', 2, 2);
+    return planEnemyAction(state(9, 5, [foe, ally]), foe);
+  };
+  assert.equal(plan(0.4).attack?.moveId, 'protect');
+  assert.notEqual(plan(0.9).attack?.moveId, 'protect');
+  assert.notEqual(plan(0.4, { guardPrev: true }).attack?.moveId, 'protect');
+});
+
+test('enemy does not pick moves blocked by taunt', () => {
+  const foe = makeUnit({ species: 'pidgey', side: 'enemy', x: 4, y: 2, level: 30, moves: ['tackle', 'protect'] });
+  foe.hp = Math.floor(foe.maxHp * 0.4); foe.taunt = 3;
+  const plan = planEnemyAction(state(9, 5, [foe, mk('garchomp', 'ally', 2, 2)]), foe);
+  assert.notEqual(plan.attack?.moveId, 'protect');
+});
+
+test('enemy yawns an awake target and skips already yawned ones', () => {
+  const run = (extra) => {
+    const foe = makeUnit({ species: 'slowpoke', side: 'enemy', x: 4, y: 2, level: 30, moves: ['yawn'] });
+    const ally = mk('luxray', 'ally', 2, 2);
+    Object.assign(ally, extra);
+    return planEnemyAction(state(9, 5, [foe, ally, mk('bronzong', 'ally', 8, 4)]), foe); // 깨어 있는 마지막 하나는 재우지 않으므로 하나 더
+  };
+  assert.equal(run({}).attack?.moveId, 'yawn');
+  assert.notEqual(run({ yawnBy: 'enemy-x' }).attack?.moveId, 'yawn');
+});
+
+test('enemy rooted by ingrain stays put', () => {
+  const foe = makeUnit({ species: 'oddish', side: 'enemy', x: 6, y: 2, level: 30, moves: ['absorb'] });
+  foe.rooted = true;
+  const plan = planEnemyAction(state(9, 5, [foe, mk('luxray', 'ally', 1, 2)]), foe);
+  assert.deepEqual(plan.moveTo, { x: 6, y: 2 });
+});
