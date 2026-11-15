@@ -30,7 +30,7 @@ export function varPower(attacker, defender, move) {
     case 'lowHp': { const p = Math.floor(48 * attacker.hp / attacker.maxHp); return p >= 33 ? 20 : p >= 17 ? 40 : p >= 10 ? 80 : p >= 5 ? 100 : p >= 2 ? 150 : 200; }
     case 'targetHp': return Math.max(1, Math.floor(120 * defender.hp / defender.maxHp) + 1);
     case 'speed': return Math.min(150, Math.floor(25 * effectiveStat(defender, 'spe') / Math.max(1, effectiveStat(attacker, 'spe'))) + 1);
-    case 'lastStand': { const n = attacker.alliesLeft ?? 4; return n <= 1 ? 200 : n === 2 ? 80 : n === 3 ? 60 : 40; }
+    case 'lastStand': return attacker.allMovesUsed ? 200 : 40; // 마지막수단: 남은 아군 모두가 모든 기술을 한 번씩 썼으면
     default: return move.power;
   }
 }
@@ -83,6 +83,7 @@ export function fixedDamage(attacker, defender, move, weather = null) {
 export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false }) {
   if (move.fixedDamage) {
     const fd = fixedDamage(attacker, defender, move, weather);
+    if (fd === 0 && move.fixedDamage === 'ohko' && defender.boss) return { hit: true, crit: false, typeMult: 0, damage: 0, ohkoBoss: true }; // 보스 전용 문구
     if (fd === 0) return { hit: true, crit: false, typeMult: 0, damage: 0 };
     const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather);
     const dmg = move.fixedDamage === 'psywave' ? Math.max(1, Math.floor(fd * (0.5 + rng()))) : fd;
