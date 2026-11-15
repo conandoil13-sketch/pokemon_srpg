@@ -362,7 +362,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     unitPose(u) {
       const s = step();
       if (!s) return null;
-      if (result.summoned && u.id === result.summoned && (summonAt === null || total - summonAt < 0.7)) return { hidden: true }; // 물기둥 속에서 등장
+      if (result.summoned && u.id === result.summoned && (summonAt === null || total - summonAt < 1.0)) return { hidden: true }; // 물기둥 속에서 등장
       if (result.pushed && u.id === result.pushed.unitId) { // 밀려난 포켓몬: 원래 칸 → 새 칸
         const pi = steps.findIndex((x) => x.k === 'push'), { from, to } = result.pushed;
         const k = i < pi ? 0 : i === pi ? Math.min(1, t / 0.3) : 1;
