@@ -157,3 +157,15 @@ test('each OHKO move has its own finisher effect', () => {
     assert.ok(CUSTOM_FX[fx], fx);
   }
 });
+
+import { LINK_EFFECTS, linkFx } from '../src/data/moveFx.js';
+test('swap-type moves use link orbs; other recent status moves have their own effect', () => {
+  for (const e of ['powerSwap', 'guardSwap', 'heartSwap', 'psychUp', 'psychoShift', 'painSplit', 'memento']) assert.ok(LINK_EFFECTS.has(e), e);
+  assert.equal(linkFx('psychUp', -48, 0).opts.mode, 'take');
+  assert.equal(fxForEffect('stockpile', 'stockpile').id, 'pokemon/stockpile-gulp');
+  assert.equal(fxForEffect('bellyDrum', 'belly-drum').id, 'pokemon/drum-beat');
+  assert.equal(fxForEffect('wish', 'wish').id, 'pokemon/wish-star');
+  assert.equal(fxForEffect('acupressure', 'acupressure').id, 'pokemon/needle-point');
+  assert.equal(fxForEffect('nightmare', 'nightmare').id, 'pokemon/nightmare-cloud');
+  assert.equal(fxForEffect('splash', 'splash').id, 'pokemon/splash-hop');
+});

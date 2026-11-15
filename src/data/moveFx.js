@@ -154,11 +154,11 @@ export const EFFECT_FX = {
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
-  refresh: HEAL_FX, teamCure: HEAL_FX, wish: fxOn('holy/blessing', {}, 2), stockpile: fxOn('status/rage', { palette: PAL.gold }, 1.5), swallow: HEAL_FX,
-  sacrificeHeal: HEAL_FX, memento: fxOn('status/cursed', { palette: PAL.water }, 1.5), painSplit: fxOn('shadow/soul-drain', {}, 2.5), bellyDrum: fxOn('status/rage', {}, 1.5),
-  acupressure: fxOn('impacts/hit-spark', { palette: PAL.gold }, 1), psychUp: fxOn('arcane/rune-circle', { palette: PAL.arcane }), powerSwap: fxOn('arcane/rune-circle', { palette: PAL.ember }),
+  refresh: HEAL_FX, teamCure: HEAL_FX, wish: spec('pokemon/wish-star', {}, 1, 'front', { life: 1.3 }), stockpile: spec('pokemon/stockpile-gulp', {}, 1, 'front', { life: 1.1 }), swallow: HEAL_FX,
+  sacrificeHeal: HEAL_FX, memento: fxOn('status/cursed', { palette: PAL.water }, 1.5), painSplit: fxOn('shadow/soul-drain', {}, 2.5), bellyDrum: spec('pokemon/drum-beat', {}, 1, 'front', { life: 1.3 }),
+  acupressure: spec('pokemon/needle-point', {}, 1, 'front', { life: 0.9 }), psychUp: fxOn('arcane/rune-circle', { palette: PAL.arcane }), powerSwap: fxOn('arcane/rune-circle', { palette: PAL.ember }),
   guardSwap: fxOn('arcane/rune-circle', { palette: PAL.ice }), heartSwap: fxOn('arcane/rune-circle', { palette: PAL.candy }), psychoShift: fxOn('arcane/rune-circle', { palette: PAL.neon }),
-  nightmare: fxOn('shadow/curse', {}, 2.5), teeterDance: fxOn('status/confused', {}, 1.5), splash: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
+  nightmare: spec('pokemon/nightmare-cloud', {}, 1, 'front', { life: 1.3 }), teeterDance: fxOn('status/confused', {}, 1.5), splash: spec('pokemon/splash-hop', {}, 1, 'front', { life: 0.9 }),
   counterStance: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5), // 반격 자세
   bide: fxOn('status/rage', {}, 1.5), // 참기
   bind: spec('pokemon/bind-coil', {}, 1, 'front', { life: 1.3 }), // 속박기 (기술별로는 bindFx)
@@ -186,6 +186,15 @@ export const COUNTER_PAL = {
 };
 // 숨기: 종류별로 숨는 순간 연출
 const HIDE_FX = { fly: 'pokemon/hide-sky', bounce: 'pokemon/hide-sky', dig: 'pokemon/hide-dig', dive: 'pokemon/hide-dive', 'shadow-force': 'pokemon/hide-shadow' };
+// 주고받는 구슬 (원점 = 대상 발밑, fromX/fromY = 사용자 발밑의 상대 위치): 스왑·자기암시·사이코시프트·아픔나누기·추억의선물
+const LINK = {
+  powerSwap: ['swap', ['#3a0a0a', '#8a1a1a', '#e04040', '#ff9a8a', '#ffe0d8']], guardSwap: ['swap', ['#06143a', '#1a3a8a', '#3a7ae0', '#8ac0ff', '#e0f0ff']],
+  heartSwap: ['swap', ['#3a0a2a', '#8a1a5a', '#e04aa0', '#ff9ad0', '#ffe0f2']], psychUp: ['take', ['#1e0a3a', '#4a1a8a', '#8a4ae0', '#c49aff', '#f0e4ff']],
+  psychoShift: ['give', ['#2a1a04', '#7a4a10', '#e09a28', '#ffd070', '#fff4d0']], painSplit: ['swap', ['#2a0404', '#7a0a10', '#d01a2a', '#ff6a6a', '#ffd0d0']],
+  memento: ['give', ['#06040a', '#1a1424', '#3a2e4e', '#6a5a8a', '#b0a4d0']],
+};
+export const LINK_EFFECTS = new Set(Object.keys(LINK));
+export const linkFx = (effect, fromX, fromY) => spec('pokemon/link-orbs', { mode: LINK[effect][0], palette: LINK[effect][1], fromX, fromY }, 1, 'front', { life: 1.2 });
 export const PRESENT_FX = spec('pokemon/present-box', {}, 1, 'front', { life: 1.3 });
 export const GYARADOS_FX = spec('pokemon/gyarados-burst', {}, 1, 'front', { life: 1.9 });
 const MOVE_EFFECT_FX = {
