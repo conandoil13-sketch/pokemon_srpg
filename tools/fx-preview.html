@@ -66,6 +66,14 @@
   <label>찾기 <input id="leftFind" placeholder="이름" style="background:var(--panel);color:var(--ink);border:1px solid #39445c;border-radius:6px;padding:5px 8px;font:inherit;width:120px"></label>
 </div>
 <div class="tablewrap"><table id="leftTable"></table></div>
+
+<h2>특성 일람 <span id="abCount" style="color:var(--muted)"></span></h2>
+<p class="note">게임에 나오는 포켓몬이 가진 특성 전부 (실시간 계산). <b>SRPG식</b> = 이 게임 규칙으로 다시 만든 것, <b>원작대로</b> = 원작 효과 그대로, <b>이름만</b> = 아직 효과 없음. 열 제목을 누르면 정렬.</p>
+<div class="filters">
+  <label>상태 <select id="abState"><option value="">전체</option><option value="srpg">SRPG식</option><option value="orig">원작대로</option><option value="none">이름만</option></select></label>
+  <label>찾기 <input id="abFind" placeholder="이름" style="background:var(--panel);color:var(--ink);border:1px solid #39445c;border-radius:6px;padding:5px 8px;font:inherit;width:120px"></label>
+</div>
+<div class="tablewrap"><table id="abTable"></table></div>
 <script type="module">
 import { createFxManager } from '../src/render/fx.js';
 import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx } from '../src/data/moveFx.js';
@@ -78,6 +86,8 @@ import { SPECIES } from '../src/data/species.js';
 import { EFFECT_MOVES } from '../src/data/moveEffects.js';
 import { MOVES } from '../src/data/moves.js';
 import { familyOf } from '../src/data/moveFamilies.js';
+import { ABILITIES, SRPG_ABILITY_TEXT, NO_EFFECT } from '../src/data/abilities.js';
+import POKEDEX from '../src/data/generated/pokedex.js';
 
 const $ = (id) => document.getElementById(id);
 const TYPES = [...new Set([...Object.keys(TYPE_PALETTE), 'dark'])];
@@ -200,6 +210,31 @@ function drawLeft() {
 for (const id of ['leftCat', 'leftNext']) $(id).onchange = drawLeft;
 $('leftFind').oninput = drawLeft;
 drawLeft();
+// ---- 특성 일람: 게임에 나오는 포켓몬의 특성, 상태(SRPG식·원작대로·이름만), 이 게임 효과, 원작 효과 ----
+const AB_STATE = { srpg: ['SRPG식', 'next'], orig: ['원작대로', ''], none: ['이름만', ''] };
+const abOwners = new Map();
+for (const sp of Object.values(SPECIES)) for (const id of sp.abilities ?? []) { if (!abOwners.has(id)) abOwners.set(id, []); abOwners.get(id).push(sp.name); }
+const abRows = [...abOwners].map(([id, who]) => {
+  const a = ABILITIES[id] ?? { name: id, desc: '' }, orig = POKEDEX.abilities[id]?.desc ?? '';
+  const state = NO_EFFECT.includes(id) ? 'none' : SRPG_ABILITY_TEXT[id] ? 'srpg' : 'orig';
+  return { id, name: a.name, state, mine: state === 'none' ? '-' : state === 'srpg' ? SRPG_ABILITY_TEXT[id] : orig, orig, n: who.length, who: who.slice(0, 6).join(', ') + (who.length > 6 ? ' …' : '') };
+});
+let abSort = { key: 'state', dir: 1 };
+function drawAbilities() {
+  const st = $('abState').value, q = $('abFind').value.trim();
+  const rows = abRows.filter((r) => (!st || r.state === st) && (!q || r.name.includes(q) || r.id.includes(q)))
+    .sort((a, b) => (a[abSort.key] > b[abSort.key] ? 1 : a[abSort.key] < b[abSort.key] ? -1 : 0) * abSort.dir || a.name.localeCompare(b.name));
+  const by = (k) => abRows.filter((r) => r.state === k).length;
+  $('abCount').textContent = `(${rows.length} / ${abRows.length}개 · SRPG식 ${by('srpg')} · 원작대로 ${by('orig')} · 이름만 ${by('none')})`;
+  const head = [['name', '특성'], ['state', '상태'], ['mine', '이 게임 효과'], ['orig', '원작 효과'], ['n', '가진 포켓몬']];
+  $('abTable').innerHTML = `<tr>${head.map(([k, l]) => `<th data-k="${k}">${l}${abSort.key === k ? (abSort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`
+    + rows.map((r) => `<tr><td>${r.name} <span style="color:var(--muted)">${r.id}</span></td><td><span class="tag ${AB_STATE[r.state][1]}">${AB_STATE[r.state][0]}</span></td><td>${r.mine}</td><td style="color:var(--muted)">${r.orig}</td><td class="num" title="${r.who}">${r.n}</td></tr>`).join('');
+  for (const th of $('abTable').querySelectorAll('th')) th.onclick = () => { const k = th.dataset.k; abSort = { key: k, dir: abSort.key === k ? -abSort.dir : k === 'n' ? -1 : 1 }; drawAbilities(); };
+}
+$('abState').onchange = drawAbilities;
+$('abFind').oninput = drawAbilities;
+drawAbilities();
+
 // 회복기·잠자기·차례 끝 회복: 회복 표시 / 흡수기: 적에게서 구슬이 날아오고 도착하면 회복 표시
 function playHeal() { lastPlay = playHeal; reset(); onBody(HEAL_FX, cast.me, A); $('info').textContent = `회복 표시 → ${HEAL_FX.id}`; }
 function playDrain() {
