@@ -14,6 +14,8 @@ import { immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILME
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
+import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE } from './field.js';
+import { pathTo, canEnter } from './pathfind.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -77,9 +79,12 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
     weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
+    ...newField(), // 오라 · 장판 · 압정 · 날씨 부르기 (층마다 새로)
   };
   floorStartAbilities(state);
+  state.baseWeather = state.weather; // 날씨 부르기가 끝나면 돌아갈 날씨 (날씨 특성 반영 후)
   for (const u of units) u.fieldWeather = effectiveWeather(state); // 날씨 특성(쓱쓱 등)이 처음부터 이동력에 반영
+  refreshField(state);
   return state;
 
 }
@@ -109,11 +114,29 @@ export const unitAt = (state, x, y) => state.units.find((u) => u.x === x && u.y 
 const byId = (state, id) => state.units.find((u) => u.id === id);
 
 // cost: 이번 이동의 경로 비용 (치고 빠지기에서 남은 이동력 계산)
-export function moveUnit(state, id, x, y, cost = 0) {
+// path: 지나온 칸들 (처음 = 출발 칸). 없으면 경로를 계산한다. 지나는 칸마다 압정 판정, 쓰러지면 그 칸에서 멈춤
+export function moveUnit(state, id, x, y, cost = 0, path = null) {
   const u = byId(state, id);
   const stayed = u.x === x && u.y === y;
+  state.log.trapEvents = [];
+  if (!stayed && state.spikes?.length) {
+    let route = path;
+    if (!route) { const p = pathTo(state.grid, state.units, u, x, y); route = p.length > 1 && p.at(-1).x === x && p.at(-1).y === y ? p : [{ x: u.x, y: u.y }, { x, y }]; }
+    for (const p of route.slice(1)) {
+      const evs = stepOn(state, u, p.x, p.y);
+      state.log.trapEvents.push(...evs);
+      if (u.hp === 0) { // 압정에 쓰러짐: 그 칸에서 멈춘다
+        u.x = p.x; u.y = p.y; u.moved = true;
+        state.log.trapEvents.at(-1).fainted = true;
+        knockOut(state, u, null);
+        checkResult(state);
+        return;
+      }
+    }
+  }
   u.spent = (u.spent ?? 0) + cost;
   u.x = x; u.y = y; u.moved = true;
+  refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
   state.log.arriveAbilityEvents = [];
   // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
   if (has(u, 'intimidate') && !stayed) {
@@ -168,6 +191,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
     (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.suppressedAbility ?? d.ability, boss: !!d.boss }); // 메타몽 캡슐 (위액으로 꺼졌으면 원래 특성)
   }
   if (d.side === 'ally' && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
+  refreshField(state); // 오라 주인이 쓰러지면 오라도 사라진다
   return expGained;
 }
 
@@ -222,6 +246,30 @@ export function retreatMove(state, id, x, y, cost = 0) {
   u.retreated = true; u.retreatReady = false;
 }
 
+// 울부짖기·날려버리기: 쓴 포켓몬 반대쪽으로 3칸 (차이가 큰 축, 같으면 x). 못 서는 칸·다른 포켓몬·맵 끝 앞에서 멈춤.
+// 보스·뿌리박기는 안 밀림. 밀려난 포켓몬은 랭크 변화가 지워지고, 지난 압정은 밟은 것
+export const PUSH_TILES = 3;
+function pushAway(state, a, t, out) {
+  const res = (ok, reason) => ({ unitId: t.id, effect: 'push', ok, ...(reason ? { reason } : {}) });
+  if (t.boss || t.rooted) return res(false, 'immune');
+  const dx = t.x - a.x, dy = t.y - a.y;
+  const [sx, sy] = Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dy)];
+  const path = [{ x: t.x, y: t.y }];
+  for (let i = 0; i < PUSH_TILES; i++) {
+    const p = path.at(-1), nx = p.x + sx, ny = p.y + sy;
+    if (!canEnter(state.grid[ny]?.[nx], t) || state.units.some((u) => u !== t && u.x === nx && u.y === ny)) break;
+    path.push({ x: nx, y: ny });
+  }
+  if (path.length === 1) return res(false, 'stuck');
+  const from = path[0], to = path.at(-1);
+  Object.assign(t, newStages());
+  moveUnit(state, t.id, to.x, to.y, 0, path);
+  const end = { x: t.x, y: t.y }, fainted = !state.units.includes(t); // 압정에 쓰러지면 그 칸에서 멈춤
+  out.pushed = { unitId: t.id, from, to: end, path: path.slice(0, path.findIndex((p) => p.x === end.x && p.y === end.y) + 1), ...(fainted ? { fainted: true } : {}) };
+  out.trapEvents = [...(state.log.trapEvents ?? [])];
+  return res(true);
+}
+
 // 공격기·변화기 공통. 공격기는 데미지 + 능력치 부가효과, 변화기는 대상별 랭크 변화
 const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
 
@@ -229,6 +277,7 @@ const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
 export function applyMove(state, userId, moveId, aim, rng) {
   const W = effectiveWeather(state); // 에어록·날씨부정 반영
   for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 등 스피드·이동력 특성용
+  refreshField(state);
   // 플러스·마이너스 / 플라워기프트: 옆 동료를 보고 켠다 (데미지 계산이 읽음)
   const nextTo = (u, pred) => state.units.some((o) => o !== u && o.side === u.side && dist(o, u) === 1 && pred(o));
   for (const u of state.units) {
@@ -309,8 +358,13 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, healed: { unitId: a.id, amount: a.hp - before } };
   }
 
+  if (kind === 'status' && move.aimTile) { // 압정: 칸 조준 (사거리 1~3)
+    const ok = aim && aim.x !== undefined && state.grid[aim.y]?.[aim.x] !== undefined && dist(a, aim) >= TRAP_RANGE[0] && dist(a, aim) <= TRAP_RANGE[1];
+    const r = ok ? layTraps(state, a, move.effect, aim) : { ok: false, tiles: [] };
+    return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, effects: [{ unitId: a.id, effect: move.effect, ok: r.ok, ...(ok ? {} : { reason: 'range' }) }], protectedIds: [], trapsLaid: r.tiles };
+  }
   if (kind === 'status') {
-    const missed = [], effects = [], protectedIds = [];
+    const missed = [], effects = [], protectedIds = [], out2 = {}; // out2: 밀어내기 pushed · 흑안개 hazed
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
       if (t !== a && t.guard === 'protect') { protectedIds.push(t.id); continue; } // 방어: 다른 유닛의 기술을 막음
@@ -318,13 +372,19 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (ab) { absorb(t, ab); continue; }
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
       if (move.id === 'captivate' && !(t.gender && a.gender && t.gender !== a.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
-      if (move.effect) { effects.push(applyEffect(state, a, t, move, rng, W)); continue; } // 포켓몬에 붙는 효과
+      if (move.effect === 'push') { effects.push(pushAway(state, a, t, out2)); continue; } // 울부짖기·날려버리기
+    if (move.effect === 'haze') { // 흑안개: 주변 2칸 모두 (자신 포함) 랭크 초기화
+      out2.hazed = state.units.filter((u) => dist(u, a) <= 2).map((u) => { Object.assign(u, newStages()); return u.id; });
+      effects.push({ unitId: a.id, effect: 'haze', ok: true });
+      continue;
+    }
+    if (move.effect) { effects.push(applyEffect(state, a, t, move, rng, W)); continue; } // 포켓몬에 붙는 효과
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
     let selfFainted = null;
     if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); selfFainted = a.id; } // 고스트 저주로 쓰러짐
-    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...(selfFainted ? { selfFainted } : {}) };
+    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...out2, ...(selfFainted ? { selfFainted } : {}) };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
@@ -465,7 +525,7 @@ export function endPhase(state, rng = Math.random) {
   const ending = state.phase === 'player' ? 'ally' : 'enemy';
   const events = (state.log.statusEvents = []);
   const abilityLog = (state.log.phaseAbilityEvents = []); // 차례 끝·시작 특성 발동 (화면 알림용)
-  const W = effectiveWeather(state);
+  let W = effectiveWeather(state);
   for (const u of state.units) u.fieldWeather = W;
   for (const u of state.units.filter((o) => o.side === ending)) {
     const r = phaseEnd(u);
@@ -515,6 +575,8 @@ export function endPhase(state, rng = Math.random) {
     }
   }
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
+  tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
+  W = effectiveWeather(state); // 날씨 부르기가 방금 끝났을 수 있음 (쾌청 녹이기 등)
   checkResult(state);
   state.log.expired = [];
   for (const u of state.units) {

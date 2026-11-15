@@ -35,6 +35,7 @@ const types = (unit) => unit.types ?? SPECIES[unit.species].types; // 메타몽 
 // move: 거는 기술 (전기자석파처럼 기술 타입 상성으로 무효가 되는 경우)
 export function canInflict(unit, ailment, move, weather = null, { breaker = false } = {}) {
   if (weatherBlocksAilment(weather, ailment)) return { ok: false, reason: 'weather' }; // 쾌청엔 얼지 않는다
+  if (unit.field?.safeguard) return { ok: false, reason: 'safeguard' }; // 신비의부적 오라
   if (!breaker && blocksAilment(unit, ailment, weather)) return { ok: false, reason: 'ability' }; // 면역·불면·리프가드 …
   if (IMMUNE[ailment]?.some((t) => types(unit).includes(t))) return { ok: false, reason: 'immune' };
   if (move?.id === 'thunder-wave' && typeMultiplier(move.type, types(unit)) === 0) return { ok: false, reason: 'immune' };
@@ -59,7 +60,7 @@ export const moveBudget = (unit) => {
   const m = SPECIES[unit.species].move;
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
   if (unit.trapped) return 1; // 개미지옥·그림자밟기·자력
-  return Math.max(1, base + moveBonus(unit)); // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1
+  return Math.max(1, base + moveBonus(unit)) + (unit.field?.tailwind ? 1 : 0); // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1, 순풍 +1
 };
 
 export const speedMultiplier = (unit) => (unit.status === 'paralysis' ? 0.5 : 1);

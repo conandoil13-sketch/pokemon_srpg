@@ -100,6 +100,7 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
 // 급소: 확률과 배율
 // 급소 단계: 0 → 1/16, 1 → 1/8, 2 이상 → 1/4 (기술 급소율 + 대운). 전투무장·조가비갑옷이 우선
 export function critRate(attacker, defender, move = null) {
+  if (defender?.field?.luckyChant) return 0; // 주술 오라
   if (def(attacker, defender, 'battle-armor') || def(attacker, defender, 'shell-armor')) return 0;
   const stage = (move?.critRate ?? 0) + (has(attacker, 'super-luck') ? 1 : 0) + (attacker.focusEnergy ? 2 : 0); // 기충전 +2
   return stage >= 2 ? 1 / 4 : stage === 1 ? 1 / 8 : 1 / 16;

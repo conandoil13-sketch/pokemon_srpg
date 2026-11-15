@@ -15,7 +15,7 @@ export const stageMultiplier = (n) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
 
 // 마비면 스피드 ×0.5 (status.js 와 같은 규칙, 순환 import 를 피해 여기서 직접 본다)
 export const effectiveStat = (unit, key) => unit.stats[key] * stageMultiplier(unit.stages?.[key] ?? 0)
-  * (key === 'spe' ? (unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? 0.5 : 1) * speedMult(unit) : 1);
+  * (key === 'spe' ? (unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? 0.5 : 1) * speedMult(unit) * (unit.field?.tailwind ? 1.25 : 1) : 1); // 순풍 ×1.25
 
 // 꿰뚫어보기·미라클아이: 회피 상승은 무시 (하락은 그대로)
 export const accuracyShift = (attacker, defender) => {
@@ -35,6 +35,7 @@ function refresh(unit, key) {
 // 반환: { key, before, after, applied } — applied 0 이면 이미 한계 (새 층 없음)
 export function applyStageChange(unit, key, change, turns = STAGE_TURNS, { fromOther = false, breaker = false } = {}) {
   if (!breaker) change = stageGuard(unit, key, change, fromOther); // 클리어바디·괴력집게·날카로운눈·단순 (틀깨기면 무시)
+  if (fromOther && change < 0 && unit.field?.mist) change = 0; // 흰안개 오라
   unit.stages ??= zeros();
   unit.turns ??= zeros();
   unit.layers ??= [];

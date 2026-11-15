@@ -597,3 +597,86 @@ test('phase-end heals show a heal on the healed unit', () => {
   const [none] = phaseNotices([{ unitId: 'e', kind: 'leech', by: 'a', damage: 4, healed: 0, hpBefore: 20, maxHp: 30 }], [], get);
   assert.equal(none.heal, undefined);
 });
+
+// ---- 변화기 묶음 2차: 화면 ----
+import { trapNotices } from '../src/game/states.js';
+import { drawTraps } from '../src/render/ui.js';
+test('field messages for each cast, push, haze, safeguard and weather', () => {
+  const units = { a: { id: 'a', species: 'pikachu', side: 'ally' }, e: { id: 'e', species: 'pidgey', side: 'enemy' } };
+  const get = (id) => units[id];
+  const one = (effect, moveId) => effectMessages({ effects: [{ unitId: 'a', effect, ok: true }] }, get, moveId)[0];
+  assert.equal(one('tailwind'), '순풍이 불기 시작했다!');
+  assert.equal(one('reflect'), '리플렉터로 물리 공격에 강해졌다!');
+  assert.equal(one('weather', 'rain-dance'), '비가 내리기 시작했다!');
+  assert.equal(one('weather', 'hail'), '싸라기눈이 내리기 시작했다!');
+  assert.equal(one('spikes'), '발밑에 압정이 뿌려졌다!');
+  assert.deepEqual(effectMessages({ effects: [{ unitId: 'e', effect: 'push', ok: true }], pushed: { unitId: 'e' } }, get), ['상대 구구는 날려가 버렸다!']);
+  assert.deepEqual(effectMessages({ effects: [{ unitId: 'e', effect: 'push', ok: false, reason: 'stuck' }] }, get), ['상대 구구는 꿈쩍도 하지 않았다!']);
+  assert.deepEqual(effectMessages({ effects: [{ unitId: 'a', effect: 'haze', ok: true }], hazed: ['a', 'e'] }, get), ['모든 랭크 변화가 원래대로 돌아왔다!']);
+  assert.deepEqual(effectMessages({ effects: [{ unitId: 'a', effect: 'yawn', ok: false, reason: 'safeguard' }] }, get), ['피카츄는 신비의 베일이 지켜 주고 있다!']);
+});
+
+test('trap step notices', () => {
+  const units = { e: { id: 'e', species: 'pidgey', side: 'enemy', x: 3, y: 1 } };
+  const get = (id) => units[id];
+  const lines = trapNotices([{ unitId: 'e', kind: 'spikes', damage: 3, hpBefore: 10, maxHp: 24, x: 3, y: 1 }, { unitId: 'e', kind: 'toxicSpikes', x: 4, y: 1 }, { unitId: 'e', kind: 'cleared', x: 5, y: 1, fainted: true }], get);
+  assert.deepEqual(lines.map((l) => l.lines.join(' ')), ['상대 구구는 압정에 찔렸다!', '상대 구구는 독압정을 밟았다!', '상대 구구는 독압정을 치웠다!', '상대 구구는 쓰러졌다!']);
+  assert.deepEqual(lines[0].hp, { from: 10, to: 7, max: 24 });
+});
+
+test('enemy traps are not drawn unless revealed; ally traps are', () => {
+  const ctx = { fillRect() {}, set fillStyle(v) {} };
+  const st = { spikes: [{ x: 1, y: 1, kind: 'spikes', side: 'ally', revealed: false }, { x: 2, y: 1, kind: 'spikes', side: 'enemy', revealed: false }, { x: 3, y: 1, kind: 'toxicSpikes', side: 'enemy', revealed: true }] };
+  assert.deepEqual(drawTraps(ctx, st).map((t) => [t.x, t.y]), [[1, 1], [3, 1]]);
+  assert.deepEqual(drawTraps(ctx, st, [{ x: 2, y: 1 }]).map((t) => [t.x, t.y]), [[1, 1], [2, 1], [3, 1]]); // 까는 연출 중
+});
+
+test('spikes are aimed at a tile from the menu', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const c = game.state.units.find((u) => u.id === 'ally-chimchar');
+  c.moves = ['spikes'];
+  const at = (x, y) => [{ type: 'cursor', px: x * 24 + 12 - Math.round(game.camera.x), py: y * 24 + 12 - Math.round(game.camera.y) }, { type: 'confirm' }];
+  for (const e of at(c.x, c.y)) game.handle(e);
+  for (const e of at(c.x, c.y)) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  game.handle({ type: 'confirm' });
+  assert.equal(game.mode, 'target');
+  game.handle({ type: 'confirm' });
+  assert.ok(game.state.spikes.length >= 3);
+});
+
+test('an ally that faints on spikes ends its action without getting stuck', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state, c = st.units.find((u) => u.id === 'ally-chimchar');
+  st.spikes.push({ x: c.x + 1, y: c.y, kind: 'spikes', side: 'enemy', revealed: false });
+  c.hp = 1;
+  const at = (x, y) => [{ type: 'cursor', px: x * 24 + 12 - Math.round(game.camera.x), py: y * 24 + 12 - Math.round(game.camera.y) }, { type: 'confirm' }];
+  for (const e of at(c.x, c.y)) game.handle(e);
+  for (const e of at(c.x + 1, c.y)) game.handle(e);
+  assert.ok(run(game, (m) => m === 'idle' || m === 'result' || m === 'enemy', [{ type: 'confirm' }]), `stuck in ${game.mode}`);
+  assert.ok(!st.units.includes(c));
+});
+test('review fix: cancelling a move refreshes aura flags', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state, c = st.units.find((u) => u.id === 'ally-chimchar'), p = st.units.find((u) => u.id === 'ally-piplup');
+  st.auras.push({ kind: 'tailwind', ownerId: c.id, side: 'ally', turns: 5 });
+  const free = (x, y) => st.grid[y]?.[x] === '.' && !st.units.some((u) => u !== p && u.x === x && u.y === y);
+  const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]].find(([dx, dy]) => free(c.x + dx, c.y + dy) && free(c.x - 2 * dx, c.y - 2 * dy));
+  p.x = c.x - 2 * dx; p.y = c.y - 2 * dy; // 오라 안 (거리 2), 주인이 한 칸 비키면 밖 (거리 3)
+  const at = (x, y) => [{ type: 'cursor', px: x * 24 + 12 - Math.round(game.camera.x), py: y * 24 + 12 - Math.round(game.camera.y) }, { type: 'confirm' }];
+  for (const e of at(c.x, c.y)) game.handle(e);
+  const ox = c.x, oy = c.y;
+  for (const e of at(ox + dx, oy + dy)) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  game.handle({ type: 'cancel' });
+  assert.deepEqual([c.x, c.y], [ox, oy]);
+  assert.equal(p.field.tailwind, true);
+});
+test('review fix: spikes stepped on during a push are announced', () => {
+  const units = { e: { id: 'e', species: 'pidgey', side: 'enemy' } };
+  const msgs = effectMessages({ effects: [{ unitId: 'e', effect: 'push', ok: true }], pushed: { unitId: 'e', fainted: true }, trapEvents: [{ unitId: 'e', kind: 'spikes', damage: 3, x: 1, y: 1, fainted: true }] }, (id) => units[id]);
+  assert.deepEqual(msgs, ['상대 구구는 날려가 버렸다!', '상대 구구는 압정에 찔렸다!', '상대 구구는 쓰러졌다!']);
+});

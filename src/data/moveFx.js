@@ -139,10 +139,28 @@ export const EFFECT_FX = {
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
   worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
+  // 2차 오라: 발밑에서 퍼지는 고리 (종류별 색) · 장판: 방패 / 땅에 번지는 물·흙
+  tailwind: fxOn('ice/frost-nova', { palette: PAL.ice, reach: AREA_REACH }, 2),
+  safeguard: fxOn('ice/frost-nova', { palette: PAL.candy, reach: AREA_REACH }, 2),
+  mist: fxOn('ice/frost-nova', { palette: PAL.bone, reach: AREA_REACH }, 2),
+  luckyChant: fxOn('ice/frost-nova', { palette: PAL.arcane, reach: AREA_REACH }, 2),
+  reflect: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 20 }, 1.5),
+  lightScreen: fxOn('holy/divine-shield', { palette: PAL.gold, radius: 20 }, 1.5),
+  mudSport: fxOn('nature/acid-splash', { palette: PAL.earth }, 2),
+  waterSport: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
+  weather: fxOn('arcane/spell-charge', { palette: PAL.holy }, 1.5), // 날씨 부르기 (기술별 색은 아래)
+  spikes: fxOn('impacts/ground-slam', { palette: PAL.stone }, 2), // 압정: 사용자 발밑 (깔린 칸은 맵에 그림)
+  toxicSpikes: fxOn('impacts/ground-slam', { palette: POISON_PAL }, 2),
+  push: fxOn('pokemon/sound-wave', { palette: PAL.bone }, 1.5), // 울부짖기·날려버리기 (사용자 앞 퍼지는 파동)
+  haze: fxOn('ice/frost-nova', { palette: PAL.smoke, reach: AREA_REACH }, 1.5), // 흑안개
 };
 // 같은 효과라도 기술마다 인상이 다른 것: 거미집 = 실로 감은 고치, 블록 = 쌓이는 장난감 벽돌 (검은눈빛은 위 손 그대로)
 const MOVE_EFFECT_FX = {
   'spider-web': spec('pokemon/silk-wrap', {}, 1.2, 'front', { life: 1.3 }),
   block: spec('pokemon/brick-stack', {}, 1.3, 'front', { life: 1.3 }),
+  'rain-dance': fxOn('arcane/spell-charge', { palette: PAL.water }, 1.5),
+  'sunny-day': fxOn('arcane/spell-charge', { palette: PAL.fire }, 1.5),
+  sandstorm: fxOn('arcane/spell-charge', { palette: PAL.earth }, 1.5),
+  hail: fxOn('arcane/spell-charge', { palette: PAL.ice }, 1.5),
 };
 export const fxForEffect = (effect, moveId) => MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect];
