@@ -10,13 +10,65 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, EFFECT_FX } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
 import { idleFrameSource } from './sprites.js';
 
 const AUTO = 1.1;
 
 const label = (u) => (u.side === 'enemy' ? '상대 ' : '') + SPECIES[u.species].name;
+
+// ---- 포켓몬에 붙는 효과 (변화기 묶음 1차) 대사 ----
+const W_ = (w, j) => josa(w, j);
+const EFFECT_TEXT = {
+  protect: (w) => `${W_(w, '은/는')} 방어 태세에 들어갔다!`,
+  endure: (w) => `${W_(w, '은/는')} 버티기 태세에 들어갔다!`,
+  focusEnergy: (w) => `${W_(w, '은/는')} 기합이 들어갔다!`,
+  rest: (w) => `${W_(w, '은/는')} 잠들어 체력을 회복했다!`,
+  aquaRing: (w) => `${W_(w, '은/는')} 물의 베일을 둘렀다!`,
+  ingrain: (w) => `${W_(w, '은/는')} 뿌리를 내렸다!`,
+  curse: (w) => `${w}에게 저주가 걸렸다!`,
+  yawn: (w) => `${W_(w, '은/는')} 졸음이 왔다!`,
+  leechSeed: (w) => `${w}에게 씨앗을 심었다!`,
+  helpingHand: (w) => `${W_(w, '을/를')} 도울 준비가 됐다!`,
+  identNormal: (w) => `${w}의 정체를 꿰뚫어 보았다!`,
+  identPsychic: (w) => `${w}의 정체를 꿰뚫어 보았다!`,
+  taunt: (w) => `${W_(w, '은/는')} 도발에 넘어갔다!`,
+  encore: (w) => `${W_(w, '은/는')} 앙코르를 받았다!`,
+  disable: (w) => `${w}의 기술이 사슬에 묶였다!`,
+  torment: (w) => `${W_(w, '은/는')} 트집을 잡혔다!`,
+  healBlock: (w) => `${W_(w, '은/는')} 회복할 수 없게 됐다!`,
+  noMove: (w) => `${W_(w, '은/는')} 움직일 수 없게 됐다!`,
+  abilityOff: (w) => `${w}의 특성이 효과를 잃었다!`,
+  worrySeed: (w) => `${w}의 특성이 불면이 됐다!`,
+  bond: (w) => `${W_(w, '은/는')} 상대를 길동무로 삼으려 하고 있다!`,
+};
+const BLOCK_TEXT = {
+  taunt: '도발당해서 변화기를 쓸 수 없다!', encore: '앙코르 때문에 다른 기술을 쓸 수 없다!',
+  disable: '그 기술은 사슬묶기로 봉인됐다!', torment: '같은 기술을 연달아 쓸 수 없다!', healBlock: '회복봉인으로 회복할 수 없다!',
+};
+export const blockedText = (reason) => BLOCK_TEXT[reason] ?? null;
+const FAIL_TEXT = '그러나 실패했다!';
+// 대사 + 연출 정보 (effect: 몸에 띄울 이펙트)
+function effectLines(result, get) {
+  const out = [];
+  const say = (u, text, effect = null) => { if (u) out.push({ text, who: u, effect }); };
+  for (const id of result.protectedIds ?? []) say(get(id), `${W_(label(get(id)), '은/는')} 몸을 지켰다!`, 'protect');
+  for (const h of result.hits ?? []) {
+    if (h.protected) say(get(h.unitId), `${W_(label(get(h.unitId)), '은/는')} 몸을 지켰다!`, 'protect');
+    if (h.endured) say(get(h.unitId), `${W_(label(get(h.unitId)), '은/는')} 공격을 버텼다!`, 'endure');
+  }
+  let failed = false;
+  for (const e of result.effects ?? []) {
+    const u = get(e.unitId);
+    if (e.ok && EFFECT_TEXT[e.effect]) say(u, EFFECT_TEXT[e.effect](label(u)), e.effect);
+    else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
+  }
+  return out;
+}
+export const effectMessages = (result, get) => effectLines(result, get).map((l) => l.text);
+const effectSteps = (result, get) => effectLines(result, get).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT ? 'Normal' : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id } : null }));
+const spawnEffectFx = (fx, s, get) => { if (s?.efx) { const u = get(s.efx.unitId); if (u) onBody(fx, EFFECT_FX[s.efx.effect], u); } };
 
 // 랭크 변화 대사 (changes: applyMove 의 stageChanges, byId: 유닛 찾기 객체/함수)
 export function stageMessages(changes, byId) {
@@ -138,6 +190,8 @@ function createBlockedAnim({ attacker, result, fx }) {
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 풀이 죽어 기술을 쓸 수 없다!`), emo: 'Pain' }]
     : result.blocked === 'damp'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage('습기 때문에 폭발할 수 없다!'), emo: 'Normal' }]
+    : BLOCK_TEXT[result.blocked]
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage(BLOCK_TEXT[result.blocked]), emo: 'Normal' }] // 도발·앙코르 …
     : [
       { k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 혼란스러워 한다!`), emo: 'Normal' },
       { k: 'impact', d: 0.6, text: wrapMessage('영문도 모르고 자신을 공격했다!'), emo: 'Pain' },
@@ -198,13 +252,14 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const missed = (result.missed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}에게는 맞지 않았다!`), who: get(id), emo: 'Normal' }));
   const healed = result.healed ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(attacker), '은/는')} 체력을 회복했다!`), who: attacker, emo: 'Happy', heal: true }]
     : result.healFailed ? [{ k: 'msg', d: AUTO, text: wrapMessage(result.healFailed === 'full' ? '그러나 HP 가 가득 차 있다!' : '이번 층에서는 더 쓸 수 없다!'), who: attacker, emo: 'Normal' }] : [];
-  const nothing = !healed.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...healed, ...missed, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const efx = effectSteps(result, get);
+  const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
+  const steps = [{ k: 'act', d: 0.45 }, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
-  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'holy/heal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); spawnChangeFx(fx, s, result, get); }; // 회복: 초록 반짝임
+  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, { id: 'holy/heal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get); }; // 회복: 초록 반짝임
   return {
     defender: target,
     get done() { return i >= steps.length; },
@@ -266,6 +321,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   for (const d of defenders) {
     const h = hitOf(d); if (!h) continue;
     const name = label(d);
+    if (h.protected) { mid.push({ text: `${josa(name, '은/는')} 몸을 지켰다!`, who: d, effect: 'protect' }); continue; } // 방어
     if (h.failed) mid.push({ text: '그러나 실패하고 말았다!', who: d }); // 꿈먹기: 깨어 있음
     else if (h.typeMult === 0) mid.push({ text: `${name}에게는 효과가 없는 것 같다...`, who: d });
     else if (!h.hit) mid.push({ text: `${name}에게는 맞지 않았다!`, who: d });
@@ -275,6 +331,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
       else if (h.typeMult < 1) mid.push({ text: many ? `${name}에게는 효과가 별로인 듯하다...` : '효과가 별로인 듯하다...', who: d });
     }
     if (h.strikes > 1) mid.push({ text: `${h.strikes}번 맞았다!`, who: d }); // 연속 공격
+    if (hits.some((x) => x.unitId === d.id && x.endured)) mid.push({ text: `${josa(name, '은/는')} 공격을 버텼다!`, who: d, effect: 'endure' }); // 버티기
     if (h.fainted) faints.push({ text: `${josa(name, '은/는')} 쓰러졌다!`, who: d });
   }
   // 흡수·반동·풀죽음 대사
@@ -283,16 +340,18 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   if (result.drained < 0) after.push({ text: `${josa(label(attacker), '은/는')} 해감액을 흡수해 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   if (result.recoil > 0) after.push({ text: `${josa(label(attacker), '은/는')} 반동으로 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   for (const id of result.flinched ?? []) { const u = get(id); if (u) after.push({ text: `${josa(label(u), '은/는')} 풀이 죽었다!`, who: u, emo: 'Pain' }); }
+  const bonded = result.bond?.includes(attacker.id) ? defenders.find((d) => hitOf(d)?.fainted) : null; // 길동무로 같이 쓰러짐
+  if (bonded) after.push({ text: `${josa(label(bonded), '은/는')} 상대를 길동무로 삼았다!`, who: bonded, emo: 'Pain', effect: 'bond' });
   const steps = [
     { k: 'act', d: actLen },
     ...(travel ? [{ k: 'travel', d: 0.25 }] : []),
     { k: 'impact', d: result.selfKO ? 1.2 : 0.6 },
-    ...mid.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: 'Pain' })),
+    ...mid.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: 'Pain', efx: m.effect ? { effect: m.effect, unitId: m.who.id } : null })),
     ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
-    ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain })),
-    ...(result.selfKO || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
+    ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain, efx: m.effect ? { effect: m.effect, unitId: m.who.id } : null })),
+    ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
@@ -305,6 +364,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const dir = dirName(focusPt.x - attacker.x, focusPt.y - attacker.y);
   let shot = null, fallbackHit = !spec, fallbackShot = !spec, shakeT = 0;
   function enter(s) {
+    spawnEffectFx(fx, s, get); // 방어·버티기·길동무
     if (!s || !spec) return;
     if (s.k === 'act' && spec.cast) spawnSafe(fx, spec.cast, feet(attacker), { dir });
     if (s.drain) onBody(fx, { id: 'shadow/life-steal', opts: { palette: PAL.leaf }, timeScale: 1.5, layer: 'front', life: 1.2 }, attacker); // 흡수: 생명 흡수 연출

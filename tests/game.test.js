@@ -529,3 +529,38 @@ test('infatuation notices: wearing off', () => {
   const out = phaseNotices([{ unitId: 'a', kind: 'infatuationEnd' }], [], () => u);
   assert.match(out[0].lines.join(' '), /헤롱헤롱이 풀렸다/);
 });
+
+// ---- 변화기 묶음 1차: 화면 ----
+import { volatileTags } from '../src/render/ui.js';
+import { effectMessages, blockedText } from '../src/render/mapAttack.js';
+test('volatileTags lists active effects with turns', () => {
+  const tags = volatileTags({ taunt: 3, noMove: 2, focusEnergy: true, encore: { move: 'tackle', turns: 2 }, guard: null });
+  for (const t of ['도발3', '이동불가2', '기충전', '앙코르2']) assert.ok(tags.includes(t), `${t} in ${tags}`);
+  assert.deepEqual(volatileTags({}), []);
+});
+
+test('effect messages: protect, endure, bond, failures', () => {
+  const units = { a: { id: 'a', species: 'pikachu', side: 'ally' }, e: { id: 'e', species: 'pidgey', side: 'enemy' } };
+  const get = (id) => units[id];
+  assert.deepEqual(effectMessages({ effects: [{ unitId: 'a', effect: 'protect', ok: true }] }, get), ['피카츄는 방어 태세에 들어갔다!']);
+  assert.deepEqual(effectMessages({ effects: [{ unitId: 'e', effect: 'taunt', ok: false, reason: 'already' }] }, get), ['그러나 실패했다!']);
+  assert.deepEqual(effectMessages({ protectedIds: ['a'] }, get), ['피카츄는 몸을 지켰다!']);
+  assert.deepEqual(effectMessages({ hits: [{ unitId: 'a', protected: true }] }, get), ['피카츄는 몸을 지켰다!']);
+  assert.deepEqual(effectMessages({ hits: [{ unitId: 'a', endured: true, hit: true }] }, get), ['피카츄는 공격을 버텼다!']);
+  assert.equal(blockedText('taunt'), '도발당해서 변화기를 쓸 수 없다!');
+  assert.equal(blockedText('healBlock'), '회복봉인으로 회복할 수 없다!');
+});
+
+test('move menu greys out blocked moves with a reason', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const c = game.state.units.find((u) => u.id === 'ally-chimchar');
+  c.moves = ['scratch', 'swords-dance']; c.taunt = 3;
+  const sel = [{ type: 'cursor', px: 2 * 24 + 12, py: 5 * 24 + 12 }, { type: 'confirm' }];
+  for (const e of [...sel, ...sel]) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  const sd = game.menu.find((i) => i.moveId === 'swords-dance');
+  assert.equal(sd.enabled, false);
+  assert.equal(sd.why, '도발당해서 변화기를 쓸 수 없다!');
+  assert.equal(game.menu.find((i) => i.moveId === 'scratch').why, undefined); // 공격기는 도발과 무관 (여기선 닿는 적이 없어 회색일 뿐)
+});
