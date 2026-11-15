@@ -2,6 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
+<base href="../"><!-- 스프라이트(assets/…)를 게임과 같은 경로로 불러오도록 저장소 루트 기준 -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>이펙트 미리보기</title>
 <style>
@@ -15,11 +16,20 @@
   button.primary { background: var(--accent); color: #202020; border-color: var(--accent); font-weight: 600; }
   canvas { image-rendering: pixelated; width: 768px; max-width: 100%; aspect-ratio: 4 / 3; background: #3a5a3a; border-radius: 6px; display: block; }
   #info { color: var(--muted); margin-top: 8px; min-height: 1.5em; }
+  h2 { font-size: 16px; margin: 24px 0 4px; }
+  .filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 8px 0; }
+  table { border-collapse: collapse; width: 100%; max-width: 768px; font-size: 13px; }
+  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #2c3548; }
+  th { color: var(--muted); font-weight: 600; cursor: pointer; white-space: nowrap; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 12px; background: #2c3548; color: var(--muted); }
+  .tag.next { background: #3a3418; color: var(--accent); }
+  .tablewrap { overflow-x: auto; }
 </style>
 </head>
 <body>
 <h1>이펙트 미리보기</h1>
-<p class="note">개발용 페이지 (게임에서 연결되지 않음). 게임과 같은 <code>fxForMove</code> · <code>fxForAilment</code> 를 그대로 호출한다.</p>
+<p class="note">개발용 페이지 (게임에서 연결되지 않음). 게임과 같은 <code>fxForMove</code> · <code>fxForAilment</code> · <code>EFFECT_FX</code> 를 그대로 호출한다. 왼쪽부터 아군 · 나 · 적 (칸 24px).</p>
 <div class="row">
   <label>타입 <select id="type"></select></label>
   <label>위력 <select id="tier"><option value="40">약 (≤50)</option><option value="70" selected>중</option><option value="100">강 (≥90)</option></select></label>
@@ -33,16 +43,36 @@
   <button class="primary" id="playMove">기술 재생</button>
 </div>
 <div class="row">
+  <label>변화기 효과 <select id="effect"></select></label>
+  <button class="primary" id="playEffect">효과 재생</button>
+  <button id="playHeal">회복 표시</button>
+  <button id="playDrain">흡수 (적 → 나)</button>
+</div>
+<div class="row">
   <label>상태이상 <select id="ailment"></select></label>
   <button id="playAil">상태이상 재생</button>
   <label><input type="checkbox" id="loop"> 반복</label>
+  <button id="reroll">포켓몬 바꾸기</button>
+  <span id="cast" style="color:var(--muted)"></span>
 </div>
 <canvas id="cv" width="256" height="192"></canvas>
 <div id="info"></div>
+
+<h2>아직 못 배우는 기술 <span id="leftCount" style="color:var(--muted)"></span></h2>
+<p class="note">동료·적 습득표에 나오지만 아직 효과가 없어 배울 수 없는 기술 (실시간 계산). 열 제목을 누르면 정렬.</p>
+<div class="filters">
+  <label>분류 <select id="leftCat"><option value="">전체</option><option value="status">변화</option><option value="physical">물리</option><option value="special">특수</option></select></label>
+  <label><input type="checkbox" id="leftNext"> 2차 예정만</label>
+  <label>찾기 <input id="leftFind" placeholder="이름" style="background:var(--panel);color:var(--ink);border:1px solid #39445c;border-radius:6px;padding:5px 8px;font:inherit;width:120px"></label>
+</div>
+<div class="tablewrap"><table id="leftTable"></table></div>
 <script type="module">
 import { createFxManager } from '../src/render/fx.js';
-import { fxForMove, fxForAilment, TYPE_PALETTE } from '../src/data/moveFx.js';
-import { actorFor } from '../src/render/fxActor.js';
+import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx } from '../src/data/moveFx.js';
+import { actorFor, bodyAt } from '../src/render/fxActor.js';
+import { requestSprites, drawUnitSprite, drawShadow, idleFrameSource, DIR } from '../src/render/sprites.js';
+import { SPECIES } from '../src/data/species.js';
+import { EFFECT_MOVES } from '../src/data/moveEffects.js';
 import { MOVES } from '../src/data/moves.js';
 import { familyOf } from '../src/data/moveFamilies.js';
 
@@ -54,8 +84,22 @@ $('ailment').innerHTML = AILS.map((a) => `<option>${a}</option>`).join('');
 
 const cv = $('cv'), ctx = cv.getContext('2d');
 const fx = createFxManager({ makeCanvas: (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) });
-const actor = actorFor('pikachu', null);
-const A = { x: 64, y: 110 }, D = { x: 176, y: 110 };
+// 아군 · 나 · 적: 무작위 포켓몬 (게임과 같은 PMD 스프라이트)
+const KEYS = Object.keys(SPECIES).filter((k) => k !== 'ditto');
+const cast = { ally: null, me: null, foe: null };
+function reroll() {
+  for (const k of Object.keys(cast)) cast[k] = KEYS[Math.floor(Math.random() * KEYS.length)];
+  requestSprites(Object.values(cast));
+  $('cast').textContent = `아군 ${SPECIES[cast.ally].name} · 나 ${SPECIES[cast.me].name} · 적 ${SPECIES[cast.foe].name}`;
+}
+reroll();
+$('reroll').onclick = reroll;
+const TILE = 24;
+const A = { x: 88, y: 120 }, D = { x: 88 + TILE * 3, y: 120 }, L = { x: 88 - TILE * 2, y: 120 }; // 발밑 (이펙트 원점)
+const actorOf = (sp) => actorFor(sp, idleFrameSource(sp));
+const foeActor = () => actorOf(cast.foe);
+// 몸에 붙는 이펙트: 게임(mapAttack onBody)과 같은 원점
+const onBody = (spec, sp, at) => { const a = actorOf(sp); return fx.spawn(spec, bodyAt(a, at.x, at.y - TILE / 2 + 4), { actor: a }); };
 const VEC = { single1: 1, single2: 3, line: 3, cone: 2, around: 1, blast: 3 };
 
 function play() {
@@ -68,8 +112,8 @@ function play() {
   const steps = [];
   if (spec.cast) steps.push([0, () => fx.spawn(spec.cast, A, { dir: 'right' })]);
   if (spec.travel) steps.push([0.25, () => fx.spawn(spec.travel, A, { dir: 'right', clipTo: D.x - A.x })]);
-  if (spec.hit) steps.push([0.55, () => fx.spawn(spec.hit, at, { dir: 'right', actor })]);
-  if (spec.hit2) steps.push([0.65, () => fx.spawn(spec.hit2, at, { dir: 'right', actor })]);
+  if (spec.hit) steps.push([0.55, () => fx.spawn(spec.hit, at, { dir: 'right', actor: foeActor() })]);
+  if (spec.hit2) steps.push([0.65, () => fx.spawn(spec.hit2, at, { dir: 'right', actor: foeActor() })]);
   if (spec.burst) steps.push([0.55, () => fx.spawn(spec.burst, at, { dir: 'right' })]);
   for (const [t, fn] of steps) setTimeout(fn, t * 1000);
   $('info').textContent = `${move.type} · ${move.category} · 위력 ${move.power} · ${shapeKey} → ${Object.keys(spec).join(', ')}`;
@@ -77,8 +121,8 @@ function play() {
 function playAil() {
   fx.clear();
   const s = fxForAilment($('ailment').value);
-  if (s.inflict) fx.spawn(s.inflict, D, { actor });
-  if (s.loop) setTimeout(() => fx.follow('loop', s.loop, () => D, actor), 300);
+  if (s.inflict) fx.spawn(s.inflict, D, { actor: foeActor() });
+  if (s.loop) setTimeout(() => fx.follow('loop', s.loop, () => D, foeActor()), 300);
   $('info').textContent = `${$('ailment').value} → ${Object.keys(s).join(', ')}`;
 }
 // 실제 기술: 게임과 같은 순서 (사용자 쪽 cast → 탄이 0.25초 날아감 → 대상에 hit)
@@ -91,7 +135,7 @@ function playMove() {
   lastPlay = playMove;
   reset();
   const mv = MOVES[$('move').value], dist = Number($('dist').value);
-  const T = { x: A.x + 16 * dist, y: A.y };
+  const T = { x: A.x + TILE * dist, y: A.y };
   D.x = T.x; // 대상 표시도 옮김
   const spec = fxForMove(mv, { distance: dist });
   if (spec.cast) fx.spawn(spec.cast, A, { dir: 'right' });
@@ -100,13 +144,62 @@ function playMove() {
     if (e && !spec.travel.clip) flying = { e, t: 0, from: { x: A.x, y: A.y - 6 }, to: { x: T.x, y: T.y - 6 } };
   }, 300);
   const hitAt = spec.travel ? 560 : 320;
-  if (spec.hit) later(() => fx.spawn(spec.hit, T, { dir: 'right', actor }), hitAt);
-  if (spec.hit2) later(() => fx.spawn(spec.hit2, T, { dir: 'right', actor }), hitAt + 80);
+  if (spec.hit) later(() => fx.spawn(spec.hit, T, { dir: 'right', actor: foeActor() }), hitAt);
+  if (spec.hit2) later(() => fx.spawn(spec.hit2, T, { dir: 'right', actor: foeActor() }), hitAt + 80);
   if (spec.burst) later(() => fx.spawn(spec.burst, T, { dir: 'right' }), hitAt);
   $('info').textContent = `${mv.name} (${mv.id}) · ${mv.type} · 위력 ${mv.power ?? '-'} · 계열 ${familyOf(mv) ?? '-'} → ${Object.entries(spec).map(([k, v]) => `${k}: ${v.id}`).join(', ')}`;
 }
 $('playMove').onclick = playMove;
-$('play').onclick = () => { reset(); lastPlay = () => { reset(); D.x = 176; play(); }; lastPlay(); };
+$('play').onclick = () => { reset(); lastPlay = () => { reset(); D.x = A.x + TILE * 3; play(); }; lastPlay(); };
+
+// 변화기 효과 (변화기 묶음 1차): 대상 종류대로 나 · 아군 · 적 몸에
+const effectMoves = Object.entries(EFFECT_MOVES).map(([id, effect]) => ({ id, effect, mv: MOVES[id] }));
+$('effect').innerHTML = effectMoves.map(({ id, effect, mv }) => `<option value="${id}">${mv.name} · ${effect}</option>`).join('');
+function playEffect() {
+  lastPlay = playEffect;
+  reset();
+  const { id, effect, mv } = effectMoves.find((e) => e.id === $('effect').value);
+  const who = id === 'curse' || mv.kind === 'enemy' || mv.kind === 'enemies' ? 'foe' : mv.kind === 'ally' ? 'ally' : 'me';
+  const at = { foe: D, ally: L, me: A }[who];
+  onBody(fxForEffect(effect, id), cast[who], at);
+  $('info').textContent = `${mv.name} (${id}) → ${effect} · ${fxForEffect(effect, id).id} · 대상 ${{ foe: '적', ally: '아군', me: '나' }[who]}`;
+}
+$('playEffect').onclick = playEffect;
+
+// ---- 아직 못 배우는 기술 (습득표에 있지만 learnable 이 아닌 것) ----
+const NEXT = new Set(['reflect', 'light-screen', 'tailwind', 'safeguard', 'mist', 'lucky-chant', 'mud-sport', 'water-sport', 'rain-dance', 'sunny-day', 'sandstorm', 'hail', 'spikes', 'toxic-spikes', 'roar', 'whirlwind', 'haze']); // 변화기 묶음 2차
+const CAT_KO = { status: '변화', physical: '물리', special: '특수' };
+const learners = new Map();
+for (const [k, sp] of Object.entries(SPECIES)) for (const [, id] of sp.learnset ?? []) {
+  if (!MOVES[id] || MOVES[id].learnable) continue;
+  if (!learners.has(id)) learners.set(id, new Set());
+  learners.get(id).add(sp.name);
+}
+const leftRows = [...learners].map(([id, set]) => ({ id, name: MOVES[id].name, cat: MOVES[id].category, type: MOVES[id].type, n: set.size, who: [...set].slice(0, 6).join(', ') + (set.size > 6 ? ' …' : ''), next: NEXT.has(id) }));
+let leftSort = { key: 'n', dir: -1 };
+function drawLeft() {
+  const cat = $('leftCat').value, onlyNext = $('leftNext').checked, q = $('leftFind').value.trim();
+  const rows = leftRows.filter((r) => (!cat || r.cat === cat) && (!onlyNext || r.next) && (!q || r.name.includes(q) || r.id.includes(q)))
+    .sort((a, b) => (a[leftSort.key] > b[leftSort.key] ? 1 : a[leftSort.key] < b[leftSort.key] ? -1 : 0) * leftSort.dir || b.n - a.n);
+  $('leftCount').textContent = `(${rows.length} / ${leftRows.length}개)`;
+  const head = [['name', '기술'], ['cat', '분류'], ['type', '타입'], ['n', '배우는 포켓몬'], ['next', '메모']];
+  $('leftTable').innerHTML = `<tr>${head.map(([k, l]) => `<th data-k="${k}">${l}${leftSort.key === k ? (leftSort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('')}</tr>`
+    + rows.map((r) => `<tr><td>${r.name} <span style="color:var(--muted)">${r.id}</span></td><td>${CAT_KO[r.cat]}</td><td>${r.type}</td><td class="num" title="${r.who}">${r.n}</td><td>${r.next ? '<span class="tag next">2차 예정</span>' : ''}</td></tr>`).join('');
+  for (const th of $('leftTable').querySelectorAll('th')) th.onclick = () => { const k = th.dataset.k; leftSort = { key: k, dir: leftSort.key === k ? -leftSort.dir : k === 'n' ? -1 : 1 }; drawLeft(); };
+}
+for (const id of ['leftCat', 'leftNext']) $(id).onchange = drawLeft;
+$('leftFind').oninput = drawLeft;
+drawLeft();
+// 회복기·잠자기·차례 끝 회복: 회복 표시 / 흡수기: 적에게서 구슬이 날아오고 도착하면 회복 표시
+function playHeal() { lastPlay = playHeal; reset(); onBody(HEAL_FX, cast.me, A); $('info').textContent = `회복 표시 → ${HEAL_FX.id}`; }
+function playDrain() {
+  lastPlay = playDrain; reset();
+  fx.spawn(drainFx(D.x - A.x, D.y - A.y), A);
+  later(() => onBody(HEAL_FX, cast.me, A), 500);
+  $('info').textContent = `흡수 → pokemon/drain-orbs + ${HEAL_FX.id}`;
+}
+$('playHeal').onclick = playHeal;
+$('playDrain').onclick = playDrain;
 $('playAil').onclick = playAil;
 
 let last = performance.now(), again = 0;
@@ -115,8 +208,12 @@ function frame(now) {
   fx.update(dt);
   if (flying) { flying.t += dt; const k = Math.min(1, flying.t / 0.25); flying.e.fx.options.x = flying.from.x + (flying.to.x - flying.from.x) * k; flying.e.fx.options.y = flying.from.y + (flying.to.y - flying.from.y) * k; if (k >= 1) flying = null; }
   ctx.fillStyle = '#3a5a3a'; ctx.fillRect(0, 0, 256, 192);
-  ctx.fillStyle = '#e8d070'; ctx.fillRect(A.x - 6, A.y - 6, 12, 12);   // 사용자 자리
-  ctx.fillStyle = '#e0e0f0'; ctx.fillRect(D.x - 6, D.y - 6, 12, 12);   // 대상 자리
+  const clock = now / 1000;
+  for (const [sp, at, dir, side] of [[cast.ally, L, DIR.Right, 'ally'], [cast.me, A, DIR.Right, 'ally'], [cast.foe, D, DIR.Left, 'enemy']]) { // 게임처럼 타일 중심 = 발밑 − 8
+    const cy = at.y - TILE / 2 + 4;
+    drawShadow(ctx, at.x, cy, side === 'ally' ? 'rgba(40,80,200,0.45)' : 'rgba(200,40,40,0.45)');
+    drawUnitSprite(ctx, sp, 'Idle', dir, clock, at.x, cy, true);
+  }
   fx.draw(ctx, 'back', { x: 0, y: 0 });
   fx.draw(ctx, 'front', { x: 0, y: 0 });
   if ($('loop').checked && (again += dt) > 1.6) { again = 0; (lastPlay ?? playMove)(); }

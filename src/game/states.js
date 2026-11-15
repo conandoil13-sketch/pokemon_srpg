@@ -13,7 +13,7 @@ import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
 import { drawUnitSprite, drawShadow, hasAnim, idleFrameSource, DIR } from '../render/sprites.js';
 import { actorFor, bodyAt } from '../render/fxActor.js';
-import { fxForAilment } from '../data/moveFx.js';
+import { fxForAilment, HEAL_FX } from '../data/moveFx.js';
 import { dirFromDelta } from '../render/pmdData.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -85,6 +85,8 @@ const STATUS_LINE = {
   sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!',
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
+// 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
+const HEAL_EVENTS = { aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
 const EFFECT_END = { taunt: '도발이 풀렸다!', noMove: '발이 풀려 다시 움직일 수 있다!', encore: '앙코르가 풀렸다!', disable: '사슬묶기가 풀렸다!', torment: '트집이 풀렸다!', healBlock: '회복봉인이 풀렸다!' };
 
 // 페이즈 전환 알림 목록 (순수). events: log.statusEvents, expired: log.expired, get: id → 유닛
@@ -109,6 +111,7 @@ export function phaseNotices(events, expired, get) {
       lines: Array.isArray(w) ? w : [w],
       at: e.x !== undefined ? { x: e.x, y: e.y } : u ? { x: u.x, y: u.y } : null,
       hp: e.damage ? { from: e.hpBefore, to: Math.max(0, e.hpBefore - e.damage), max: e.maxHp } : null,
+      ...(HEAL_EVENTS[e.kind] ? (() => { const id = HEAL_EVENTS[e.kind](e); return id ? { heal: [id] } : {}; })() : {}), // 회복 표시를 띄울 유닛
     };
   };
   const exp = expired.flatMap((e) => {
@@ -411,6 +414,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function showNotice(lines, then, extra = {}) {
     notice = { lines, then, at: extra.at ?? null, hp: extra.hp ?? null, t: 0 };
+    for (const id of extra.heal ?? []) { // 아쿠아링·뿌리박기·씨뿌리기 회복
+      const u = st.units.find((o) => o.id === id);
+      if (!u) continue;
+      const actor = actorFor(u.species, idleFrameSource(u.species));
+      try { fxm.spawn(HEAL_FX, bodyAt(actor, u.x * TILE + TILE / 2, u.y * TILE + TILE / 2), { actor }); } catch { /* 연출 실패는 무시 */ }
+    }
     mode = 'notice';
   }
 

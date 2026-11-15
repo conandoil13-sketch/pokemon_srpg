@@ -110,28 +110,39 @@ const AILMENT_FX = {
 AILMENT_FX.infatuation = { inflict: spec('status/charmed', {}, 1, 'front', { life: 1.2 }), loop: AILMENT_FX.confusion.loop }; // 헤롱헤롱: 하트
 export const fxForAilment = (ailment) => AILMENT_FX[ailment] ?? { loop: null };
 
+// 회복 표시 (회복기·잠자기·흡수·차례 끝 회복): 짧고 분명하게 — 빛이 몸을 훑고 + 가 솟음
+export const HEAL_FX = spec('pokemon/heal-glow', {}, 1, 'front', { life: 1.1 });
+// 흡수: 대상(사용자 발밑 기준 px 위치)에서 구슬이 사용자에게 날아옴
+export const drainFx = (fromX, fromY) => spec('pokemon/drain-orbs', { fromX, fromY }, 1, 'front', { life: 1.1 });
+
 // 포켓몬에 붙는 효과 (변화기 묶음 1차): 걸릴 때 몸에 한 번. 큰 이펙트는 빠르게(timeScale) 짧게(life)
 const fxOn = (id, opts = {}, timeScale = 2) => spec(id, opts, timeScale, 'front', { life: 1.2 });
 export const EFFECT_FX = {
   protect: fxOn('holy/divine-shield', { palette: PAL.holy, radius: 14 }, 1.5),
   endure: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5),
   focusEnergy: fxOn('status/rage', {}, 1.5),
-  rest: fxOn('status/sleep', {}, 1),
-  aquaRing: fxOn('nature/healing-bloom', { palette: PAL.water }),
+  rest: HEAL_FX, // 회복 표시 (잠듦은 상태이상 표시가 따로)
+  aquaRing: spec('pokemon/aqua-ring', {}, 1.2, 'front', { life: 1.3 }), // 파란 고리가 돌다 몸속으로
   ingrain: fxOn('nature/root-snare', { palette: PAL.leaf }),
   curse: fxOn('shadow/curse', {}, 2.5),
   yawn: fxOn('status/sleep', {}, 1),
-  leechSeed: fxOn('nature/spore-burst', { palette: PAL.leaf }, 2.5),
+  leechSeed: spec('pokemon/seed-scatter', {}, 1.2, 'front', { life: 1.3 }), // 씨앗이 날아와 박히고 싹이 남
   helpingHand: fxOn('holy/blessing', {}, 2),
   identNormal: fxOn('arcane/rune-circle', { palette: PAL.holy }),
   identPsychic: fxOn('arcane/rune-circle', { palette: PAL.arcane }),
-  taunt: fxOn('shadow/hex-sigil', { palette: PAL.blood }, 3),
+  taunt: spec('pokemon/anger-mark', {}, 1.1, 'front', { life: 1.3 }), // 💢 화난 표시
   encore: fxOn('holy/blessing', { palette: PAL.candy }, 2),
-  disable: fxOn('shadow/hex-sigil', { palette: PAL.arcane }, 3),
+  disable: spec('pokemon/chain-bind', {}, 1.2, 'front', { life: 1.3 }), // 굵은 쇠사슬
   torment: fxOn('status/slowed', {}, 1.5),
-  healBlock: fxOn('shadow/hex-sigil', { palette: PAL.heal }, 3),
+  healBlock: fxOn('pokemon/small-sigil', { palette: PAL.heal }, 3), // 작은 봉인 마법진
   noMove: fxOn('shadow/grasping-hands', {}, 2.5),
   abilityOff: fxOn('nature/acid-splash', { palette: POISON_PAL }, 2),
-  worrySeed: fxOn('nature/spore-burst', { palette: PAL.leaf }, 2.5),
+  worrySeed: spec('pokemon/seed-scatter', { head: true, palette: ['#1a1024', '#3a2448', '#64407a', '#9a6aae', '#d0a8e0'] }, 1.2, 'front', { life: 1.3 }), // 머리 위 보라 씨앗
   bond: fxOn('shadow/soul-drain', {}, 2.5),
 };
+// 같은 효과라도 기술마다 인상이 다른 것: 거미집 = 실로 감은 고치, 블록 = 쌓이는 장난감 벽돌 (검은눈빛은 위 손 그대로)
+const MOVE_EFFECT_FX = {
+  'spider-web': spec('pokemon/silk-wrap', {}, 1.2, 'front', { life: 1.3 }),
+  block: spec('pokemon/brick-stack', {}, 1.3, 'front', { life: 1.3 }),
+};
+export const fxForEffect = (effect, moveId) => MOVE_EFFECT_FX[moveId] ?? EFFECT_FX[effect];

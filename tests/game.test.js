@@ -587,3 +587,13 @@ test('review fix: ghost curse that knocks out its user says so', () => {
   const units = { a: { id: 'a', species: 'gastly', side: 'ally' } };
   assert.ok(effectMessages({ effects: [], selfFainted: 'a' }, (id) => units[id]).includes('고오스는 쓰러졌다!'));
 });
+test('phase-end heals show a heal on the healed unit', () => {
+  const units = { a: { id: 'a', species: 'squirtle', side: 'ally', x: 1, y: 1 }, e: { id: 'e', species: 'pidgey', side: 'enemy', x: 2, y: 1 } };
+  const get = (id) => units[id];
+  const [ring] = phaseNotices([{ unitId: 'a', kind: 'aquaRing', healed: 3 }], [], get);
+  assert.deepEqual(ring.heal, ['a']);
+  const [leech] = phaseNotices([{ unitId: 'e', kind: 'leech', by: 'a', damage: 4, healed: 4, hpBefore: 20, maxHp: 30 }], [], get);
+  assert.deepEqual(leech.heal, ['a']);
+  const [none] = phaseNotices([{ unitId: 'e', kind: 'leech', by: 'a', damage: 4, healed: 0, hpBefore: 20, maxHp: 30 }], [], get);
+  assert.equal(none.heal, undefined);
+});

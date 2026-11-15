@@ -28,19 +28,14 @@ import * as fire_fireball from './fx/fire/fireball.js';
 import * as ice_ice_lance from './fx/ice/ice-lance.js';
 import * as melee_claw_swipe from './fx/melee/claw-swipe.js';
 import * as melee_thrust from './fx/melee/thrust.js';
-import * as shadow_life_steal from './fx/shadow/life-steal.js';
-import * as holy_heal from './fx/holy/heal.js';
 import * as status_charmed from './fx/status/charmed.js';
 import * as holy_divine_shield from './fx/holy/divine-shield.js';
 import * as holy_blessing from './fx/holy/blessing.js';
 import * as status_rage from './fx/status/rage.js';
 import * as status_slowed from './fx/status/slowed.js';
 import * as nature_root_snare from './fx/nature/root-snare.js';
-import * as nature_healing_bloom from './fx/nature/healing-bloom.js';
-import * as nature_spore_burst from './fx/nature/spore-burst.js';
 import * as shadow_grasping_hands from './fx/shadow/grasping-hands.js';
 import * as shadow_curse from './fx/shadow/curse.js';
-import * as shadow_hex_sigil from './fx/shadow/hex-sigil.js';
 import * as shadow_soul_drain from './fx/shadow/soul-drain.js';
 import * as arcane_rune_circle from './fx/arcane/rune-circle.js';
 export const FX = {
@@ -73,19 +68,14 @@ export const FX = {
   'ice/ice-lance': ice_ice_lance,
   'melee/claw-swipe': melee_claw_swipe,
   'melee/thrust': melee_thrust,
-  'shadow/life-steal': shadow_life_steal,
-  'holy/heal': holy_heal,
   'status/charmed': status_charmed,
   'holy/divine-shield': holy_divine_shield,
   'holy/blessing': holy_blessing,
   'status/rage': status_rage,
   'status/slowed': status_slowed,
   'nature/root-snare': nature_root_snare,
-  'nature/healing-bloom': nature_healing_bloom,
-  'nature/spore-burst': nature_spore_burst,
   'shadow/grasping-hands': shadow_grasping_hands,
   'shadow/curse': shadow_curse,
-  'shadow/hex-sigil': shadow_hex_sigil,
   'shadow/soul-drain': shadow_soul_drain,
   'arcane/rune-circle': arcane_rune_circle,
 };
