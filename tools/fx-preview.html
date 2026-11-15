@@ -76,7 +76,7 @@
 <div class="tablewrap"><table id="abTable"></table></div>
 <script type="module">
 import { createFxManager } from '../src/render/fx.js';
-import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx, GYARADOS_FX } from '../src/data/moveFx.js';
+import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx, GYARADOS_FX, LINK_EFFECTS, linkFx } from '../src/data/moveFx.js';
 import { BIND_MOVES } from '../src/core/volatile.js';
 import { drawWeather, drawWeatherBurst, BURST_TIME } from '../src/render/weatherFx.js';
 import { WEATHER_OF } from '../src/core/field.js';
@@ -176,7 +176,8 @@ function playEffect() {
   const { id, effect, mv } = effectMoves.find((e) => e.id === $('effect').value);
   const who = id === 'curse' || mv.kind === 'enemy' || mv.kind === 'enemies' ? 'foe' : mv.kind === 'ally' ? 'ally' : 'me';
   const at = { foe: D, ally: L, me: A }[who];
-  if (effect === 'splash2') { fx.spawn(GYARADOS_FX, { x: A.x + TILE, y: A.y }); }
+  if (LINK_EFFECTS.has(effect)) { fx.spawn(linkFx(effect, A.x - D.x, A.y - D.y), D); } // 나 ↔ 적
+  else if (effect === 'splash2') { fx.spawn(GYARADOS_FX, { x: A.x + TILE, y: A.y }); }
   else if (effect === 'weather') { // 게임처럼: 손끝에 모으기 → 펑 → 날씨
     onBody(fxForEffect(effect, id), cast.me, A);
     later(() => { sky = { w: WEATHER_OF[id], t: 0 }; }, 600);

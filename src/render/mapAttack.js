@@ -11,7 +11,7 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx, COUNTER_PAL, PRESENT_FX, GYARADOS_FX } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx, COUNTER_PAL, PRESENT_FX, GYARADOS_FX, LINK_EFFECTS, linkFx } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
 import { BURST_TIME, drawBurstRing, drawBurstFlash } from './weatherFx.js';
 import { idleFrameSource } from './sprites.js';
@@ -319,6 +319,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     if (!s) return;
     if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
     if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
+    if (LINK_EFFECTS.has(s.efx?.effect)) { const u = get(s.efx.unitId); if (u) spawnSafe(fx, linkFx(s.efx.effect, (attacker.x - u.x) * TILE, (attacker.y - u.y) * TILE), feet(u)); spawnChangeFx(fx, s, result, get); return; } // 주고받는 구슬
     if (result.summoned && s.efx?.effect === 'splash') { const g = get(result.summoned); if (g) spawnSafe(fx, GYARADOS_FX, feet(g)); summonAt = total; spawnChangeFx(fx, s, result, get); return; } // 갸라도스 등장: 물기둥
     if (TOSSED.has(s.efx?.effect) && tossAt === null) { // 압정: 깔린 칸마다 하나씩 던짐
       tossAt = total;
