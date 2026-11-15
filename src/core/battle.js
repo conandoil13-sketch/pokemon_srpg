@@ -264,7 +264,9 @@ function pushAway(state, a, t, out) {
   const from = path[0], to = path.at(-1);
   Object.assign(t, newStages());
   moveUnit(state, t.id, to.x, to.y, 0, path);
-  out.pushed = { unitId: t.id, from, to, path };
+  const end = { x: t.x, y: t.y }, fainted = !state.units.includes(t); // 압정에 쓰러지면 그 칸에서 멈춤
+  out.pushed = { unitId: t.id, from, to: end, path: path.slice(0, path.findIndex((p) => p.x === end.x && p.y === end.y) + 1), ...(fainted ? { fainted: true } : {}) };
+  out.trapEvents = [...(state.log.trapEvents ?? [])];
   return res(true);
 }
 
@@ -523,7 +525,7 @@ export function endPhase(state, rng = Math.random) {
   const ending = state.phase === 'player' ? 'ally' : 'enemy';
   const events = (state.log.statusEvents = []);
   const abilityLog = (state.log.phaseAbilityEvents = []); // 차례 끝·시작 특성 발동 (화면 알림용)
-  const W = effectiveWeather(state);
+  let W = effectiveWeather(state);
   for (const u of state.units) u.fieldWeather = W;
   for (const u of state.units.filter((o) => o.side === ending)) {
     const r = phaseEnd(u);
@@ -573,7 +575,8 @@ export function endPhase(state, rng = Math.random) {
     }
   }
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
-  tickField(state, ending, events); // 그 편이 놓은 오라·장판
+  tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
+  W = effectiveWeather(state); // 날씨 부르기가 방금 끝났을 수 있음 (쾌청 녹이기 등)
   checkResult(state);
   state.log.expired = [];
   for (const u of state.units) {

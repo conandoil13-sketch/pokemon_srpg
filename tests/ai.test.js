@@ -314,3 +314,9 @@ test('enemy lays spikes on a tile, not a unit', () => {
   const d = Math.abs(plan.attack.aim.x - plan.moveTo.x) + Math.abs(plan.attack.aim.y - plan.moveTo.y);
   assert.ok(d >= 1 && d <= 3);
 });
+test('review fix: an enemy with spikes walks toward far foes instead of camping', () => {
+  const u = en('cloyster', 28, 8, ['spikes']);
+  const plan = planEnemyAction(state(30, 10, [u, mk('luxray', 'ally', 1, 1)]), u);
+  assert.notEqual(plan.attack?.moveId, 'spikes');
+  assert.ok(plan.moveTo.x < 28 || plan.moveTo.y !== 8);
+});

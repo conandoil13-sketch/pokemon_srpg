@@ -658,3 +658,25 @@ test('an ally that faints on spikes ends its action without getting stuck', () =
   assert.ok(run(game, (m) => m === 'idle' || m === 'result' || m === 'enemy', [{ type: 'confirm' }]), `stuck in ${game.mode}`);
   assert.ok(!st.units.includes(c));
 });
+test('review fix: cancelling a move refreshes aura flags', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state, c = st.units.find((u) => u.id === 'ally-chimchar'), p = st.units.find((u) => u.id === 'ally-piplup');
+  st.auras.push({ kind: 'tailwind', ownerId: c.id, side: 'ally', turns: 5 });
+  const free = (x, y) => st.grid[y]?.[x] === '.' && !st.units.some((u) => u !== p && u.x === x && u.y === y);
+  const [dx, dy] = [[0, -1], [0, 1], [-1, 0], [1, 0]].find(([dx, dy]) => free(c.x + dx, c.y + dy) && free(c.x - 2 * dx, c.y - 2 * dy));
+  p.x = c.x - 2 * dx; p.y = c.y - 2 * dy; // 오라 안 (거리 2), 주인이 한 칸 비키면 밖 (거리 3)
+  const at = (x, y) => [{ type: 'cursor', px: x * 24 + 12 - Math.round(game.camera.x), py: y * 24 + 12 - Math.round(game.camera.y) }, { type: 'confirm' }];
+  for (const e of at(c.x, c.y)) game.handle(e);
+  const ox = c.x, oy = c.y;
+  for (const e of at(ox + dx, oy + dy)) game.handle(e);
+  assert.ok(run(game, (m) => m === 'action'));
+  game.handle({ type: 'cancel' });
+  assert.deepEqual([c.x, c.y], [ox, oy]);
+  assert.equal(p.field.tailwind, true);
+});
+test('review fix: spikes stepped on during a push are announced', () => {
+  const units = { e: { id: 'e', species: 'pidgey', side: 'enemy' } };
+  const msgs = effectMessages({ effects: [{ unitId: 'e', effect: 'push', ok: true }], pushed: { unitId: 'e', fainted: true }, trapEvents: [{ unitId: 'e', kind: 'spikes', damage: 3, x: 1, y: 1, fainted: true }] }, (id) => units[id]);
+  assert.deepEqual(msgs, ['상대 구구는 날려가 버렸다!', '상대 구구는 압정에 찔렸다!', '상대 구구는 쓰러졌다!']);
+});

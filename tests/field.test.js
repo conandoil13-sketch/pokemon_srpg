@@ -295,3 +295,38 @@ test('haze clears stat changes of everyone within 2, including the user', () => 
   assert.deepEqual([a[0].stages.atk, a[1].stages.atk, f[0].stages.atk, f[1].stages.atk], [0, 0, 0, 2]);
   assert.deepEqual(r.hazed.sort(), [a[0].id, a[1].id, f[0].id].sort());
 });
+
+// ---- 최종 검토 수정 ----
+import { lethalTrapCut } from '../src/core/field.js';
+test('review fix: when a called weather ends, units drop its speed bonuses at once', () => {
+  const { s, a, f } = field([['squirtle', 1, 1]], [['squirtle', 11, 7]]); // 고라파덕은 날씨부정이 나올 수 있어 피함
+  a[0].ability = 'swift-swim'; f[0].ability = 'torrent';
+  const base = moveBudget(a[0]);
+  endPhase(s, () => 0.9); // 적 차례
+  applyMove(s, f[0].id, 'rain-dance', f[0].id, hit);
+  assert.equal(moveBudget(a[0]), base + 1);
+  for (let i = 0; i < 4; i++) { endPhase(s, () => 0.9); endPhase(s, () => 0.9); }
+  endPhase(s, () => 0.9); // 적 페이즈 끝 5번째 → 바로 아군 차례 (다음 페이즈 갱신 전)
+  assert.equal(s.weather, null);
+  assert.equal(a[0].fieldWeather, null);
+  assert.equal(moveBudget(a[0]), base);
+});
+
+test('review fix: a walk is cut at the tile where spikes would knock the unit out', () => {
+  const { s, a, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  applyMove(s, a[0].id, 'spikes', { x: 4, y: 1 }, hit);
+  const path = P([6, 1], [5, 1], [4, 1], [3, 1], [2, 1]);
+  assert.equal(lethalTrapCut(s, f[0], path).length, 5); // 버틸 수 있으면 그대로
+  f[0].hp = 1;
+  assert.deepEqual(lethalTrapCut(s, f[0], path), P([6, 1], [5, 1]));
+});
+
+test('review fix: a push reports its trap hits and where the target really stopped', () => {
+  const { s, a, f } = field([['cloyster', 1, 1], ['growlithe', 2, 2]], [['meowth', 3, 2]]);
+  applyMove(s, a[0].id, 'spikes', { x: 4, y: 1 }, hit); // (4,2) 포함
+  f[0].hp = 1;
+  const r = applyMove(s, a[1].id, 'roar', f[0].id, hit);
+  assert.deepEqual(r.pushed.to, { x: 4, y: 2 });
+  assert.equal(r.pushed.fainted, true);
+  assert.equal(r.trapEvents[0].kind, 'spikes');
+});

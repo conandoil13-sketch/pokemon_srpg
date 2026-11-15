@@ -2,8 +2,9 @@
 import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
-import { wrapMessage, blockedText } from '../render/mapAttack.js';
+import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
 import { moveBlock, moveFor } from '../core/volatile.js';
+import { refreshField, lethalTrapCut } from '../core/field.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
@@ -88,7 +89,6 @@ const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
 const HEAL_EVENTS = { aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
 // 압정 밟기 알림 (이동·밀려나기 뒤). fainted 면 쓰러짐 줄을 하나 더
-const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 export function trapNotices(events = [], get) {
   const out = [];
   for (const e of events) {
@@ -368,6 +368,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function startWalk(unit, path, onDone) {
+    path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
     walk = { unit, path, t: 0, onDone, prevMode: mode };
     mode = 'walking';
   }
@@ -590,6 +591,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           if (mode === 'endMenu') { mode = 'idle'; return; }
           if (moveLocked) return;
           sel.x = origin.x; sel.y = origin.y; sel.moved = false; sel.spent = 0;
+          refreshField(st); // 오라·장판 안팎이 원래대로
           facing[sel.id] = origin.facing;
           cursor = { x: origin.x, y: origin.y };
           mode = 'selected';

@@ -48,6 +48,7 @@ const EFFECT_TEXT = {
   spikes: () => '발밑에 압정이 뿌려졌다!', toxicSpikes: () => '발밑에 독압정이 뿌려졌다!',
   haze: () => '모든 랭크 변화가 원래대로 돌아왔다!',
 };
+export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = {
   taunt: '도발당해서 변화기를 쓸 수 없다!', encore: '앙코르 때문에 다른 기술을 쓸 수 없다!',
@@ -74,11 +75,17 @@ function effectLines(result, get, moveId = null) {
     else if (!e.ok && e.reason === 'safeguard') say(u, `${W_(label(u), '은/는')} 신비의 베일이 지켜 주고 있다!`);
     else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
   }
+  for (const e of result.trapEvents ?? []) { // 밀려나며 밟은 압정
+    const u = get(e.unitId);
+    if (!u) continue;
+    say(u, `${W_(label(u), '은/는')} ${TRAP_LINE[e.kind]}`);
+    if (e.fainted) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, pushFaint: true });
+  }
   if (result.selfFainted) { const u = get(result.selfFainted); if (u) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, selfFaint: true }); } // 고스트 저주
   return out;
 }
 export const effectMessages = (result, get, moveId = null) => effectLines(result, get, moveId).map((l) => l.text);
-const effectSteps = (result, get, moveId = null) => effectLines(result, get, moveId).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT || l.selfFaint ? (l.selfFaint ? 'Pain' : 'Normal') : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id, moveId } : null, selfFaint: !!l.selfFaint }));
+const effectSteps = (result, get, moveId = null) => effectLines(result, get, moveId).map((l) => ({ k: 'msg', d: AUTO, text: wrapMessage(l.text), who: l.who, emo: l.text === FAIL_TEXT || l.selfFaint ? (l.selfFaint ? 'Pain' : 'Normal') : 'Determined', efx: l.effect ? { effect: l.effect, unitId: l.who.id, moveId } : null, selfFaint: !!l.selfFaint, pushFaint: !!l.pushFaint }));
 const spawnEffectFx = (fx, s, get) => { if (s?.efx) { const u = get(s.efx.unitId); if (u) onBody(fx, fxForEffect(s.efx.effect, s.efx.moveId), u); } };
 
 // 랭크 변화 대사 (changes: applyMove 의 stageChanges, byId: 유닛 찾기 객체/함수)
@@ -289,6 +296,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
       if (result.pushed && u.id === result.pushed.unitId) { // 밀려난 포켓몬: 원래 칸 → 새 칸
         const pi = steps.findIndex((x) => x.k === 'push'), { from, to } = result.pushed;
         const k = i < pi ? 0 : i === pi ? Math.min(1, t / 0.3) : 1;
+        if (steps.slice(0, i + 1).some((x) => x.pushFaint)) return { hidden: true }; // 압정에 쓰러짐
         if (k >= 1) return null;
         return { anim: 'Hurt', t, loop: false, dx: (from.x - to.x) * TILE * (1 - k), dy: (from.y - to.y) * TILE * (1 - k) };
       }

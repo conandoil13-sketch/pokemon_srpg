@@ -82,6 +82,20 @@ export function stepOn(state, unit, x, y) {
   return out;
 }
 
+// 걷는 경로에서 압정에 쓰러질 칸까지만 남긴다 (화면의 걷기가 그 칸에서 멈추도록). 판정은 stepOn 과 같은 규칙
+export function lethalTrapCut(state, unit, path) {
+  let hp = unit.hp;
+  for (let i = 1; i < path.length; i++) {
+    for (const t of state.spikes ?? []) {
+      if (t.x !== path[i].x || t.y !== path[i].y || t.side === unit.side || t.kind !== 'spikes') continue;
+      if (typesOf(unit).includes('flying') || has(unit, 'levitate') || magicGuard(unit)) continue;
+      hp -= Math.max(1, Math.floor(unit.maxHp / 8));
+    }
+    if (hp <= 0) return path.slice(0, i + 1);
+  }
+  return path;
+}
+
 // 날씨 부르기: 5턴 동안 그 날씨, 끝나면 층 시작 날씨(state.baseWeather). 같은 날씨·안개 층이면 실패
 export const WEATHER_OF = { 'rain-dance': 'rain', 'sunny-day': 'sun', sandstorm: 'sand', hail: 'hail' };
 export function castWeather(state, user, moveId) {
@@ -100,6 +114,8 @@ export function tickField(state, side, events) {
   if (state.weatherTimer?.side === side && --state.weatherTimer.turns <= 0) {
     state.weatherTimer = null;
     state.weather = state.baseWeather ?? null;
+    const W = effectiveWeather(state);
+    for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 이동력도 바로 원래대로
     events.push({ kind: 'weatherEnd' });
   }
   for (const key of ['auras', 'zones']) {

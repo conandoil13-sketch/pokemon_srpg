@@ -38,6 +38,7 @@ const IDLE_EFFECTS = ['focusEnergy', 'aquaRing', 'ingrain'];
 const FIELD_UNIT_SCORE = 10;   // 오라·장판: 덮는 아군 한 마리당
 const WEATHER_SCORE = 25;      // 자기 타입에 유리한 날씨 부르기
 const HAZE_STAGE_SCORE = 6;    // 흑안개: 지우는 (상대 양의 랭크 − 아군 양의 랭크) 1단계당
+const TRAP_NEAR = 3;           // 압정: 가장 가까운 상대가 사거리 + 이 거리 안일 때만
 const WEATHER_FOR = { water: 'rain', fire: 'sun', rock: 'sand', ground: 'sand', steel: 'sand', ice: 'hail' };
 
 // 조준 하나의 점수 (위험도 제외). 적이 하나도 안 맞으면 null
@@ -321,7 +322,7 @@ function effectCandidate(state, unit, ghost, move, foes, threat, risk) {
     }
     case 'spikes': case 'toxicSpikes': { // 가장 가까운 상대 쪽으로 사거리 안 가장 가까운 빈 칸
       const f = foes.slice().sort((p, q) => manhattan(ghost, p) - manhattan(ghost, q))[0];
-      if (!f) return null;
+      if (!f || manhattan(ghost, f) > TRAP_RANGE[1] + TRAP_NEAR) return null; // 멀면 깔지 말고 다가간다 (제자리 압정 깔기 방지)
       let best = null;
       for (let y = ghost.y - TRAP_RANGE[1]; y <= ghost.y + TRAP_RANGE[1]; y++) for (let x = ghost.x - TRAP_RANGE[1]; x <= ghost.x + TRAP_RANGE[1]; x++) {
         const d = manhattan(ghost, { x, y });
