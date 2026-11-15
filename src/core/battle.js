@@ -268,6 +268,10 @@ function pushAway(state, a, t, out) {
   const end = { x: t.x, y: t.y }, fainted = !state.units.includes(t); // 압정에 쓰러지면 그 칸에서 멈춤
   out.pushed = { unitId: t.id, from, to: end, path: path.slice(0, path.findIndex((p) => p.x === end.x && p.y === end.y) + 1), ...(fainted ? { fainted: true } : {}) };
   out.trapEvents = [...(state.log.trapEvents ?? [])];
+  // 속박: 밀려난 쪽이 묶은 쪽이거나 묶인 쪽이면 거리를 다시 본다 (사거리 밖이면 바로 풀림)
+  const evs = [];
+  for (const u of state.units) if (u.bound && (u.bound.by === t.id || u === t)) bindCheck(state, u, evs);
+  if (evs.length) out.unbound = [...(out.unbound ?? []), ...evs.map((e) => ({ unitId: e.unitId, moveId: e.moveId }))];
   return res(true);
 }
 
@@ -495,7 +499,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, flinched, bound, retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];

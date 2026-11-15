@@ -142,6 +142,7 @@ export function tickEnd(state, unit, events, rng) {
       events.push({ unitId: unit.id, kind: 'bind', moveId: b.moveId, damage, hpBefore, maxHp: unit.maxHp, x: unit.x, y: unit.y });
     }
     if (unit.hp > 0 && --b.turns <= 0) { unit.bound = null; events.push({ unitId: unit.id, kind: 'bindEnd', moveId: b.moveId }); }
+    if (unit.hp <= 0) return; // 속박으로 쓰러짐: 뒤의 회복·저주·씨뿌리기는 없음 (호출 측이 기절 처리)
   }
   // 지속 회복 (아쿠아링·뿌리박기 각 1/16), 저주 피해 1/4
   for (const [flag, kind] of [['aquaRing', 'aquaRing'], ['rooted', 'ingrain']]) {

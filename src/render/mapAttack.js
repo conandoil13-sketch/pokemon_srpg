@@ -86,6 +86,7 @@ function effectLines(result, get, moveId = null) {
     say(u, `${W_(label(u), '은/는')} ${TRAP_LINE[e.kind]}`);
     if (e.fainted) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, pushFaint: true });
   }
+  for (const b of result.unbound ?? []) { const u = get(b.unitId); if (u) say(u, `${W_(label(u), '은/는')} ${MOVES[b.moveId].name}에서 풀려났다!`); } // 밀어내기로 속박이 풀림
   if (result.selfFainted) { const u = get(result.selfFainted); if (u) out.push({ text: `${W_(label(u), '은/는')} 쓰러졌다!`, who: u, effect: null, selfFaint: true }); } // 고스트 저주
   return out;
 }

@@ -526,3 +526,27 @@ test('bind damage that faints the target leaves no bind behind', () => {
   f.hp = 1; round(s);
   assert.ok(!s.units.includes(f));
 });
+
+test('lethal bind damage is not undone by ingrain or aqua ring healing', () => {
+  const { s, a, f } = duel('ekans', 'geodude');
+  applyMove(s, a.id, 'wrap', f.id, hit);
+  f.rooted = true; f.hp = 1;
+  round(s);
+  assert.ok(!s.units.includes(f));
+});
+test('pushing the binder out of reach frees the bound unit at once, with a release line', () => {
+  const { s, a, f } = duel('ekans', 'geodude');
+  applyMove(s, a.id, 'wrap', f.id, hit);
+  const r = applyMove(s, f.id, 'whirlwind', a.id, hit); // 묶인 쪽이 묶은 쪽을 날려버림
+  assert.ok(r.pushed);
+  assert.equal(f.bound, null);
+  assert.ok(moveBudget(f) > 0);
+  assert.deepEqual(r.unbound, [{ unitId: f.id, moveId: 'wrap' }]);
+});
+test('a binder knocked out by rough skin recoil reports no bind', () => {
+  const { s, a, f } = duel('ekans', 'geodude', { foe: { ability: 'rough-skin' } });
+  a.hp = 1;
+  const r = applyMove(s, a.id, 'wrap', f.id, hit);
+  assert.ok(!s.units.includes(a));
+  assert.deepEqual(r.bound, []);
+});
