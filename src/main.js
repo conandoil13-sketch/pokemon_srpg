@@ -5,6 +5,7 @@ import { requestSprites } from './render/sprites.js';
 import { loadFonts } from './render/font.js';
 import { bindInput } from './game/input.js';
 import { watchTouch, mountPad } from './game/touchPad.js';
+import { sound } from './audio/sound.js';
 import { createGame } from './game/states.js';
 import { createTitle } from './game/title.js';
 import { createTown } from './game/town.js';
@@ -58,7 +59,8 @@ function evolveChain(list, done) {
     if (!to) { evolveChain(rest, done); return; }
     if (first.stone) game.items.evoStone -= 1; // 진화의돌은 실제로 진화할 때만 소모
     requestSprites([to]);
-    scene = createEvolution({ member, to, onDone: () => evolveChain(rest, done) }); // 출전 목록은 uid 라 진화해도 같은 자리
+    sound.bgm('evolution');
+    scene = createEvolution({ member, to, onDone: () => { sound.bgm('route1'); evolveChain(rest, done); } }); // 출전 목록은 uid 라 진화해도 같은 자리
   };
   if (options.length === 1) { evolveTo(options[0]); return; }
   requestSprites(options);
@@ -69,6 +71,7 @@ const newSeed = () => ((Date.now() ^ Math.floor(rng() * 0x7fffffff)) >>> 0);
 
 // ---------- 탐험 ----------
 function startFloor() {
+  sound.bgm('route1');
   const run = game.run;
   const d = dungeonById(run.dungeonId);
   const map = generateFloor(d, run.floor, floorSeed(run));
@@ -102,6 +105,7 @@ function afterBattle(result, log) {
 }
 
 function afterResults(result, log) {
+  sound.bgm('route1'); // 승리 음악 끝
   const prevFloor = game.run.floor;
   const { run, outcome } = afterFloor(game.run, result, log.fainted);
   if (outcome !== 'next') { endRun(outcome); return; }
@@ -131,7 +135,7 @@ function endRun(outcome, reached = game.run.floor) {
     : outcome === 'retreat' ? ['마을로 돌아왔다.', loot]
     : ['눈앞이 캄캄해졌다...', '모은 보물을 잃고 마을로 돌아왔다.'];
   const pages = reward.dropped ? [lines, ['가방이 가득 차서', `오래된 캡슐 ${reward.dropped}개를 버렸다.`]] : lines; // 조용히 버리지 않는다
-  const toTown = () => go.town(pages, TOWN.returnSpot);
+  const toTown = () => { sound.bgm('route1'); go.town(pages, TOWN.returnSpot); sound.jingle('healed'); }; // 마을로: 회복 효과음
   if (!Object.keys(reward.exp).length) { toTown(); return; }
   // 경험 사탕: 탐험 보상 결산
   // 사탕 경험치는 출전 멤버만
@@ -187,7 +191,7 @@ const go = {
     });
   },
   gacha: () => {
-    scene = createGachaScene({ game, rng, onBack: () => go.town(null, TOWN.gachaSpot), onPulled: () => save() });
+    scene = createGachaScene({ game, rng, onBack: () => go.town(null, TOWN.gachaSpot), onPulled: () => { save(); sound.jingle('item'); } });
   },
   party: () => {
     requestSprites(game.party.map((m) => m.species));
@@ -200,6 +204,8 @@ const go = {
   },
 };
 go.title();
+sound.bgm('route1'); // 기본 배경음악 (첫 터치·키 입력 때부터 들림)
+for (const t of ['pointerdown', 'keydown']) addEventListener(t, () => sound.unlock(), { once: true, capture: true });
 
 window.__app = { get scene() { return scene; }, get game() { return game; }, go, save }; // 디버그용
 bindInput(canvas, getScale, (ev) => scene.handle(ev));

@@ -5,6 +5,7 @@ import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
 import { moveBlock, moveFor } from '../core/volatile.js';
 import { refreshField, lethalTrapCut } from '../core/field.js';
+import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
@@ -439,9 +440,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const a = arrive(st, sel.id);
     if (a.stairs) {
       sel.acted = true;
+      if (a.item) sound.jingle('item'); // 보물상자
       showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; });
     } else if (a.item) {
       moveLocked = true;
+      sound.jingle('item');
       showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item] ?? '아이템', '을/를')} 얻었다!`], openAction); // 모르는 아이템이어도 멈추지 않게
     } else openAction();
   }
@@ -554,7 +557,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           startWalk(unit, pathTo(st.grid, st.units, unit, cursor.x, cursor.y), () => {
             unit.retreatReady = false; unit.retreated = true;
             const a = arrive(st, unit.id); // 상자·계단은 보통 이동과 같게
-            if (a.stairs) { showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; }); return; }
+            if (a.stairs) { if (a.item) sound.jingle('item'); showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; }); return; }
             if (a.item) { showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item] ?? '아이템', '을/를')} 얻었다!`], finishAllyAction); return; }
             finishAllyAction();
           });
@@ -656,7 +659,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // ---------- 갱신 ----------
+  let victoryMusic = false;
   function update(dt) {
+    if (st.result && st.result !== 'lose' && !victoryMusic) { victoryMusic = true; sound.bgm('victory'); } // 승리·층 돌파: 결산까지 승리 음악
     clock += dt;
     syncStatusFx();
     fxm.update(dt);

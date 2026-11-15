@@ -5,6 +5,7 @@ import { josa } from '../data/text.js';
 import { resolveChoice } from '../core/progress.js';
 import * as ui from '../render/ui.js';
 import { W, H } from '../render/screen.js';
+import { sound } from '../audio/sound.js';
 
 export const CHOICE_LOCK = 0.4; // 선택 메뉴가 뜬 직후 연타 방지(초)
 
@@ -18,7 +19,7 @@ export function stepsFromEvents(events) {
   const steps = [];
   for (const e of events) {
     const n = nameOf(e.species);
-    if (e.type === 'level') steps.push({ kind: 'msg', text: [`${n}의 레벨이 ${numJosa(e.to, '이/가')} 되었다!`, `HP ${e.before.hp}→${e.after.hp}  공격 ${e.before.atk}→${e.after.atk}`] });
+    if (e.type === 'level') steps.push({ kind: 'msg', jingle: 'levelUp', text: [`${n}의 레벨이 ${numJosa(e.to, '이/가')} 되었다!`, `HP ${e.before.hp}→${e.after.hp}  공격 ${e.before.atk}→${e.after.atk}`] });
     else if (e.type === 'learned') steps.push({ kind: 'msg', text: [`${josa(n, '은/는')} ${josa(moveName(e.move), '을/를')} 배웠다!`] });
     else if (e.type === 'choose') steps.push({ kind: 'choose', event: e });
   }
@@ -49,7 +50,9 @@ export function createLearnFlow({ steps, member, onFinish }) {
   let i = 0, cursor = null, t = 0, finished = false, confirm = null; // confirm = { cursor: 0 예 | 1 아니요 }
   const step = () => steps[i];
   const finish = () => { if (!finished) { finished = true; onFinish(); } };
-  const next = () => { i++; t = 0; cursor = null; confirm = null; if (i >= steps.length) finish(); };
+  const enter = () => { if (step()?.jingle) sound.jingle(step().jingle); }; // 레벨업 효과음
+  const next = () => { i++; t = 0; cursor = null; confirm = null; if (i >= steps.length) finish(); else enter(); };
+  enter();
 
   function apply(e) {
     const m = member(e);
