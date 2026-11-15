@@ -14,6 +14,7 @@ export const EFFECT_MOVES = {
   reflect: 'reflect', 'light-screen': 'lightScreen', 'mud-sport': 'mudSport', 'water-sport': 'waterSport',
   'rain-dance': 'weather', 'sunny-day': 'weather', sandstorm: 'weather', hail: 'weather', // 날씨 부르기 5턴
   spikes: 'spikes', 'toxic-spikes': 'toxicSpikes', // 칸에 까는 함정
+  roar: 'push', whirlwind: 'push', haze: 'haze', // 밀어내기 3칸 · 주변 2칸 랭크 초기화
 };
 const SELF = { kind: 'self', range: [0, 0], area: false };
 
@@ -27,5 +28,6 @@ export const KIND_OVERRIDES = {
   tailwind: SELF, safeguard: SELF, mist: SELF, 'lucky-chant': SELF, reflect: SELF, 'light-screen': SELF, 'mud-sport': SELF, 'water-sport': SELF,
   'rain-dance': SELF, 'sunny-day': SELF, sandstorm: SELF, hail: SELF,
   spikes: { kind: 'tile', range: [1, 3], area: false, aimTile: true }, // 칸을 고른다 (그 칸 + 4방)
-  'toxic-spikes': { kind: 'tile', range: [1, 3], area: false, aimTile: true }, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
+  'toxic-spikes': { kind: 'tile', range: [1, 3], area: false, aimTile: true },
+  haze: SELF, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
 };

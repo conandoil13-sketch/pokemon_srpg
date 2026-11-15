@@ -228,3 +228,70 @@ test('a foe that faints on spikes stops on that tile', () => {
   assert.equal(s.log.trapEvents.at(-1).fainted, true);
   assert.equal(s.log.trapEvents.length, 1);
 });
+
+// ---- Task 4: 울부짖기 · 날려버리기 · 흑안개 ----
+test('roar pushes the target 3 tiles away and clears its stat changes', () => {
+  const { s, a, f } = field([['growlithe', 1, 1]], [['meowth', 2, 1]]);
+  f[0].stages.atk = 2; f[0].layers = [{ key: 'atk', amount: 2, turns: 3 }];
+  const r = applyMove(s, a[0].id, 'roar', f[0].id, hit);
+  assert.deepEqual([f[0].x, f[0].y], [5, 1]);
+  assert.deepEqual(r.pushed, { unitId: f[0].id, from: { x: 2, y: 1 }, to: { x: 5, y: 1 }, path: P([2, 1], [3, 1], [4, 1], [5, 1]) });
+  assert.equal(f[0].stages.atk, 0);
+});
+
+test('push stops before walls, water it cannot enter, other units and the map edge', () => {
+  const wall = field([['growlithe', 1, 1]], [['meowth', 2, 1]]);
+  wall.s.grid[1] = wall.s.grid[1].slice(0, 4) + '#' + wall.s.grid[1].slice(5); // (4,1)
+  applyMove(wall.s, wall.a[0].id, 'roar', wall.f[0].id, hit);
+  assert.deepEqual([wall.f[0].x, wall.f[0].y], [3, 1]);
+  const water = field([['growlithe', 1, 1]], [['meowth', 2, 1]]);
+  water.s.grid[1] = water.s.grid[1].slice(0, 3) + '~' + water.s.grid[1].slice(4); // (3,1)
+  const r = applyMove(water.s, water.a[0].id, 'roar', water.f[0].id, hit);
+  assert.equal(r.effects[0].reason, 'stuck');
+  assert.deepEqual([water.f[0].x, water.f[0].y], [2, 1]);
+  const unit = field([['growlithe', 1, 1]], [['meowth', 2, 1], ['geodude', 4, 1]]);
+  applyMove(unit.s, unit.a[0].id, 'roar', unit.f[0].id, hit);
+  assert.deepEqual([unit.f[0].x, unit.f[0].y], [3, 1]);
+  const edge = field([['growlithe', 9, 1]], [['meowth', 10, 1]], { w: 12 });
+  applyMove(edge.s, edge.a[0].id, 'roar', edge.f[0].id, hit);
+  assert.deepEqual([edge.f[0].x, edge.f[0].y], [11, 1]);
+});
+
+test('bosses and ingrain users are not pushed; mean look victims are', () => {
+  const b = field([['growlithe', 1, 1]], [['meowth', 2, 1]]);
+  b.f[0].boss = true;
+  assert.equal(applyMove(b.s, b.a[0].id, 'roar', b.f[0].id, hit).effects[0].reason, 'immune');
+  const g = field([['growlithe', 1, 1]], [['meowth', 2, 1]]);
+  g.f[0].rooted = true;
+  assert.equal(applyMove(g.s, g.a[0].id, 'roar', g.f[0].id, hit).effects[0].reason, 'immune');
+  const m = field([['growlithe', 1, 1]], [['meowth', 2, 1]]);
+  m.f[0].noMove = 2;
+  applyMove(m.s, m.a[0].id, 'roar', m.f[0].id, hit);
+  assert.deepEqual([m.f[0].x, m.f[0].y], [5, 1]);
+});
+
+test('diagonal push goes along the larger axis, ties along x', () => {
+  const y = field([['pidgeot', 3, 1]], [['meowth', 3, 3]]); // 세로가 큼 → 아래로 (사거리 2 안에서 대각선은 1·1 동률뿐)
+  applyMove(y.s, y.a[0].id, 'whirlwind', y.f[0].id, hit);
+  assert.deepEqual([y.f[0].x, y.f[0].y], [3, 6]);
+  const t = field([['pidgeot', 3, 3]], [['meowth', 4, 4]]); // dx 1, dy 1 → 오른쪽
+  applyMove(t.s, t.a[0].id, 'whirlwind', t.f[0].id, hit);
+  assert.deepEqual([t.f[0].x, t.f[0].y], [7, 4]);
+});
+
+test('a push through spikes triggers them', () => {
+  const { s, a, f } = field([['cloyster', 1, 1], ['growlithe', 2, 2]], [['meowth', 3, 2]]);
+  applyMove(s, a[0].id, 'spikes', { x: 4, y: 1 }, hit); // (4,2) 포함
+  const hp = f[0].hp;
+  applyMove(s, a[1].id, 'roar', f[0].id, hit);
+  assert.ok(f[0].hp < hp);
+  assert.ok(s.log.trapEvents.length >= 1);
+});
+
+test('haze clears stat changes of everyone within 2, including the user', () => {
+  const { s, a, f } = field([['koffing', 1, 1], ['pikachu', 2, 1]], [['meowth', 3, 1], ['geodude', 9, 6]]);
+  for (const u of [...a, ...f]) { u.stages.atk = 2; u.layers = [{ key: 'atk', amount: 2, turns: 3 }]; }
+  const r = applyMove(s, a[0].id, 'haze', a[0].id, hit);
+  assert.deepEqual([a[0].stages.atk, a[1].stages.atk, f[0].stages.atk, f[1].stages.atk], [0, 0, 0, 2]);
+  assert.deepEqual(r.hazed.sort(), [a[0].id, a[1].id, f[0].id].sort());
+});

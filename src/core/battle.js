@@ -15,7 +15,7 @@ import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate,
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE } from './field.js';
-import { pathTo } from './pathfind.js';
+import { pathTo, canEnter } from './pathfind.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -246,6 +246,28 @@ export function retreatMove(state, id, x, y, cost = 0) {
   u.retreated = true; u.retreatReady = false;
 }
 
+// 울부짖기·날려버리기: 쓴 포켓몬 반대쪽으로 3칸 (차이가 큰 축, 같으면 x). 못 서는 칸·다른 포켓몬·맵 끝 앞에서 멈춤.
+// 보스·뿌리박기는 안 밀림. 밀려난 포켓몬은 랭크 변화가 지워지고, 지난 압정은 밟은 것
+export const PUSH_TILES = 3;
+function pushAway(state, a, t, out) {
+  const res = (ok, reason) => ({ unitId: t.id, effect: 'push', ok, ...(reason ? { reason } : {}) });
+  if (t.boss || t.rooted) return res(false, 'immune');
+  const dx = t.x - a.x, dy = t.y - a.y;
+  const [sx, sy] = Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dy)];
+  const path = [{ x: t.x, y: t.y }];
+  for (let i = 0; i < PUSH_TILES; i++) {
+    const p = path.at(-1), nx = p.x + sx, ny = p.y + sy;
+    if (!canEnter(state.grid[ny]?.[nx], t) || state.units.some((u) => u !== t && u.x === nx && u.y === ny)) break;
+    path.push({ x: nx, y: ny });
+  }
+  if (path.length === 1) return res(false, 'stuck');
+  const from = path[0], to = path.at(-1);
+  Object.assign(t, newStages());
+  moveUnit(state, t.id, to.x, to.y, 0, path);
+  out.pushed = { unitId: t.id, from, to, path };
+  return res(true);
+}
+
 // 공격기·변화기 공통. 공격기는 데미지 + 능력치 부가효과, 변화기는 대상별 랭크 변화
 const SELF_KO = ['self-destruct', 'explosion']; // 쓴 쪽이 기절
 
@@ -340,7 +362,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, effects: [{ unitId: a.id, effect: move.effect, ok: r.ok, ...(ok ? {} : { reason: 'range' }) }], protectedIds: [], trapsLaid: r.tiles };
   }
   if (kind === 'status') {
-    const missed = [], effects = [], protectedIds = [];
+    const missed = [], effects = [], protectedIds = [], out2 = {}; // out2: 밀어내기 pushed · 흑안개 hazed
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
     for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
       if (t !== a && t.guard === 'protect') { protectedIds.push(t.id); continue; } // 방어: 다른 유닛의 기술을 막음
@@ -348,13 +370,19 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (ab) { absorb(t, ab); continue; }
       if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
       if (move.id === 'captivate' && !(t.gender && a.gender && t.gender !== a.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
-      if (move.effect) { effects.push(applyEffect(state, a, t, move, rng, W)); continue; } // 포켓몬에 붙는 효과
+      if (move.effect === 'push') { effects.push(pushAway(state, a, t, out2)); continue; } // 울부짖기·날려버리기
+    if (move.effect === 'haze') { // 흑안개: 주변 2칸 모두 (자신 포함) 랭크 초기화
+      out2.hazed = state.units.filter((u) => dist(u, a) <= 2).map((u) => { Object.assign(u, newStages()); return u.id; });
+      effects.push({ unitId: a.id, effect: 'haze', ok: true });
+      continue;
+    }
+    if (move.effect) { effects.push(applyEffect(state, a, t, move, rng, W)); continue; } // 포켓몬에 붙는 효과
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
     let selfFainted = null;
     if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); selfFainted = a.id; } // 고스트 저주로 쓰러짐
-    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...(selfFainted ? { selfFainted } : {}) };
+    return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...out2, ...(selfFainted ? { selfFainted } : {}) };
   }
   const targets = unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   const dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
