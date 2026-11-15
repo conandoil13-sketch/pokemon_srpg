@@ -799,3 +799,41 @@ test('bind tag, catch lines, forecast note and phase notices', () => {
   assert.ok(out[0].hp);
   assert.equal(out[1].lines.join(' '), '꼬마돌은 김밥말이에서 풀려났다!');
 });
+
+// ---- 공격기 고유 효과 2차: 대사 ----
+import { attackExtraLines } from '../src/render/mapAttack.js';
+test('recharge notice, crash, screen and spin lines', () => {
+  const u = { id: 'a', species: 'pidgey', side: 'ally', x: 1, y: 1 };
+  assert.equal(phaseNotices([{ unitId: 'a', kind: 'recharge' }], [], () => u)[0].lines.join(' '), '구구는 반동으로 기술을 쓸 수 없다!');
+  const msgs = attackExtraLines({ crash: 10, screensBroken: ['reflect'], spun: { freed: true, cleared: 2 } }, u).map((l) => l.text);
+  assert.ok(msgs.includes('구구는 땅에 부딪혔다!'));
+  assert.ok(msgs.includes('장벽이 깨졌다!'));
+  assert.ok(msgs.includes('구구는 몸이 자유로워졌다!'));
+  assert.ok(msgs.includes('압정이 날아갔다!'));
+});
+
+import { drawBurrowMark } from '../src/render/ui.js';
+test('burrow mark draws by kind', () => {
+  for (const kind of ['ground', 'water', 'sky', 'shadow']) {
+    let n = 0;
+    const ctx = { fillRect() { n++; }, set fillStyle(v) {}, set globalAlpha(v) {}, get globalAlpha() { return 1; }, save() {}, restore() {}, beginPath() {}, ellipse() {}, fill() { n++; } };
+    drawBurrowMark(ctx, { burrow: { kind } }, 24, 24);
+    assert.ok(n > 0, kind);
+  }
+});
+
+test('a charged move rushes and fires by itself at the start of the next ally phase', () => {
+  const game = createGame({ rng: createRng(2) });
+  assert.ok(run(game, (m) => m === 'idle'));
+  const st = game.state, c = st.units.find((u) => u.id === 'ally-chimchar');
+  const foe = st.units.find((u) => u.side === 'enemy');
+  c.maxHp = c.hp = 999;
+  foe.maxHp = foe.hp = 999; // 반격·기절 없이 확인
+  c.charging = { moveId: 'sky-attack', targetId: foe.id };
+  const before = foe.hp;
+  game.handle({ type: 'endTurn' });
+  assert.ok(run(game, () => c.charging === null && st.phase === 'player', [{ type: 'confirm' }], 200), `mode ${game.mode} phase ${st.phase}`);
+  assert.ok(run(game, (m) => m === 'idle', null, 60), `stuck in ${game.mode}`); // 대사는 자동으로 넘어감
+  assert.ok(foe.hp < before || !st.units.includes(foe));
+  assert.equal(c.acted, true);
+});

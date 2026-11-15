@@ -290,3 +290,24 @@ export function drawOutline(ctx, x, y, color) {
   ctx.fillRect(px + 1, py + 1, TILE - 2, 2); ctx.fillRect(px + 1, py + TILE - 3, TILE - 2, 2);
   ctx.fillRect(px + 1, py + 1, 2, TILE - 2); ctx.fillRect(px + TILE - 3, py + 1, 2, TILE - 2);
 }
+
+// 숨기 표시 (칸 좌상단 px,py, 월드 좌표): 구멍파기 흙더미 · 다이빙 물웅덩이 · 공중날기 구름 · 섀도다이브 그림자(유닛 위)
+export function drawBurrowMark(ctx, unit, px, py) {
+  const kind = unit.burrow?.kind;
+  if (!kind) return;
+  const blob = (x, y, rx, ry, c) => { ctx.fillStyle = c; ctx.beginPath(); ctx.ellipse(px + x, py + y, rx, ry, 0, 0, Math.PI * 2); ctx.fill(); };
+  if (kind === 'ground') { // 흙더미 + 구멍
+    blob(12, 18, 10, 4.5, '#5a3a1c'); blob(12, 17, 8, 3.2, '#8a5a2c'); blob(12, 18, 5, 2, '#24140a');
+    for (const [x, y] of [[3, 14], [20, 15], [6, 21], [18, 21]]) { ctx.fillStyle = '#a8743a'; ctx.fillRect(px + x, py + y, 2, 2); }
+  } else if (kind === 'water') { // 물웅덩이 + 물결
+    blob(12, 18, 11, 4.5, '#1a4a90'); blob(12, 17.5, 9, 3.2, '#3a80d8');
+    ctx.fillStyle = '#c0e4ff'; ctx.fillRect(px + 6, py + 16, 4, 1); ctx.fillRect(px + 14, py + 18, 4, 1);
+  } else if (kind === 'sky') { // 머리 위 구름
+    for (const [x, y, r] of [[7, 3, 4], [12, 1, 5], [17, 3, 4]]) blob(x, y, r, r * 0.7, '#e8eef8');
+    ctx.fillStyle = '#b0bcd0'; ctx.fillRect(px + 4, py + 5, 16, 1);
+  } else if (kind === 'shadow') { // 포켓몬 위 검은 반투명 그림자
+    ctx.save(); ctx.globalAlpha = 0.55;
+    blob(12, 10, 10, 12, '#0a0610');
+    ctx.restore();
+  }
+}

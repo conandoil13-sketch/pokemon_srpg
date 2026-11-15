@@ -1,5 +1,5 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
-import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
@@ -7,7 +7,7 @@ import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js'
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
-import { aimsOf, unitsHit, tilesOf, bestAim } from '../core/shapes.js';
+import { aimsOf, unitsHit, tilesOf, bestAim, canTarget } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
@@ -118,6 +118,7 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'yawnFizzle' ? `${who(e.unitId)}의 졸음이 달아났다!`
       : e.kind === 'leech' ? `씨뿌리기가 ${who(e.unitId)}의 체력을 빼앗는다!`
       : e.kind === 'curse' ? `${josa(who(e.unitId), '은/는')} 저주를 받고 있다!`
+      : e.kind === 'recharge' ? `${josa(who(e.unitId), '은/는')} ${e.hide ? '자세를 가다듬느라 기술을 쓸 수 없다!' : '반동으로 기술을 쓸 수 없다!'}`
       : e.kind === 'bind' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}의 데미지를 입고 있다!`
       : e.kind === 'bindEnd' ? `${josa(who(e.unitId), '은/는')} ${MOVES[e.moveId].name}에서 풀려났다!`
       : e.kind === 'aquaRing' ? `${josa(who(e.unitId), '은/는')} 아쿠아링으로 체력을 회복했다!`
@@ -236,7 +237,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!pickOne(mv)) return targetsOf(st, unit, mv);
     const [min, max] = mv.range;
     const want = mv.kind === 'ally' ? (o) => o.side === unit.side && o !== unit : (o) => o.side !== unit.side;
-    return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max);
+    return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max && canTarget(mv, o)); // 숨은 포켓몬 제외
   }
 
   // 안개: 지금 아군 누구에게서도 FOG_SIGHT 이상 떨어진 적 (실시간)
@@ -299,12 +300,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 대사 뒤: 결과가 났으면 결과 화면, 아군이 전원 쉬면(잠듦·얼음) 바로 상대 턴
   const weatherTag = () => (st.weather ? ` · ${WEATHER_KO[st.weather]}${st.weatherTimer ? ` (${st.weatherTimer.turns})` : ''}` : ''); // 날씨 부르기 남은 턴
   const playerPhase = (lines = []) => showBanner('아군 턴', (floorLabel ? `${floorLabel} · ${st.turn}턴째` : `${st.turn}턴째`) + weatherTag(), '#4080f8',
-    () => noticeChain(lines, () => {
+    () => noticeChain(lines, () => runCharges('ally', () => {
       focus = null;
       if (st.result) { mode = 'result'; return; }
       if (allyUnits().every((u) => u.acted)) { enemyPhase(); return; }
       mode = 'idle';
-    }));
+    })));
 
   function enemyPhase() {
     sel = null;
@@ -317,7 +318,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       // 안개: 적 차례 시작 때 적 누구에게서도 먼 아군은 이번 차례 안 보인다
       enemyUnseen = st.weather === 'fog' ? new Set(allyUnits().filter((a) => isHidden(a, st.units.filter((u) => u.side === 'enemy'))).map((a) => a.id)) : new Set();
       mode = 'enemy';
-      nextEnemy();
+      runCharges('enemy', () => { mode = 'enemy'; nextEnemy(); }); // 준비 기술 발사 먼저
     }));
   }
 
@@ -364,6 +365,30 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 압정에 쓰러져 행동이 끝남: 아군은 다음 선택, 적은 다음 적
+  // 준비 기술: 그 편 페이즈 시작에 모아 둔 포켓몬이 차례로 대상에게 돌진해 발사 (이동력 무시). 불발이면 알림 후 평소대로
+  function runCharges(side, then) {
+    const queue = st.units.filter((u) => u.side === side && u.charging);
+    const next = () => {
+      if (st.result) { mode = 'result'; return; }
+      const u = queue.shift();
+      if (!u) { then(); return; }
+      if (!st.units.includes(u)) { next(); return; }
+      const route = chargeRoute(st, u);
+      if (!route) {
+        u.charging = null;
+        noticeChain([{ lines: [wrapMessage(`${unitLabel(u)}의 모은 힘이 흩어졌다!`)], at: { x: u.x, y: u.y } }], next);
+        return;
+      }
+      const mv = MOVES[u.charging.moveId];
+      focus = u; cursor = { x: u.x, y: u.y };
+      startWalk(u, route.path, () => {
+        const target = unitsHit(st, u, mv, route.aim).find((d) => d.side !== u.side) ?? null;
+        attackWith(u, target, mv, () => { u.moved = true; u.acted = true; u.charging = null; next(); }, route.aim); // 막혀도 모은 힘은 씀
+      }, () => next());
+    };
+    next();
+  }
+
   function afterTrapFaint(unit) {
     if (st.result) { mode = 'result'; return; }
     if (unit.side === 'ally') {
@@ -372,9 +397,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     } else nextEnemy();
   }
 
-  function startWalk(unit, path, onDone) {
+  function startWalk(unit, path, onDone, onDead = null) {
     path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
-    walk = { unit, path, t: 0, onDone, prevMode: mode };
+    walk = { unit, path, t: 0, onDone, onDead, prevMode: mode };
     if (unit.side === 'ally' && path.length > 1) { // 도착할 칸 표시 (도착하면 사라짐)
       const end = path.at(-1);
       fxm.unfollow('moveMarker');
@@ -689,7 +714,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       }
       if (walk.t >= STEP * (walk.path.length - 1)) {
         fxm.unfollow('moveMarker');
-        const { onDone, prevMode, unit, path } = walk;
+        const { onDone, onDead, prevMode, unit, path } = walk;
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
@@ -700,7 +725,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const trapLines = trapNotices(st.log.trapEvents, get);
         if ((arriveLines.length || trapLines.length) && unit.side === 'ally') moveLocked = true; // 위협·압정이 걸린 이동은 취소할 수 없다
         const dead = !st.units.includes(unit);
-        noticeChain([...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) afterTrapFaint(unit); else onDone(); });
+        noticeChain([...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
       }
     } else if (mode === 'anim') {
       anim.update(dt);
@@ -787,6 +812,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         ctx.restore();
         continue;
       }
+      const burrowUnder = u.burrow && (u.burrow.kind === 'ground' || u.burrow.kind === 'water');
+      if (burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 숨기: 흙더미·물웅덩이는 발밑에
+      if (u.burrow) { ctx.save(); ctx.globalAlpha = 0.45; } // 숨은 포켓몬은 반투명
       if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.85)'; }
       if (restFilter) { ctx.save(); ctx.filter = restFilter; }
       if (pose?.flash) { ctx.save(); ctx.filter = 'brightness(3)'; }
@@ -794,6 +822,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (pose?.flash) ctx.restore();
       if (restFilter) ctx.restore();
       if (grey) ctx.restore();
+      if (u.burrow) ctx.restore();
+      if (u.burrow && !burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 구름·그림자는 위에
       if (!pose?.hidden) ui.drawStatusDot(ctx, u, cx, cy);
     }
   }
@@ -832,14 +862,14 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, `${spec(a).name} → ${spec(d).name}`, 10, y + 5);
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     drawText(ctx, mv.name, 10, y + 20);
-    const bn = bindNote(moveId);
+    const bn = bindNote(moveId) ?? (mv.sure ? '필중' : null); // 속박기 · 필중
     if (bn) drawText(ctx, bn, 16 + textWidth(mv.name), y + 22, '#5848a0', null, 'small'); // 속박기
     const tm = min.typeMult;
     const eff = tm === 0 ? ['효과 없음', '#808080'] : tm > 1 ? ['효과 굉장', '#20a020'] : tm < 1 ? ['효과 별로', '#c07020'] : null;
     if (eff) drawText(ctx, eff[0], W - 12 - textWidth(eff[0]), y + 20, eff[1]);
     drawText(ctx, `명중 ${tm === 0 ? '-' : `${hit}%`}`, 10, y + 35);
     drawText(ctx, `데미지 ${tm === 0 ? 0 : `${min.damage}~${max.damage}`}`, 72, y + 35);
-    const ko = tm === 0 ? '' : min.damage >= d.hp && hit === 100 ? '기절!' : max.damage >= d.hp ? '기절?' : '';
+    const ko = tm === 0 || moveId === 'false-swipe' ? '' : min.damage >= d.hp && hit === 100 ? '기절!' : max.damage >= d.hp ? '기절?' : '';
     if (ko) drawText(ctx, ko, 172, y + 35, '#e03030');
     ui.drawHpBar(ctx, 206, y + 39, 40, Math.max(0, d.hp - max.damage), d.maxHp);
   }

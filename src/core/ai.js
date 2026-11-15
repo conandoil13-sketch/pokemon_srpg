@@ -124,7 +124,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
   W = effectiveWeather(state); // 에어록·날씨부정 반영
   const reach = reachable(state.grid, state.units, unit);
   const allFoes = state.units.filter((u) => u.side !== unit.side);
-  const foes = allFoes.filter((u) => !unseen.has(u.id));
+  const foes = allFoes.filter((u) => !unseen.has(u.id) && !u.burrow); // 안개 속·숨은 상대는 노리지 않는다
   const threats = threatMap(state, unit, unseen);
   let best = null, bestStatus = null;
 

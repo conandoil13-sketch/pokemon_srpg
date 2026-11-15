@@ -53,6 +53,17 @@ const EFFECT_TEXT = {
 // 속박기 걸림 대사: 감는 기술은 "묶였다", 가두는 기술은 "갇혔다"
 const COILS = new Set(['bind', 'wrap', 'clamp']);
 export const bindLine = (name, moveId) => `${josa(name, '은/는')} ${MOVES[moveId].name}에 ${COILS.has(moveId) ? '묶였다' : '갇혔다'}!`;
+// 공격 뒤 덧붙는 대사: 깨뜨리다·고속스핀·점프킥 충돌
+export function attackExtraLines(result, attacker) {
+  const out = [];
+  if (result.screensBroken?.length) out.push({ text: '장벽이 깨졌다!', who: attacker, emo: 'Determined' });
+  if (result.spun?.freed) out.push({ text: `${josa(label(attacker), '은/는')} 몸이 자유로워졌다!`, who: attacker, emo: 'Happy' });
+  if (result.spun?.cleared) out.push({ text: '압정이 날아갔다!', who: attacker, emo: 'Happy' });
+  const HIDE_LINE = { fly: '하늘 높이 날아올랐다!', bounce: '높이 뛰어올랐다!', dig: '땅속으로 파고들었다!', dive: '물속으로 잠수했다!', 'shadow-force': '모습을 감췄다!' };
+  if (attacker.burrow && HIDE_LINE[attacker.burrow.moveId]) out.push({ text: `${josa(label(attacker), '은/는')} ${HIDE_LINE[attacker.burrow.moveId]}`, who: attacker, emo: 'Determined' });
+  if (result.crash > 0) out.push({ text: `${josa(label(attacker), '은/는')} 땅에 부딪혔다!`, who: attacker, emo: 'Pain' });
+  return out;
+}
 export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = {
@@ -200,6 +211,7 @@ function spawnChangeFx(fx, s, result, get) {
 const BEAM_HAND = { right: [15, -24], left: [-15, -24], up: [-24, -15], down: [24, 15] };
 
 export function createMapAttack(opts) {
+  if (opts.result.charged) return createBlockedAnim({ ...opts, result: { ...opts.result, blocked: 'charged' } }); // 준비 기술: 모으기 대사만
   if (opts.result.blocked) return createBlockedAnim(opts);
   return opts.result.kind === 'status' ? createStatusAnim(opts) : createAttack(opts);
 }
@@ -214,6 +226,9 @@ function createBlockedAnim({ attacker, result, fx }) {
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 헤롱헤롱해서 기술을 쓸 수 없었다!`), emo: 'Normal' }]
     : result.blocked === 'sealed'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} 풀이 죽어 기술을 쓸 수 없다!`), emo: 'Pain' }]
+    : result.blocked === 'charged'
+    ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(who, '은/는')} ${result.charged.moveId === 'solar-beam' ? '빛을' : '힘을'} 모으고 있다!`), emo: 'Determined' },
+      ...(result.stageChanges?.length ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${who}의 방어가 올라갔다!`), emo: 'Determined' }] : [])]
     : result.blocked === 'damp'
     ? [{ k: 'msg', d: AUTO, text: wrapMessage('습기 때문에 폭발할 수 없다!'), emo: 'Normal' }]
     : BLOCK_TEXT[result.blocked]
@@ -410,6 +425,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const after = [];
   if (result.drained > 0) after.push({ text: `${josa(label(attacker), '은/는')} 체력을 흡수했다!`, who: attacker, emo: 'Happy', drain: true });
   if (result.drained < 0) after.push({ text: `${josa(label(attacker), '은/는')} 해감액을 흡수해 데미지를 입었다!`, who: attacker, emo: 'Pain' });
+  after.push(...attackExtraLines(result, attacker));
   if (result.recoil > 0) after.push({ text: `${josa(label(attacker), '은/는')} 반동으로 데미지를 입었다!`, who: attacker, emo: 'Pain' });
   for (const id of result.flinched ?? []) { const u = get(id); if (u) after.push({ text: `${josa(label(u), '은/는')} 풀이 죽었다!`, who: u, emo: 'Pain' }); }
   for (const b of result.bound ?? []) { const u = get(b.unitId); if (u) after.push({ text: bindLine(label(u), b.moveId), who: u, emo: 'Pain', effect: 'bind', moveId: b.moveId }); }
@@ -424,7 +440,7 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     ...stageSteps(result.stageChanges, get),
     ...statusSteps(result, get, false),
     ...after.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: m.emo, drain: m.drain, efx: m.effect ? { effect: m.effect, unitId: m.who.id, moveId: m.moveId ?? null } : null })),
-    ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
+    ...(result.selfKO || bonded || ((result.recoil > 0 || result.drained < 0 || result.crash > 0) && attacker.hp === 0) ? [{ k: 'selffaint', d: 0.6 }, { k: 'msg', d: AUTO, text: `${josa(label(attacker), '은/는')} 쓰러졌다!`, who: attacker, emo: 'Pain' }] : []), // 자폭·반동·해감액
   ];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';

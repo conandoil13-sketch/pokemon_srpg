@@ -37,6 +37,8 @@ for (const [id, v] of Object.entries(HEAL_MOVES)) if (MOVES[id]) Object.assign(M
 if (MOVES['dream-eater']) MOVES['dream-eater'].dreamOnly = true;
 
 // 포켓몬에 붙는 효과 변화기 (core/volatile.js)
+// 필중: 명중 판정 없음 (방어·무효·숨기에는 막힘)
+for (const id of ['aerial-ace', 'aura-sphere', 'feint-attack', 'magical-leaf', 'magnet-bomb', 'shadow-punch', 'shock-wave', 'swift', 'vital-throw']) if (MOVES[id]) MOVES[id].sure = true;
 for (const [id, effect] of Object.entries(EFFECT_MOVES)) if (MOVES[id]) Object.assign(MOVES[id], { effect, learnable: true });
 for (const [id, v] of Object.entries(KIND_OVERRIDES)) if (MOVES[id]) Object.assign(MOVES[id], v);
 for (const id of PLAIN_MOVES) if (MOVES[id]) MOVES[id].learnable = true;
