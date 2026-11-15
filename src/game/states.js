@@ -610,6 +610,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
             return;
           }
           if (tile && (ev.type === 'cursor' || ev.type === 'click')) {
+            if (ev.touch && ev.type === 'cursor') return; // 터치엔 올려 두기가 없다: 첫 톡은 고르기, 같은 곳 두 번째 톡이 쏘기
             // 그 칸이 중심인 조준 → 지금 조준이 그 칸을 덮으면 유지 → 그 칸을 덮는 첫 조준
             const covers = (a) => coverOf(sel, MV(move), a).some((t) => t.x === tile.x && t.y === tile.y) || (a.self && tile.x === sel.x && tile.y === sel.y);
             const centred = aims.findIndex((a) => { const p = aimPoint(a); return p.x === tile.x && p.y === tile.y; });
@@ -634,8 +635,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         if (tile && (ev.type === 'cursor' || ev.type === 'click')) {
           const i = targets.findIndex((t) => t.x === tile.x && t.y === tile.y);
           if (i >= 0) {
+            if (ev.touch && ev.type === 'cursor') return; // 터치: 첫 톡은 고르기(예상 창), 같은 대상 두 번째 톡이 쓰기
+            const was = i === tIdx;
             tIdx = i; cursor = { ...tile };
-            if (ev.type === 'click') doAttack(sel, targets[tIdx], move, finishAllyAction);
+            if (ev.type === 'click' && (!ev.touch || was)) doAttack(sel, targets[tIdx], move, finishAllyAction);
           }
           return;
         }

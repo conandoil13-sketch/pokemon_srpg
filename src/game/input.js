@@ -10,6 +10,12 @@ const KEYS = {
   s: { type: 'sort' }, S: { type: 'sort' }, // 편성소 박스 정렬
 };
 
+// 화면 터치 (순수): 닿으면 그 칸으로 커서 + 클릭, 누른 채 끌면 커서만. 화면 밖이면 아무것도
+export function touchToEvents(kind, p) {
+  if (!p) return [];
+  return kind === 'down' ? [{ type: 'cursor', ...p, touch: true }, { type: 'click', ...p, touch: true }] : [{ type: 'cursor', ...p, touch: true }]; // touch: 조준은 두 번 톡으로
+}
+
 // getScale 은 인터페이스 호환용 (좌표는 실제 렌더 크기로 계산)
 export function bindInput(canvas, getScale, onEvent) {
   const toPixel = (e) => {
@@ -20,7 +26,9 @@ export function bindInput(canvas, getScale, onEvent) {
     return { px, py };
   };
   let last = '';
-  canvas.addEventListener('mousemove', (e) => {
+  // 마우스(펜): 포인터 이벤트로 받는다. 터치 뒤 브라우저가 늦게 보내는 mousedown 흉내는 듣지 않으므로 두 번 눌리지 않는다
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'touch') return;
     const p = toPixel(e);
     if (!p) return;
     const k = `${p.px},${p.py}`;
@@ -28,7 +36,8 @@ export function bindInput(canvas, getScale, onEvent) {
     last = k;
     onEvent({ type: 'cursor', ...p });
   });
-  canvas.addEventListener('mousedown', (e) => {
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return;
     const p = toPixel(e);
     if (!p) return;
     if (e.button === 2) { onEvent({ type: 'cancel' }); return; }
@@ -37,6 +46,27 @@ export function bindInput(canvas, getScale, onEvent) {
     onEvent({ type: 'click', ...p });
   });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  // 터치: 따로 받아서 브라우저의 마우스 흉내(늦은 클릭·두 번 눌림)를 막는다. 마우스는 위 그대로
+  let touchId = null;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    e.preventDefault();
+    touchId = e.pointerId;
+    try { canvas.setPointerCapture(e.pointerId); } catch { /* 무시 */ }
+    const p = toPixel(e);
+    if (p) last = `${p.px},${p.py}`;
+    for (const ev of touchToEvents('down', p)) onEvent(ev);
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'touch' || e.pointerId !== touchId) return;
+    const p = toPixel(e);
+    if (!p || `${p.px},${p.py}` === last) return;
+    last = `${p.px},${p.py}`;
+    for (const ev of touchToEvents('move', p)) onEvent(ev);
+  });
+  const lift = (e) => { if (e.pointerId === touchId) touchId = null; };
+  canvas.addEventListener('pointerup', lift);
+  canvas.addEventListener('pointercancel', lift);
   addEventListener('keydown', (e) => {
     const ev = KEYS[e.key];
     if (!ev) return;
