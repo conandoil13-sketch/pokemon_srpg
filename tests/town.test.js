@@ -355,7 +355,7 @@ test('box: arrows move over 31 members across two boxes, never onto empty cells'
 test('box: sortie toggle from the member menu, refusals and saves', async () => {
   const { box, game, calls } = await boxScene(2);
   // 커서를 대기 동료(6번째 칸)로
-  while (box.cursorMember && game.sortie.includes(box.cursorMember.species) || box.cursorMember?.species === 'ditto') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  while (box.cursorMember && game.sortie.includes(box.cursorMember.uid) || box.cursorMember?.species === 'ditto') box.handle({ type: 'dir', dx: 1, dy: 0 });
   const bench = box.cursorMember.species;
   box.handle({ type: 'confirm' });
   assert.equal(box.mode, 'menu');
@@ -369,7 +369,7 @@ test('box: sortie toggle from the member menu, refusals and saves', async () => 
   assert.equal(box.mode, 'deploy');
   while (box.cursorMember.species !== 'chimchar') box.handle({ type: 'dir', dx: box.cursorMember.species === 'ditto' ? 1 : -1, dy: 0 });
   box.handle({ type: 'confirm' }); box.handle({ type: 'confirm' });
-  assert.ok(!game.sortie.includes('chimchar'));
+  assert.ok(!game.sortie.includes(game.party.find((m) => m.species === 'chimchar').uid));
   assert.equal(calls.save, 1);
   // 메타몽은 뺄 수 없음
   while (box.cursorMember.species !== 'ditto') box.handle({ type: 'dir', dx: -1, dy: 0 });
@@ -586,4 +586,36 @@ test('gacha duplicate lines mention IVs and a new gender', async () => {
   assert.match(lines.join(' '), /결정/);
   assert.match(lines.join(' '), /공격·스피드 개체값이 올랐다/);
   assert.match(lines.join(' '), /♀/);
+});
+
+test('box: "한 마리 더" is grey with a reason when short, asks before spending 4 shards, then focuses the new one', async () => {
+  const { box, game, calls } = await boxScene(0);
+  while (box.cursorMember.species !== 'chimchar') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  const pick = () => {
+    box.handle({ type: 'confirm' });
+    const i = box.menuLabels.findIndex((l) => l.startsWith('한 마리 더'));
+    assert.ok(i >= 0, box.menuLabels.join(','));
+    for (let k = 0; k < i; k++) box.handle({ type: 'dir', dx: 0, dy: 1 });
+    return i;
+  };
+  const i = pick();
+  assert.equal(box.menuEnabled[i], false, 'grey when shards are short');
+  box.handle({ type: 'confirm' });
+  assert.deepEqual(box.message, ['결정이 모자라다. (4개 필요)']);
+  assert.equal(game.party.length, 5);
+  box.handle({ type: 'confirm' });
+  game.shards = { chimchar: 4 };
+  const j = pick();
+  assert.equal(box.menuEnabled[j], true);
+  box.handle({ type: 'confirm' });
+  assert.deepEqual(box.menuLabels, ['데려온다 (결정 4개 사용)', '그만둔다']); // 확인 먼저
+  box.handle({ type: 'dir', dx: 0, dy: 1 }); box.handle({ type: 'confirm' }); // 그만둔다
+  assert.equal(game.party.length, 5);
+  assert.equal(game.shards.chimchar, 4);
+  pick(); box.handle({ type: 'confirm' }); box.handle({ type: 'confirm' }); // 데려온다
+  assert.equal(game.party.length, 6);
+  assert.deepEqual(box.message, ['불꽃숭이가 한 마리 더 합류했다!']);
+  assert.equal(calls.save, 1);
+  box.handle({ type: 'confirm' });
+  assert.equal(box.cursorMember, game.party[5]);
 });

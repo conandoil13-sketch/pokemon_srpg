@@ -4,6 +4,8 @@ import { ABILITIES } from '../data/abilities.js';
 import { abilityOf, typesOfMember } from '../core/progress.js';
 import { stoneEvolutionOptions } from '../core/evolution.js';
 import { deployed, toggleSortie } from '../core/roster.js';
+import { memberKey, copyMember, COPY_COST, lineMembers, lineLimit } from '../core/members.js';
+import { josa } from '../data/text.js';
 import { SORTIE_SIZE } from '../core/save.js';
 import { sortMembers, boxesOf, SORT_KEYS, SORT_KO, BOX_SIZE } from '../core/box.js';
 import { lineRoot } from '../core/gacha.js';
@@ -18,10 +20,11 @@ import { fitLines } from './memberText.js';
 const COLS = 6, CELL = 24, GX = 108, GY = 16, PANEL_W = 104, DY = 140, SLOT_X = 38, SLOT_W = 43;
 const NEXT_X = GX + 50, SORT_X = GX + 68; // 머리줄: ◀ 1/2 ▶ (고정 위치) · 정렬
 const REASON = { full: ['출전 자리가 꽉 찼다.', '먼저 다른 동료를 빼자.'], last: ['최소 1마리는', '출전해야 한다.'], ditto: ['메타몽은 항상 출전한다.'] };
+const COPY_REASON = { limit: ['이 계열은 더 데려올 수 없다.'], shards: [`결정이 모자라다. (${COPY_COST}개 필요)`] }; // 한 마리 더
 
-// 실행 중 기억 (저장하지 않음): 정렬, 박스 번호, 커서 동료 — 진화 뒤 다시 열어도 그대로
-const remembered = { sort: 'joined', box: 0, species: null };
-export const resetBoxMemory = () => Object.assign(remembered, { sort: 'joined', box: 0, species: null }); // 테스트용
+// 실행 중 기억 (저장하지 않음): 정렬, 박스 번호, 커서 동료(열쇠) — 진화 뒤 다시 열어도 그대로
+const remembered = { sort: 'joined', box: 0, key: null, species: null };
+export const resetBoxMemory = () => Object.assign(remembered, { sort: 'joined', box: 0, key: null, species: null }); // 테스트용
 
 export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   let sort = remembered.sort, box = 0, cell = 0, slot = 0, area = 'grid';
@@ -29,23 +32,31 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   const list = () => sortMembers(game.party, sort);
   const boxes = () => boxesOf(list());
   const team = () => deployed(game); // 메타몽 + 출전
-  const isOut = (m) => m.species === 'ditto' || game.sortie.includes(m.species);
+  const isOut = (m) => m.species === 'ditto' || game.sortie.some((k) => String(k) === String(memberKey(m)));
   const current = () => (area === 'grid' ? boxes()[box]?.[cell] : team()[slot]) ?? null;
-  const remember = () => Object.assign(remembered, { sort, box, species: current()?.species ?? remembered.species });
+  const remember = () => { const c = current(); Object.assign(remembered, { sort, box, key: c ? memberKey(c) : remembered.key, species: c?.species ?? remembered.species }); };
 
-  // 그 동료(또는 같은 계열)에 커서를 둔다
-  function focusOn(species) {
+  // 그 동료(열쇠), 없으면 같은 종·같은 계열에 커서를 둔다
+  function focusOn(species, key = null) {
     const l = list();
-    let k = l.findIndex((m) => m.species === species);
+    let k = key === null ? -1 : l.findIndex((m) => String(memberKey(m)) === String(key));
+    if (k < 0) k = l.findIndex((m) => m.species === species);
     if (k < 0 && species) k = l.findIndex((m) => lineRoot(m.species) === lineRoot(species)); // 진화로 이름이 바뀐 경우
     if (k < 0) { box = Math.min(remembered.box, boxes().length - 1); cell = 0; return; }
     area = 'grid'; box = Math.floor(k / BOX_SIZE); cell = k % BOX_SIZE;
   }
-  focusOn(remembered.species);
+  focusOn(remembered.species, remembered.key);
   remember();
 
   const say = (lines) => { msg = lines; mode = 'msg'; };
   const back = () => { mode = area; menu = null; };
+
+  // 한 마리 더: 수 제한·결정 부족이면 회색 (누르면 이유)
+  function copyItem(m) {
+    const root = lineRoot(m.species);
+    const why = lineMembers(game, root).length >= lineLimit(root) ? COPY_REASON.limit : (game.shards?.[root] ?? 0) < COPY_COST ? COPY_REASON.shards : null;
+    return { label: `한 마리 더 (결정 ${COPY_COST})`, enabled: !why, act: 'copy', why };
+  }
 
   function openMenu() {
     const m = current();
@@ -55,7 +66,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       { label: isOut(m) ? '출전에서 빼기' : '출전에 넣기', enabled: true, act: 'sortie' },
       { label: '자세히 보기', enabled: true, act: 'summary' },
       { label: `진화의돌 (${game.items.evoStone}개)`, enabled: canStone, act: 'stone' },
-      ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }]),
+      ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }, copyItem(m)]),
       { label: '그만둔다', enabled: true, act: 'close' },
     ];
     menuSel = 0; mode = 'menu';
@@ -67,8 +78,8 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       game, list: l, index: Math.max(0, l.indexOf(m)), page, onSave,
       onClose: (last) => { // 연 곳으로 돌아감 (출전 줄에서 열었고 그 동료가 출전 중이면 출전 줄)
         summary = null;
-        const k = team().findIndex((x) => x.species === last.species);
-        if (from === 'deploy' && k >= 0) { area = 'deploy'; slot = k; } else focusOn(last.species);
+        const k = team().indexOf(last);
+        if (from === 'deploy' && k >= 0) { area = 'deploy'; slot = k; } else focusOn(last.species, memberKey(last));
         remember(); mode = area;
       },
     });
@@ -77,7 +88,8 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
 
   function act(item) {
     const m = current();
-    if (!item.enabled || !m) return;
+    if (!m) return;
+    if (!item.enabled) { if (item.why) say(item.why); return; } // 회색 항목: 이유만 알려 준다
     if (item.act === 'close') { back(); return; }
     if (item.act === 'summary') { openSummary(0); return; }
     if (item.act === 'ability') { openSummary(3); return; }
@@ -86,8 +98,21 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       mode = 'summary';
       return;
     }
+    if (item.act === 'copy') { // 결정을 쓰기 전에 한 번 더 묻는다 (되돌릴 수 없음)
+      menu = [{ label: `데려온다 (결정 ${COPY_COST}개 사용)`, enabled: true, act: 'copyYes' }, { label: '그만둔다', enabled: true, act: 'close' }];
+      menuSel = 0;
+      return;
+    }
+    if (item.act === 'copyYes') { // 같은 계열 한 마리 더 (결정 4)
+      const r = copyMember(game, memberKey(m), Math.random);
+      if (!r.ok) { say(COPY_REASON[r.reason] ?? ['데려올 수 없다.']); return; }
+      onSave();
+      focusOn(r.member.species, memberKey(r.member)); remember();
+      say([`${josa(SPECIES[r.member.species].name, '이/가')} 한 마리 더 합류했다!`]);
+      return;
+    }
     if (item.act === 'stone') { remember(); onEvolve(m, stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null)); return; } // 돌은 실제로 진화할 때 차감 (main)
-    const r = toggleSortie(game, m.species);
+    const r = toggleSortie(game, memberKey(m));
     if (!r.ok) { say(REASON[r.reason]); return; }
     onSave();
     if (area === 'deploy') slot = Math.min(slot, team().length - 1);
@@ -120,9 +145,9 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     }
   }
   function cycleSort() {
-    const keep = current()?.species;
+    const keepM = current(), keep = keepM?.species;
     sort = SORT_KEYS[(SORT_KEYS.indexOf(sort) + 1) % SORT_KEYS.length];
-    if (area === 'grid' && keep) focusOn(keep); // 출전 줄 순서는 정렬과 무관 → 그대로
+    if (area === 'grid' && keep) focusOn(keep, memberKey(keepM)); // 출전 줄 순서는 정렬과 무관 → 그대로
     mode = area;
   }
 
@@ -154,6 +179,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     get summary() { return summary; },
     get message() { return msg; },
     get menuLabels() { return menu?.map((i) => i.label) ?? []; },
+    get menuEnabled() { return menu?.map((i) => i.enabled) ?? []; },
     handle(ev) {
       if (mode === 'summary') { summary.handle(ev); return; }
       const pick = ev.type === 'confirm' || ev.type === 'click';

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { IV_KEYS, rollIvs, hashIvs, mergeIvs, rollGender, setGender, genderSymbol, ivGrade } from '../src/core/individual.js';
+import { IV_KEYS, rollIvs, hashIvs, mergeIvs, rollGender, setGender, genderSymbol, ivGrade, usableGenders } from '../src/core/individual.js';
 import { statsAt } from '../src/core/stats.js';
 import { SPECIES } from '../src/data/species.js';
 import { newMember } from '../src/core/progress.js';
@@ -182,7 +182,8 @@ test('review: cute charm from a fainted holder does nothing; evolving into a gen
   n.gender = 'male'; n.genders = ['male', 'female'];
   evolveMember(n, 'shedinja');
   assert.equal(n.gender, null);
-  assert.deepEqual(n.genders, []);
+  assert.deepEqual(n.genders, ['male', 'female']); // 계열 기록은 남는다 (토중몬을 한 마리 더 데려오면 다시 쓸 수 있게)
+  assert.deepEqual(usableGenders(n), []);
 });
 
 test('review: attract/captivate forecast notes follow gender', () => {
@@ -192,4 +193,25 @@ test('review: attract/captivate forecast notes follow gender', () => {
   assert.equal(ailmentNote({ ...foeF, infatuation: 2 }, MOVES.attract, atk), '이미 헤롱헤롱');
   assert.equal(ailmentNote(foeM, MOVES.captivate, atk), '효과 없음');
   assert.equal(ailmentNote(foeF, MOVES.captivate, atk), null);
+});
+
+test('obtained genders survive evolution; only fitting ones are usable; setGender by uid', async () => {
+  const { evolveMember, newMember } = await import('../src/core/progress.js');
+  const { usableGenders } = await import('../src/core/individual.js');
+  const { newGame } = await import('../src/core/save.js');
+  const m = { ...newMember('kirlia', 30), gender: 'male', genders: ['male', 'female'] };
+  evolveMember(m, 'gallade');
+  assert.deepEqual([...m.genders].sort(), ['female', 'male']);
+  assert.deepEqual(usableGenders(m), ['male']);
+  const f = { ...newMember('kirlia', 30), gender: 'female', genders: ['female', 'male'] };
+  evolveMember(f, 'gardevoir');
+  assert.equal(f.gender, 'female');
+  const g = newGame();
+  g.party.push({ uid: 6, ...newMember('kirlia', 20), gender: 'male', genders: ['male', 'female'] });
+  g.party.push({ uid: 7, ...newMember('kirlia', 20), gender: 'male', genders: ['male', 'female'] });
+  assert.deepEqual(setGender(g, 7, 'female'), { ok: true });
+  assert.equal(g.party.find((x) => x.uid === 6).gender, 'male');
+  assert.equal(g.party.find((x) => x.uid === 7).gender, 'female');
+  g.party.push({ uid: 8, ...newMember('gallade', 30), gender: 'male', genders: ['male', 'female'] });
+  assert.equal(setGender(g, 8, 'female').reason, 'fixed');
 });

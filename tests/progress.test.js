@@ -157,3 +157,23 @@ test('units carry abilities; Shedinja never appears as an enemy', () => {
     assert.ok(!encounterPool(d, f, { boss: true }).includes('shedinja'));
   }
 });
+
+test('applyExp by member key: only that copy levels up, events carry the key', () => {
+  const a = { uid: 7, ...newMember('chimchar', 10) }, b = { uid: 8, ...newMember('chimchar', 10) };
+  const events = applyExp([a, b], { 7: 5000 });
+  assert.ok(a.level > 10);
+  assert.equal(b.level, 10);
+  assert.ok(events.length > 0 && events.every((e) => e.key === 7));
+  assert.ok(events.some((e) => e.type === 'level'));
+});
+
+test('ability unlock and slot are per member (uid)', async () => {
+  const { newGame } = await import('../src/core/save.js');
+  const g = newGame();
+  g.party.push({ uid: 6, ...newMember('geodude', 10), abilitySlot: 0 }, { uid: 7, ...newMember('geodude', 10), abilitySlot: 0 });
+  g.shards = { geodude: 3 };
+  assert.deepEqual(unlockAbility(g, 7), { ok: true });
+  assert.equal(g.party.find((x) => x.uid === 6).abilityUnlocked, false);
+  assert.equal(setAbilitySlot(g, 6, 1).reason, 'locked');
+  assert.deepEqual(setAbilitySlot(g, 7, 0), { ok: true });
+});

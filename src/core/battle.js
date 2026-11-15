@@ -20,7 +20,7 @@ import { newParty, abilityOf } from './progress.js';
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base, ivs, gender, weight }) {
+export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base, ivs, gender, weight, memberKey }) {
   // 개체값·성별: 아군은 멤버 값, 적은 위치·레벨로 정해지는 무작위 (같은 층이면 같음). 메타몽은 31·성별 없음
   ivs ??= species === 'ditto' ? null : hashIvs(species, x, y, level);
   if (gender === undefined) gender = hashGender(species, x, y, level);
@@ -38,8 +38,12 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss, ability,
     ...newStages(),
     ...newStatus(),
     ...(boss ? { boss: true } : {}),
+    ...(memberKey !== undefined ? { memberKey } : {}), // 동료: 파티 멤버 열쇠(uid) — 경험치·기절 기록용
   };
 }
+
+const keyOf = (m) => m.uid ?? m.species; // = members.memberKey (순환 import 피함)
+const unitKey = (u) => u.memberKey ?? u.species;
 
 function uniqueId(units, side, species) {
   let id = `${side}-${species}`;
@@ -47,14 +51,14 @@ function uniqueId(units, side, species) {
   return id;
 }
 
-// opts.hpRatio: { [species]: 0.5 } — 직전 층 기절자 등 시작 HP 비율
+// opts.hpRatio: { [memberKey]: 0.5 } — 직전 층 기절자 등 시작 HP 비율 (열쇠 = uid, 없으면 종 이름)
 export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } = {}) {
   const units = [];
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
     const { x, y } = mapDef.allySlots[i];
     const build = m.species === 'ditto' && m.build ? { types: m.build.types, base: effectiveBase(m.build), ...(m.build.weight ? { weight: m.build.weight } : {}) } : {}; // 메타몽 빌드
-    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ivs: m.ivs ?? (m.species === 'ditto' ? null : hashIvs(m.species)), gender: m.gender ?? null, ...build });
-    if (hpRatio[m.species]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[m.species]));
+    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ivs: m.ivs ?? (m.species === 'ditto' ? null : hashIvs(m.species)), gender: m.gender ?? null, memberKey: keyOf(m), ...build });
+    if (hpRatio[keyOf(m)]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[keyOf(m)]));
     units.push(u);
   });
   for (const e of mapDef.enemies) units.push(makeUnit({ ...e, side: 'enemy', id: uniqueId(units, 'enemy', e.species) }));
@@ -66,7 +70,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     phase: 'player',
     turn: 1,
     result: null,
-    log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] }, // defeated: 캡슐 굴림용 쓰러뜨린 적 // 획득 경험치(종족별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
+    log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] }, // defeated: 캡슐 굴림용 쓰러뜨린 적 // 획득 경험치(동료 열쇠별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     bossFloor: units.some((u) => u.boss),
@@ -127,9 +131,9 @@ function awardExp(state, attacker, defender) {
   const gained = {};
   if (attacker.side !== 'ally' || defender.side !== 'enemy') return gained;
   const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
-  gained[attacker.species] = full;
+  gained[unitKey(attacker)] = full;
   for (const u of state.units) {
-    if (u.side === 'ally' && u !== attacker && u.hp > 0) gained[u.species] = (gained[u.species] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+    if (u.side === 'ally' && u !== attacker && u.hp > 0) gained[unitKey(u)] = (gained[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
   }
   for (const [sp, n] of Object.entries(gained)) state.log.exp[sp] = (state.log.exp[sp] ?? 0) + n;
   return gained;
@@ -140,7 +144,7 @@ function awardShare(state, defender) {
   if (defender.side !== 'enemy') return;
   const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
   for (const u of state.units) {
-    if (u.side === 'ally' && u.hp > 0) state.log.exp[u.species] = (state.log.exp[u.species] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+    if (u.side === 'ally' && u.hp > 0) state.log.exp[unitKey(u)] = (state.log.exp[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
   }
 }
 
@@ -156,7 +160,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
     state.log.coins += 3 + Math.floor(d.level / 3);
     (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.ability, boss: !!d.boss }); // 메타몽 캡슐
   }
-  if (d.side === 'ally' && !state.log.fainted.includes(d.species)) state.log.fainted.push(d.species);
+  if (d.side === 'ally' && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
   return expGained;
 }
 

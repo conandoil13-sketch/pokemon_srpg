@@ -502,3 +502,23 @@ test('area stat drops (growl) last 2 turns, single-target buffs 3', () => {
   endPhase(s); endPhase(s); // 적 페이즈 끝 2번 → 풀림
   assert.equal(r.stages.atk, 0);
 });
+
+// ---- 같은 종 두 마리 (동료 uid) ----
+import { newMember as nm2 } from '../src/core/progress.js';
+test('two of the same species: exp, faint log and start HP are tracked per member', () => {
+  const party = [{ uid: 1, ...nm2('ditto') }, { uid: 7, ...nm2('chimchar', 10) }, { uid: 8, ...nm2('chimchar', 10) }];
+  const s = createBattle(undefined, party, { hpRatio: { 8: 0.5 } });
+  const [a, b] = s.units.filter((u) => u.species === 'chimchar');
+  assert.equal(a.hp, a.maxHp);
+  assert.equal(b.hp, Math.max(1, Math.floor(b.maxHp * 0.5)));
+  const budew = find(s, 'enemy-budew');
+  budew.hp = 1;
+  applyAttack(s, a.id, 'enemy-budew', 'ember', zero);
+  const full = expYield(SPECIES.budew.baseExp, 7, BALANCE.expMultiplier);
+  assert.equal(s.log.exp[7], full);
+  assert.equal(s.log.exp[8], Math.floor(full * BALANCE.shareRatio));
+  assert.equal(s.log.exp.chimchar, undefined);
+  b.hp = 1;
+  applyAttack(s, 'enemy-gible', b.id, 'tackle', zero);
+  assert.deepEqual(s.log.fainted, [8]);
+});

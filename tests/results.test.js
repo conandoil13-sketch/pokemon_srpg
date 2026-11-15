@@ -11,19 +11,19 @@ const toLevel = (m, lv) => expForLevel(SPECIES[m.species].growth, lv) - m.exp;
 test('bars → events → onDone once with evolutions', () => {
   const game = newGame();
   const done = [];
-  const r = createResults({ game, result: 'win', log: { exp: { chimchar: toLevel(game.party[1], 15) } }, firstClear: true, onDone: (ev) => done.push(ev) });
+  const r = createResults({ game, result: 'win', log: { exp: { 2: toLevel(game.party[1], 15) } }, firstClear: true, onDone: (ev) => done.push(ev) });
   assert.equal(game.items.evoStone, 1);
   assert.equal(r.phase, 'bars');
   r.handle({ type: 'confirm' }); // 바 즉시 완료
   assert.equal(r.phase, 'events');
   for (let i = 0; i < 30 && !done.length; i++) { tick(r, 0.5); r.handle({ type: 'confirm' }); }
   assert.equal(done.length, 1);
-  assert.deepEqual(done[0], [{ species: 'chimchar', options: ['monferno'] }]);
+  assert.deepEqual(done[0], [{ key: 2, species: 'chimchar', options: ['monferno'] }]);
 });
 
 test('lose: no stone, exp still applied', () => {
   const game = newGame();
-  createResults({ game, result: 'lose', log: { exp: { piplup: toLevel(game.party[2], 10) } }, firstClear: true, onDone() {} });
+  createResults({ game, result: 'lose', log: { exp: { 3: toLevel(game.party[2], 10) } }, firstClear: true, onDone() {} });
   assert.equal(game.items.evoStone, 0);
   assert.equal(game.party[2].level, 10);
 });
@@ -33,7 +33,7 @@ test('choose menu: mashing Z (even after the lock) never forgets or gives up a m
   const m = game.party[1];
   m.moves = ['scratch', 'ember', 'tackle', 'peck'];
   let done = 0;
-  const r = createResults({ game, result: 'win', log: { exp: { chimchar: toLevel(m, 15) } }, firstClear: false, onDone: () => done++ });
+  const r = createResults({ game, result: 'win', log: { exp: { 2: toLevel(m, 15) } }, firstClear: false, onDone: () => done++ });
   r.handle({ type: 'confirm' });
   for (let i = 0; i < 40 && r.pending?.type !== 'choose'; i++) { tick(r, 0.3); r.handle({ type: 'confirm' }); }
   assert.equal(r.pending.type, 'choose');
@@ -47,7 +47,7 @@ test('choose menu: pick a move → confirm 예 → replaced', () => {
   const game = newGame();
   const m = game.party[1];
   m.moves = ['scratch', 'ember', 'tackle', 'peck'];
-  const r = createResults({ game, result: 'win', log: { exp: { chimchar: toLevel(m, 15) } }, firstClear: false, onDone() {} });
+  const r = createResults({ game, result: 'win', log: { exp: { 2: toLevel(m, 15) } }, firstClear: false, onDone() {} });
   r.handle({ type: 'confirm' });
   for (let i = 0; i < 40 && r.pending?.type !== 'choose'; i++) { tick(r, 0.3); r.handle({ type: 'confirm' }); }
   const wanted = r.pending.move;
@@ -68,7 +68,7 @@ test('choose menu: clicking a menu row picks it, clicking elsewhere does nothing
   const game = newGame();
   const m = game.party[1];
   m.moves = ['scratch', 'ember', 'tackle', 'peck'];
-  const r = createResults({ game, result: 'win', log: { exp: { chimchar: toLevel(m, 15) } }, firstClear: false, onDone() {} });
+  const r = createResults({ game, result: 'win', log: { exp: { 2: toLevel(m, 15) } }, firstClear: false, onDone() {} });
   r.handle({ type: 'confirm' });
   for (let i = 0; i < 40 && r.pending?.type !== 'choose'; i++) { tick(r, 0.3); r.handle({ type: 'confirm' }); }
   tick(r, CHOICE_LOCK + 0.05);

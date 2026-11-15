@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { hash } from '../render/pixels.js';
 import { DEFAULT_BUILD, effectiveBase } from './dittoBuild.js';
-import { rollIvs, hashIvs, maxIvs, rollGender, hashGender, genderFits } from './individual.js';
+import { rollIvs, hashIvs, maxIvs, rollGender, hashGender, genderFits, findMember } from './individual.js';
 
 // 개체값·성별: rng 가 있으면 무작위, 없으면 종 이름으로 고정. 메타몽은 개체값 31·성별 없음
 function individualOf(species, rng) {
@@ -35,12 +35,12 @@ export const typesOfMember = (m) => m.build?.types ?? SPECIES[m.species].types;
 
 // 특성 해금: 계열 뿌리 결정 3개를 한 번 쓰면 다른 특성이 열리고 바로 바뀐다. 그 뒤 전환은 공짜
 export const ABILITY_UNLOCK_COST = 3;
-export function unlockAbility(game, species) {
-  const m = game.party.find((x) => x.species === species);
+export function unlockAbility(game, key) {
+  const m = findMember(game, key);
   if (!m) return { ok: false, reason: 'missing' };
-  if (SPECIES[species].abilities.length < 2) return { ok: false, reason: 'single' };
+  if (SPECIES[m.species].abilities.length < 2) return { ok: false, reason: 'single' };
   if (m.abilityUnlocked) return { ok: false, reason: 'already' };
-  const root = lineRoot(species);
+  const root = lineRoot(m.species);
   if ((game.shards[root] ?? 0) < ABILITY_UNLOCK_COST) return { ok: false, reason: 'shards' };
   game.shards[root] -= ABILITY_UNLOCK_COST;
   m.abilityUnlocked = true;
@@ -49,10 +49,10 @@ export function unlockAbility(game, species) {
 }
 
 // 특성 슬롯 고르기: 잠겨 있으면 지금 슬롯만
-export function setAbilitySlot(game, species, slot) {
-  const m = game.party.find((x) => x.species === species);
+export function setAbilitySlot(game, key, slot) {
+  const m = findMember(game, key);
   if (!m) return { ok: false, reason: 'missing' };
-  if (!Number.isInteger(slot) || slot < 0 || slot >= SPECIES[species].abilities.length) return { ok: false, reason: 'slot' };
+  if (!Number.isInteger(slot) || slot < 0 || slot >= SPECIES[m.species].abilities.length) return { ok: false, reason: 'slot' };
   if (slot !== (m.abilitySlot ?? 0) && !m.abilityUnlocked) return { ok: false, reason: 'locked' };
   m.abilitySlot = slot;
   return { ok: true };
@@ -70,20 +70,22 @@ function learnEvents(member, moves) {
   });
 }
 
-// expBySpecies: 전투 로그 { [species]: exp }. 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
+// expByKey: 전투 로그 { [memberKey]: exp } (열쇠 = uid, 없으면 종 이름). 파티 순서대로 이벤트를 만든다 (멤버를 직접 갱신)
+// 이벤트마다 key 를 붙여 같은 종 두 마리를 구분한다
 // cap: 레벨 상한 (던전 돌파로 열림). 상한을 넘는 경험치는 버린다, 이미 넘은 멤버는 그대로
-export function applyExp(party, expBySpecies, rng = Math.random, cap = MAX_LEVEL) {
+export function applyExp(party, expByKey, rng = Math.random, cap = MAX_LEVEL) {
   const events = [];
   for (const m of party) {
-    const gain = expBySpecies[m.species];
+    const gain = expByKey[m.uid ?? m.species];
     if (!gain) continue;
+    const start = events.length;
     const s = SPECIES[m.species];
     const ceiling = Math.max(m.exp, expForLevel(s.growth, Math.min(cap, MAX_LEVEL)));
     const capped = cap < MAX_LEVEL && m.exp + gain > ceiling;
     m.exp = Math.min(m.exp + gain, ceiling);
     const cappedEvent = capped ? { type: 'capped', species: m.species, capped: true, cap } : null; // 레벨 상한: 넘친 경험치 버림
     const to = levelForExp(s.growth, m.exp);
-    if (to <= m.level) { if (cappedEvent) events.push(cappedEvent); continue; }
+    if (to <= m.level) { if (cappedEvent) events.push({ ...cappedEvent, key: m.uid ?? m.species }); continue; }
     const from = m.level;
     const base = m.build ? effectiveBase(m.build) : s.base; // 메타몽은 빌드 종족값
     events.push({ type: 'level', species: m.species, from, to, before: statsAt(base, from, m.ivs), after: statsAt(base, to, m.ivs) });
@@ -93,6 +95,7 @@ export function applyExp(party, expBySpecies, rng = Math.random, cap = MAX_LEVEL
     const pick = pickEvolution(levelEvolutionOptions(s, to, m.gender ?? null), s, rng); // 성별 진화
     if (pick) events.push({ type: 'evolve', species: m.species, options: pick.auto ? [pick.auto] : pick.choose, random: !!pick.auto && levelEvolutionOptions(s, to, m.gender ?? null).length > 1 });
     if (cappedEvent) events.push(cappedEvent);
+    for (let i = start; i < events.length; i++) events[i].key = m.uid ?? m.species;
   }
   return events;
 }
@@ -106,9 +109,10 @@ export function resolveChoice(member, move, forgetIndex) {
 // 진화: 종족 교체 후 새 종족이 '현재 레벨'에 배우는 기술 처리
 export function evolveMember(member, to) {
   member.species = to;
-  // 새 종의 성별 비율과 안 맞으면(예: 껍데기몬 — 성별 없음) 고친다
-  if (!genderFits(to, member.gender ?? null)) member.gender = hashGender(to);
-  member.genders = (member.genders ?? []).filter((g) => genderFits(to, g));
+  // 새 종의 성별 비율과 안 맞으면(예: 껍데기몬 — 성별 없음) 얻은 성별 중 맞는 것, 없으면 종으로 정한 값
+  // 얻은 성별 목록(계열 기록)은 지우지 않는다: 같은 계열을 한 마리 더 데려오면 다른 갈래로 키울 수 있게
+  if (!genderFits(to, member.gender ?? null)) member.gender = (member.genders ?? []).find((g) => genderFits(to, g)) ?? hashGender(to);
+  member.genders = [...(member.genders ?? [])];
   if (member.gender && !member.genders.includes(member.gender)) member.genders.push(member.gender);
   const s = SPECIES[to];
   const moves = s.learnset.filter(([lv, mv]) => lv === member.level && MOVES[mv]?.learnable).map(([, mv]) => mv);

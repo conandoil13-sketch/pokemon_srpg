@@ -6,8 +6,9 @@ import { josa } from '../data/text.js';
 import { statsAt, expForLevel, MAX_LEVEL } from '../core/stats.js';
 import { typesOfMember, abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
+import { memberKey } from '../core/members.js';
 import { effectiveBase } from '../core/dittoBuild.js';
-import { genderFixed, setGender, ivGrade } from '../core/individual.js';
+import { genderFixed, setGender, ivGrade, usableGenders } from '../core/individual.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
 import { drawPortrait } from '../render/sprites.js';
@@ -33,9 +34,9 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
     if (m.build) { say(['메타몽의 특성은', '박스 메뉴의 메타몽 빌드에서 바꾼다.']); return; }
     if (SPECIES[m.species].abilities.length < 2) { say([`${name}의 특성은 하나뿐이다.`]); return; }
     if (!m.abilityUnlocked) {
-      const r = unlockAbility(game, m.species);
+      const r = unlockAbility(game, memberKey(m));
       if (!r.ok) { say([`${name}의 결정이 모자란다.`, `(${shards(m)}/${ABILITY_UNLOCK_COST})`]); return; }
-    } else setAbilitySlot(game, m.species, (m.abilitySlot ?? 0) === 0 ? 1 : 0);
+    } else setAbilitySlot(game, memberKey(m), (m.abilitySlot ?? 0) === 0 ? 1 : 0);
     onSave();
     say([`${name}의 특성이`, `${josa(ABILITIES[abilityOf(m)].name, '으로/로')} 바뀌었다!`]);
   }
@@ -45,8 +46,8 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
     const m = member(), name = SPECIES[m.species].name;
     if (genderFixed(m.species)) { say([`${name}의 성별은 바꿀 수 없다.`]); return; }
     const other = m.gender === 'male' ? 'female' : 'male';
-    if (!(m.genders ?? []).includes(other)) { say(['다른 성별을 얻은 적이 없다.', '뽑기에서 다른 성별이 나오면 고를 수 있다.']); return; }
-    setGender(game, m.species, other);
+    if (!usableGenders(m).includes(other)) { say(['다른 성별을 얻은 적이 없다.', '뽑기에서 다른 성별이 나오면 고를 수 있다.']); return; }
+    setGender(game, memberKey(m), other);
     onSave();
     say([`${name}의 성별을 ${other === 'male' ? '♂' : '♀'}로 바꿨다.`]);
   }
@@ -93,10 +94,10 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
         ctx.fillStyle = '#58b8f8'; ctx.fillRect(11, y0 + 14, Math.round(158 * r), 3);
         small(`진화: ${evolutionHint(m)}`, 10, y0 + 24);
         small(`${SPECIES[lineRoot(m.species)].name} 계열 결정: ${shards(m)}개`, 10, y0 + 38);
-        const out = m.species === 'ditto' || game.sortie.includes(m.species);
+        const out = m.species === 'ditto' || game.sortie.some((k) => String(k) === String(memberKey(m)));
         small(out ? '출전 중' : '대기 중', 10, y0 + 52, out ? '#2860c8' : '#808080');
         small(`특성: ${ABILITIES[abilityOf(m)]?.name ?? '-'} · 몸무게 ${m.build?.weight ?? s.weight}kg`, 10, y0 + 66);
-        if (!genderFixed(m.species)) small(`확인: 성별 바꾸기 (${(m.genders ?? []).length > 1 ? '♂/♀' : '다른 성별 없음'})`, 10, y0 + 80, (m.genders ?? []).length > 1 ? '#c06010' : '#a0a0a0');
+        if (!genderFixed(m.species)) small(`확인: 성별 바꾸기 (${usableGenders(m).length > 1 ? '♂/♀' : '다른 성별 없음'})`, 10, y0 + 80, usableGenders(m).length > 1 ? '#c06010' : '#a0a0a0');
       } else if (pg === 1) {
         const st = statsAt(m.build ? effectiveBase(m.build) : s.base, m.level, m.ivs), top = Math.max(...Object.values(st)) * 1.1; // 가장 큰 값 기준
         STAT_ROWS.forEach(([k, label], r) => {
