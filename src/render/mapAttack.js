@@ -5,7 +5,7 @@ import { MOVES } from '../data/moves.js';
 import { TYPE_COLORS } from '../data/types.js';
 import { josa } from '../data/text.js';
 import { TILE } from './tiles.js';
-import { animTiming, hasPmd, DIR } from './sprites.js';
+import { animTiming, hasPmd, DIR, hasAnim } from './sprites.js';
 import { dirFromDelta } from './pmdData.js';
 import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
@@ -310,7 +310,8 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const weatherSteps = wx ? [{ k: 'wcharge', d: 0.6 }, { k: 'wburst', d: BURST_TIME }] : [];
   const push = result.pushed ? [{ k: 'push', d: 0.3 }] : []; // 밀려나며 미끄러짐
   const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const DANCE = move.id === 'teeter-dance'; // 흔들흔들댄스: 빙글빙글 춤춘 뒤 혼란
+  const steps = [{ k: 'act', d: DANCE ? 1.2 : 0.45 }, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
@@ -376,6 +377,7 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
         return { anim: 'Hurt', t, loop: false, dx: (from.x - to.x) * TILE * (1 - k), dy: (from.y - to.y) * TILE * (1 - k) };
       }
       if (u !== attacker) return null;
+      if (DANCE && s.k === 'act') return { anim: hasAnim(u.species, 'Twirl') ? 'Twirl' : 'Rotate', t: total, loop: true, dy: -Math.round(3 * Math.abs(Math.sin(total * 9))) }; // 춤: 돌며 통통
       if (steps.slice(0, i + 1).some((x) => x.selfFaint)) return { hidden: true }; // 저주로 쓰러짐
       const hop = s.k === 'act' ? -Math.round(4 * Math.sin(Math.PI * Math.min(1, t / 0.45))) : 0;
       return { anim: 'Idle', t: total, loop: true, dir: dir ?? undefined, dy: hop };

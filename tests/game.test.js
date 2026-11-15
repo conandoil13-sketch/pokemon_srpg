@@ -867,3 +867,10 @@ test('pain split makes both pokemon flinch when the orbs land', () => {
   assert.equal(anim.unitPose(me)?.anim, 'Hurt');
   assert.equal(anim.unitPose(foe)?.anim, 'Hurt');
 });
+
+test('teeter dance spins the dancer before the confusion', () => {
+  const me = { id: 'a', species: 'pidgey', side: 'ally', x: 2, y: 2 };
+  const anim = statusAnim('teeter-dance', { effects: [{ unitId: 'a', effect: 'teeterDance', ok: true }] }, [me]);
+  runFor(anim, 0.5);
+  assert.ok(['Twirl', 'Rotate'].includes(anim.unitPose(me)?.anim));
+});
