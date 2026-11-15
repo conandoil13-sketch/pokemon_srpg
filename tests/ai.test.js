@@ -323,7 +323,11 @@ test('review fix: an enemy with spikes walks toward far foes instead of camping'
 
 import { bindValue, HINDER_SCORE } from '../src/core/ai.js';
 test('binding an unbound foe is worth a little more than hitting a bound one', () => {
-  assert.equal(bindValue(MV.wrap, { bound: null, hp: 50 }), HINDER_SCORE / 2);
+  assert.equal(bindValue(MV.wrap, { bound: null, hp: 50 }), (HINDER_SCORE / 2) * (MV.wrap.accuracy / 100));
   assert.equal(bindValue(MV.wrap, { bound: { by: 'x' }, hp: 50 }), 0);
   assert.equal(bindValue(MV.tackle, { bound: null, hp: 50 }), 0);
+});
+
+test('bind value scales with accuracy', () => {
+  assert.ok(bindValue({ ...MV.wrap, accuracy: 50 }, { bound: null }) < bindValue({ ...MV.wrap, accuracy: 100 }, { bound: null }));
 });

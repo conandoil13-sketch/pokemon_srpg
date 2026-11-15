@@ -198,3 +198,38 @@ test('the turn after hiding has its own line, not the recoil line', () => {
   const e = s.log.statusEvents.find((x) => x.kind === 'recharge');
   assert.equal(e.hide, true);
 });
+
+// ---- 작은 버그 묶음 ----
+test('ranged charge moves fire from where they stand, losing 5% per tile beyond range', () => {
+  const { s, a, f } = duel('bulbasaur', 'geodude', { foe: { hp: 999, maxHp: 999 } });
+  applyMove(s, a.id, 'solar-beam', { dir: 'right' }, hit);
+  const near = duel('bulbasaur', 'geodude', { foe: { hp: 999, maxHp: 999 } });
+  applyMove(near.s, near.a.id, 'solar-beam', { dir: 'right' }, hit);
+  f.x = 8; f.y = 1; // 거리 7, 사거리 3 → 4칸 초과 = 20% 감소
+  round(s); round(near.s);
+  const route = chargeRoute(s, a);
+  assert.deepEqual(route.path, [{ x: a.x, y: a.y }]);
+  const far = applyMove(s, a.id, 'solar-beam', route.aim, () => 0.5).hits[0];
+  const close = applyMove(near.s, near.a.id, 'solar-beam', chargeRoute(near.s, near.a).aim, () => 0.5).hits[0];
+  assert.equal(far.unitId, f.id);
+  assert.ok(far.damage < close.damage && far.damage >= close.damage * 0.78, `${far.damage} vs ${close.damage}`);
+});
+test('a line charge remembers the nearest foe', () => {
+  const { s, a, f } = duel('bulbasaur', 'geodude', { fx: 3, fy: 1 });
+  s.units.push({ ...f, id: 'enemy-near', x: 2, y: 1 });
+  const r = applyMove(s, a.id, 'solar-beam', { dir: 'right' }, hit);
+  assert.equal(r.charged.targetId, 'enemy-near');
+});
+test('brick break keeps screens when the target protects or is immune', () => {
+  const { s, a, f } = duel('machop', 'gastly');
+  s.zones = [{ kind: 'reflect', side: 'enemy', x: f.x, y: f.y, turns: 5 }];
+  assert.deepEqual(applyMove(s, a.id, 'brick-break', f.id, hit).screensBroken, []);
+  assert.equal(s.zones.length, 1);
+});
+test('laying spikes where every tile is taken fails', () => {
+  const { s, a } = duel('pidgey', 'geodude');
+  const aim = { x: 1, y: 3 };
+  assert.equal(applyMove(s, a.id, 'spikes', aim, hit).effects[0].ok, true); a.acted = false; a.moved = false;
+  const r = applyMove(s, a.id, 'spikes', aim, hit);
+  assert.equal(r.effects[0].ok, false);
+});

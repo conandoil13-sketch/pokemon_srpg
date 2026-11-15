@@ -837,3 +837,9 @@ test('a charged move rushes and fires by itself at the start of the next ally ph
   assert.ok(foe.hp < before || !st.units.includes(foe));
   assert.equal(c.acted, true);
 });
+
+test('hiding a newly tossed caltrop does not hide toxic spikes on the same tile', () => {
+  const ctx = { fillRect() {}, set fillStyle(v) {} };
+  const st = { spikes: [{ x: 2, y: 1, kind: 'toxicSpikes', side: 'ally' }, { x: 2, y: 1, kind: 'spikes', side: 'ally' }] };
+  assert.deepEqual(drawTraps(ctx, st, [], [{ x: 2, y: 1, kind: 'spikes' }]).map((t) => t.kind), ['toxicSpikes']);
+});

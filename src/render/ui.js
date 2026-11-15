@@ -218,7 +218,7 @@ export function drawZones(ctx, state) {
 // 압정: 아군 것과 드러난 적 것만 (shown: 까는 연출 중이라 잠깐 보이는 칸). 그린 칸 목록을 돌려준다
 // hidden: 던진 압정이 아직 안 떨어진 칸 (그리지 않음)
 export function drawTraps(ctx, state, shown = [], hidden = []) {
-  const vis = (state.spikes ?? []).filter((t) => (t.side === 'ally' || t.revealed || shown.some((p) => p.x === t.x && p.y === t.y)) && !hidden.some((p) => p.x === t.x && p.y === t.y));
+  const vis = (state.spikes ?? []).filter((t) => (t.side === 'ally' || t.revealed || shown.some((p) => p.x === t.x && p.y === t.y)) && !hidden.some((p) => p.x === t.x && p.y === t.y && (!p.kind || p.kind === t.kind)));
   for (const t of vis) {
     const [rim, body, tip] = t.kind === 'spikes' ? ['#30303a', '#9898a8', '#e8e8f0'] : ['#2a1032', '#8a3aa8', '#e0a8f0'];
     for (const [ox, oy] of [[6, 17], [12, 12], [17, 18]]) { // 작은 가시 셋
