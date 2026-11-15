@@ -10,7 +10,7 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
 import { BURST_TIME, drawBurstRing, drawBurstFlash } from './weatherFx.js';
 import { idleFrameSource } from './sprites.js';
@@ -175,6 +175,7 @@ const center = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE / 2 });
 // ---- pixelfx 연결 ----
 const feet = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE - 4 });
 const dirName = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'up' : 'down');
+const TOSSED = new Set(['spikes', 'toxicSpikes']);
 // 이펙트 하나가 실패해도 연출은 계속 (실패하면 null → 예전 그림으로)
 function spawnSafe(fx, spec, at, opts) {
   if (!fx || !spec) return null;
@@ -286,8 +287,17 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     if (!s) return;
     if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
     if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
+    if (TOSSED.has(s.efx?.effect) && tossAt === null) { // 압정: 깔린 칸마다 하나씩 던짐
+      tossAt = total;
+      const from = feet(attacker);
+      laid.forEach((p, k) => { const at = { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 4 }; spawnSafe(fx, trapTossFx(s.efx.effect, from.x - at.x, from.y - at.y), at, { delay: TOSS_GAP * k }); });
+      spawnChangeFx(fx, s, result, get);
+      return;
+    }
     spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get);
   };
+  const laid = result.trapsLaid ?? [];
+  let tossAt = null; // 던지기 시작 시각 (total 기준)
   const burstAt = steps.findIndex((x) => x.k === 'wburst');
   return {
     defender: target,
@@ -299,6 +309,11 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
     get trapsShown() { return i < steps.length ? result.trapsLaid ?? [] : []; }, // 적이 깐 압정도 까는 동안은 보인다
+    get trapsHidden() { // 던진 압정이 아직 안 떨어진 칸
+      if (!laid.length || i >= steps.length) return [];
+      if (tossAt === null) return laid;
+      return laid.filter((_, k) => total - tossAt < TOSS_GAP * k + TOSS_FLIGHT);
+    },
     get weatherShown() { return !wx || i >= steps.length ? undefined : i < burstAt ? wx.from : wx.to; }, // 펑 전엔 이전 날씨
     unitPose(u) {
       const s = step();

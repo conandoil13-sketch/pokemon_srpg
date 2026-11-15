@@ -899,7 +899,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     ui.drawZones(ctx, st); // 장판 테두리
     ui.drawAuras(ctx, st); // 오라 (쓴 포켓몬을 따라다님)
-    ui.drawTraps(ctx, st, anim?.trapsShown ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)
+    ui.drawTraps(ctx, st, anim?.trapsShown ?? [], anim?.trapsHidden ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)
     for (const c of st.chests) drawChest(ctx, c.x, c.y);
     if (mode === 'selected') {
       ui.drawHighlights(ctx, toPts(reach), BLUE);

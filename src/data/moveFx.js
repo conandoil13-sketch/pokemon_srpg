@@ -120,6 +120,10 @@ export const HEAL_FX = spec('pokemon/heal-glow', {}, 1, 'front', { life: 1.1 });
 export const drainFx = (fromX, fromY) => spec('pokemon/drain-orbs', { fromX, fromY }, 1, 'front', { life: 1.1 });
 
 // 포켓몬에 붙는 효과 (변화기 묶음 1차): 걸릴 때 몸에 한 번. 큰 이펙트는 빠르게(timeScale) 짧게(life)
+// 압정 던지기: 칸마다 하나씩 (원점 = 떨어질 칸 발밑, fromX/fromY = 던진 포켓몬 발밑의 상대 위치)
+export const TOSS_FLIGHT = 0.45, TOSS_GAP = 0.08; // 날아가는 시간 (이펙트 FLIGHT 와 같음) · 칸 사이 간격
+const CALTROP_PAL = ['#202028', '#4a4a58', '#8a8a9c', '#c8c8d8', '#f0f0f8'];
+export const trapTossFx = (kind, fromX, fromY) => spec('pokemon/caltrop-toss', { palette: kind === 'toxicSpikes' ? POISON_PAL : CALTROP_PAL, fromX, fromY }, 1, 'front', { life: 0.75 });
 const FOG_WHITE = ['#6a6a7a', '#9a9aac', '#c4c4d4', '#e2e2ee', '#f8f8ff'];
 const FOG_DARK = ['#0c0814', '#1e1630', '#342a4a', '#4e4266', '#7a6a90'];
 const fxOn = (id, opts = {}, timeScale = 2) => spec(id, opts, timeScale, 'front', { life: 1.2 });
@@ -155,8 +159,8 @@ export const EFFECT_FX = {
   mudSport: fxOn('nature/acid-splash', { palette: PAL.earth }, 2),
   waterSport: fxOn('nature/acid-splash', { palette: PAL.water }, 2),
   weather: fxOn('arcane/spell-charge', { palette: PAL.holy }, 1.5), // 날씨 부르기 (기술별 색은 아래)
-  spikes: fxOn('impacts/ground-slam', { palette: PAL.stone }, 2), // 압정: 사용자 발밑 (깔린 칸은 맵에 그림)
-  toxicSpikes: fxOn('impacts/ground-slam', { palette: POISON_PAL }, 2),
+  spikes: trapTossFx('spikes', 0, 0), // 압정: 실제로는 칸마다 던짐 (mapAttack 이 trapTossFx 로)
+  toxicSpikes: trapTossFx('toxicSpikes', 0, 0),
   push: fxOn('pokemon/sound-wave', { palette: PAL.bone }, 1.5), // 울부짖기·날려버리기 (사용자 앞 퍼지는 파동)
   haze: spec('pokemon/ground-fog', { palette: FOG_DARK }, 1, 'back', { life: 1.7 }), // 바닥에 깔리는 검은 안개
 };

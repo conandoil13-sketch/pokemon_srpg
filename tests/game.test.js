@@ -735,3 +735,19 @@ test('a failed weather call has no burst and leaves the weather alone', () => {
   assert.equal(anim.weatherShown, undefined);
   runFor(anim, 1.2); assert.equal(anim.weatherShown, undefined);
 });
+
+import { TOSS_FLIGHT, TOSS_GAP } from '../src/data/moveFx.js';
+test('tossed spikes stay hidden until each one lands', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 };
+  const laid = [{ x: 5, y: 2 }, { x: 6, y: 2 }, { x: 5, y: 3 }]; // 벽·이미 깔린 칸 빼고 3칸만
+  const anim = statusAnim('spikes', { effects: [{ unitId: 'a', effect: 'spikes', ok: true }], trapsLaid: laid }, [me]);
+  assert.equal(anim.trapsHidden.length, 3);
+  runFor(anim, 0.45 + TOSS_FLIGHT + 0.05); assert.equal(anim.trapsHidden.length, 2); // 첫 압정 착지
+  runFor(anim, TOSS_GAP * 2); assert.equal(anim.trapsHidden.length, 0);
+  assert.equal(anim.trapsShown.length, 3); // 적 압정이어도 연출 중엔 보임 (기존)
+});
+test('hidden trap tiles are not drawn', () => {
+  const ctx = { fillRect() {}, set fillStyle(v) {} };
+  const st = { spikes: [{ x: 1, y: 1, kind: 'spikes', side: 'ally', revealed: false }, { x: 2, y: 1, kind: 'spikes', side: 'ally', revealed: false }] };
+  assert.deepEqual(drawTraps(ctx, st, [], [{ x: 2, y: 1 }]).map((t) => [t.x, t.y]), [[1, 1]]);
+});

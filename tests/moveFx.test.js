@@ -124,3 +124,13 @@ test('auras and fog get their own fx: wind, a see-through veil, rolling fog, a p
   assert.notDeepEqual(fxForEffect('mist', 'mist').opts.palette, fxForEffect('haze', 'haze').opts.palette); // 흰 / 검정
   assert.equal(fxForEffect('luckyChant', 'lucky-chant').id, 'pokemon/chant-pool');
 });
+
+import { trapTossFx, TOSS_FLIGHT, TOSS_GAP, POISON_PAL as POISON } from '../src/data/moveFx.js';
+test('spikes are tossed one by one, toxic spikes in purple', () => {
+  const s = trapTossFx('spikes', -48, 0), t = trapTossFx('toxicSpikes', -48, 0);
+  assert.equal(s.id, 'pokemon/caltrop-toss');
+  assert.equal(s.opts.fromX, -48);
+  assert.deepEqual(t.opts.palette, POISON);
+  assert.equal(fxForEffect('spikes', 'spikes').id, 'pokemon/caltrop-toss');
+  assert.ok(TOSS_FLIGHT > 0 && TOSS_GAP > 0);
+});
