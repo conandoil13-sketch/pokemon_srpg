@@ -44,6 +44,13 @@ export function createRepeater() {
 export const isTouchDevice = () => typeof window !== 'undefined'
   && ((window.matchMedia?.('(pointer: coarse)').matches ?? false) || 'ontouchstart' in window || (navigator.maxTouchPoints ?? 0) > 0);
 
+// 터치 기기가 바뀌는 순간 (개발자도구 기기 전환, 태블릿 키보드 붙이기 등) 다시 알려 준다
+export function watchTouch(onChange) {
+  const mq = typeof window !== 'undefined' ? window.matchMedia?.('(pointer: coarse)') : null;
+  mq?.addEventListener?.('change', (e) => onChange(e.matches));
+  return isTouchDevice();
+}
+
 const buzz = () => { try { navigator.vibrate?.(10); } catch { /* 무시 */ } };
 
 // 십자키는 한 덩어리: 누른 자리에서 가운데 기준 방향을 정하고, 엄지를 굴리면 방향이 바뀐다

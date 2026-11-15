@@ -4,7 +4,7 @@ import { createScreen } from './render/screen.js';
 import { requestSprites } from './render/sprites.js';
 import { loadFonts } from './render/font.js';
 import { bindInput } from './game/input.js';
-import { isTouchDevice, mountPad } from './game/touchPad.js';
+import { watchTouch, mountPad } from './game/touchPad.js';
 import { createGame } from './game/states.js';
 import { createTitle } from './game/title.js';
 import { createTown } from './game/town.js';
@@ -31,9 +31,10 @@ import { TOWN } from './data/town.js';
 
 validateData();
 const canvas = document.getElementById('game');
-const touch = isTouchDevice(); // 터치 기기: 게임기 버튼 + 버튼 자리를 뺀 칸에 화면 맞춤
-if (touch) document.body.classList.add('touch');
-const { ctx, getScale } = createScreen(canvas, touch ? document.getElementById('screen') : null);
+// 터치 기기: 게임기 버튼 + 버튼 자리를 뺀 칸에 화면 맞춤. 기기가 바뀌면(개발자도구 기기 전환 등) 새로고침 없이 바뀐다
+const { ctx, getScale, refit } = createScreen(canvas, () => (document.body.classList.contains('touch') ? document.getElementById('screen') : null));
+const setTouch = (on) => { document.body.classList.toggle('touch', on); refit(); };
+setTouch(watchTouch(setTouch));
 await loadFonts(); // 스프라이트는 화면에 나올 종족만 그때그때 (requestSprites)
 
 // localStorage 접근 자체가 막힌 환경에서도 게임은 돌아가게
@@ -202,7 +203,7 @@ go.title();
 
 window.__app = { get scene() { return scene; }, get game() { return game; }, go, save }; // 디버그용
 bindInput(canvas, getScale, (ev) => scene.handle(ev));
-if (touch) mountPad(document.getElementById('pad'), (ev) => scene.handle(ev));
+mountPad(document.getElementById('pad'), (ev) => scene.handle(ev)); // 터치 기기가 아니면 CSS 로 숨김
 
 let last = performance.now();
 function frame(now) {

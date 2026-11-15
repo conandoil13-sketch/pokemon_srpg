@@ -7,14 +7,15 @@ export function fitScale(availW, availH) {
   return exact >= 2 ? Math.floor(exact) : exact;
 }
 
-// box: 화면이 들어갈 칸 (터치 기기에서 버튼 자리를 뺀 곳). 없으면 창 전체
-export function createScreen(canvas, box = null) {
+// box: 화면이 들어갈 칸 (터치 기기에서 버튼 자리를 뺀 곳). 없으면 창 전체. 함수면 맞출 때마다 물어본다
+export function createScreen(canvas, boxOf = null) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
   let scale = 2;
   const fit = () => {
+    const box = typeof boxOf === 'function' ? boxOf() : boxOf;
     if (box) { const cs = getComputedStyle(box); scale = fitScale(box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom)); }
     else scale = fitScale(innerWidth, innerHeight);
     canvas.style.width = `${W * scale}px`;
@@ -23,5 +24,5 @@ export function createScreen(canvas, box = null) {
   addEventListener('resize', fit);
   addEventListener('orientationchange', () => setTimeout(fit, 100)); // 돌린 뒤 크기가 늦게 바뀌는 폰
   fit();
-  return { ctx, getScale: () => scale };
+  return { ctx, getScale: () => scale, refit: fit };
 }
