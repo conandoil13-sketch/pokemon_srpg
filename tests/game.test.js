@@ -715,3 +715,71 @@ test('moving an ally shows a destination marker until it arrives', () => {
   assert.ok(run(game, (m) => m === 'action'));
   assert.equal(game.fx.following, 0);
 });
+
+// ---- 2차 변화기 이펙트: 상태 연출 ----
+import { createMapAttack } from '../src/render/mapAttack.js';
+const statusAnim = (moveId, result, units, fx = null) => createMapAttack({ attacker: units[0], defender: units[1] ?? null, move: { ...MV2[moveId], id: moveId }, result: { kind: 'status', stageChanges: [], statusChanges: [], ...result }, lookup: (id) => units.find((u) => u.id === id), fx });
+const runFor = (anim, sec) => { for (let t = 0; t < sec - 1e-9; t += 0.05) anim.update(0.05); };
+test('weather shows the old weather until the screen-wide burst, then the new one', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 };
+  const anim = statusAnim('rain-dance', { effects: [{ unitId: 'a', effect: 'weather', ok: true, from: 'sun', to: 'rain' }] }, [me]);
+  assert.equal(anim.weatherShown, 'sun');
+  runFor(anim, 0.45 + 0.6 - 0.1); assert.equal(anim.weatherShown, 'sun'); // 모으는 중
+  runFor(anim, 0.2); assert.equal(anim.weatherShown, 'rain'); // 펑
+  while (!anim.done) { anim.advance(); anim.update(0.05); }
+  assert.equal(anim.weatherShown, undefined);
+});
+test('a failed weather call has no burst and leaves the weather alone', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 };
+  const anim = statusAnim('rain-dance', { effects: [{ unitId: 'a', effect: 'weather', ok: false, reason: 'already' }] }, [me]);
+  assert.equal(anim.weatherShown, undefined);
+  runFor(anim, 1.2); assert.equal(anim.weatherShown, undefined);
+});
+
+import { TOSS_FLIGHT, TOSS_GAP } from '../src/data/moveFx.js';
+test('tossed spikes stay hidden until each one lands', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 };
+  const laid = [{ x: 5, y: 2 }, { x: 6, y: 2 }, { x: 5, y: 3 }]; // 벽·이미 깔린 칸 빼고 3칸만
+  const anim = statusAnim('spikes', { effects: [{ unitId: 'a', effect: 'spikes', ok: true }], trapsLaid: laid }, [me]);
+  assert.equal(anim.trapsHidden.length, 3);
+  runFor(anim, 0.45 + TOSS_FLIGHT + 0.05); assert.equal(anim.trapsHidden.length, 2); // 첫 압정 착지
+  runFor(anim, TOSS_GAP * 2); assert.equal(anim.trapsHidden.length, 0);
+  assert.equal(anim.trapsShown.length, 3); // 적 압정이어도 연출 중엔 보임 (기존)
+});
+test('hidden trap tiles are not drawn', () => {
+  const ctx = { fillRect() {}, set fillStyle(v) {} };
+  const st = { spikes: [{ x: 1, y: 1, kind: 'spikes', side: 'ally', revealed: false }, { x: 2, y: 1, kind: 'spikes', side: 'ally', revealed: false }] };
+  assert.deepEqual(drawTraps(ctx, st, [], [{ x: 2, y: 1 }]).map((t) => [t.x, t.y]), [[1, 1]]);
+});
+
+test('push moves blow toward the target even when it does not budge', () => {
+  const made = [];
+  const fx = { spawn: (spec, at, o) => { made.push({ id: spec.id, dir: o?.dir }); return {}; } };
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 }, foe = { id: 'e', species: 'geodude', side: 'enemy', x: 2, y: 4 };
+  statusAnim('whirlwind', { effects: [{ unitId: 'e', effect: 'push', ok: false, reason: 'immune' }] }, [me, foe], fx);
+  assert.deepEqual(made.find((m) => m.id === 'pokemon/gust-blast'), { id: 'pokemon/gust-blast', dir: 'down' });
+  made.length = 0;
+  statusAnim('roar', { effects: [{ unitId: 'e', effect: 'push', ok: true }], pushed: { unitId: 'e', from: { x: 4, y: 2 }, to: { x: 7, y: 2 }, path: [] } }, [me, foe], fx);
+  assert.deepEqual(made.find((m) => m.id === 'pokemon/sound-wave'), { id: 'pokemon/sound-wave', dir: 'right' }); // 밀린 칸의 원래 위치 쪽
+});
+
+test('skipping the spikes message still waits for every caltrop to land', () => {
+  const me = { id: 'a', species: 'squirtle', side: 'enemy', x: 2, y: 2 };
+  const laid = [{ x: 5, y: 2 }, { x: 6, y: 2 }, { x: 4, y: 2 }, { x: 5, y: 3 }, { x: 5, y: 1 }];
+  const anim = statusAnim('spikes', { effects: [{ unitId: 'a', effect: 'spikes', ok: true }], trapsLaid: laid }, [me]);
+  runFor(anim, 0.5); // 던지기 시작
+  anim.advance(); anim.update(0.05); // 대사 넘김
+  assert.equal(anim.done, false);
+  assert.ok(anim.trapsHidden.length > 0);
+  assert.equal(anim.trapsShown.length, 5);
+  runFor(anim, TOSS_GAP * 4 + TOSS_FLIGHT + 0.5);
+  assert.equal(anim.trapsHidden.length, 0);
+  assert.equal(anim.done, true);
+});
+test('a diagonal push target gets a gust that reaches level with it', () => {
+  const made = [];
+  const fx = { spawn: (spec, at, o) => { made.push({ id: spec.id, reach: spec.opts?.reach, dir: o?.dir }); return {}; } };
+  const me = { id: 'a', species: 'squirtle', side: 'ally', x: 2, y: 2 }, foe = { id: 'e', species: 'geodude', side: 'enemy', x: 3, y: 3 };
+  statusAnim('whirlwind', { effects: [{ unitId: 'e', effect: 'push', ok: false, reason: 'immune' }] }, [me, foe], fx);
+  assert.equal(made.find((m) => m.id === 'pokemon/gust-blast').reach, 24);
+});

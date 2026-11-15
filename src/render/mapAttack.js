@@ -10,8 +10,9 @@ import { drawText, textWidth } from './font.js';
 import { drawHpBar, drawMessage, drawStatusBadge } from './ui.js';
 import { shade } from './pixels.js';
 import { STAT_KO } from '../core/stages.js';
-import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx } from '../data/moveFx.js';
+import { fxForMove, fxForStage, fxForAilment, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_FLIGHT, TOSS_GAP, pushFx } from '../data/moveFx.js';
 import { actorFor, bodyAt } from './fxActor.js';
+import { BURST_TIME, drawBurstRing, drawBurstFlash } from './weatherFx.js';
 import { idleFrameSource } from './sprites.js';
 
 const AUTO = 1.1;
@@ -174,6 +175,7 @@ const center = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE / 2 });
 // ---- pixelfx 연결 ----
 const feet = (u) => ({ x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE - 4 });
 const dirName = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? 'left' : 'right') : dy < 0 ? 'up' : 'down');
+const TOSSED = new Set(['spikes', 'toxicSpikes']);
 // 이펙트 하나가 실패해도 연출은 계속 (실패하면 null → 예전 그림으로)
 function spawnSafe(fx, spec, at, opts) {
   if (!fx || !spec) return null;
@@ -271,25 +273,58 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const missed = (result.missed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}에게는 맞지 않았다!`), who: get(id), emo: 'Normal' }));
   const healed = result.healed ? [{ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(attacker), '은/는')} 체력을 회복했다!`), who: attacker, emo: 'Happy', heal: true }]
     : result.healFailed ? [{ k: 'msg', d: AUTO, text: wrapMessage(result.healFailed === 'full' ? '그러나 HP 가 가득 차 있다!' : '이번 층에서는 더 쓸 수 없다!'), who: attacker, emo: 'Normal' }] : [];
-  const efx = effectSteps(result, get, move.id);
+  const wx = (result.effects ?? []).find((e) => e.effect === 'weather' && e.ok); // 날씨 부르기 성공: 모으기 → 펑 → 날씨
+  const efx = effectSteps(result, get, move.id).map((s) => (wx && s.efx?.effect === 'weather' ? { ...s, efx: null } : s));
+  const weatherSteps = wx ? [{ k: 'wcharge', d: 0.6 }, { k: 'wburst', d: BURST_TIME }] : [];
   const push = result.pushed ? [{ k: 'push', d: 0.3 }] : []; // 밀려나며 미끄러짐
   const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
-  const steps = [{ k: 'act', d: 0.45 }, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const steps = [{ k: 'act', d: 0.45 }, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];
   const stageAge = () => { const k = steps.findIndex((x) => x.k === 'stage'); return k < 0 || i < k ? null : i === k ? t : 0.6; };
-  const enter = (s) => { if (!s) return; if (s.heal) onBody(fx, HEAL_FX, attacker); spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get); }; // 회복: 초록 반짝임
+  const enter = (s) => {
+    if (!s) return;
+    if (s.heal) onBody(fx, HEAL_FX, attacker); // 회복: 초록 반짝임
+    if (s.k === 'wcharge') onBody(fx, fxForEffect('weather', move.id), attacker); // 날씨: 손끝에 모으기
+    if (TOSSED.has(s.efx?.effect) && tossAt === null) { // 압정: 깔린 칸마다 하나씩 던짐
+      tossAt = total;
+      const from = feet(attacker);
+      laid.forEach((p, k) => { const at = { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 4 }; spawnSafe(fx, trapTossFx(s.efx.effect, from.x - at.x, from.y - at.y), at, { delay: TOSS_GAP * k }); });
+      spawnChangeFx(fx, s, result, get);
+      return;
+    }
+    spawnChangeFx(fx, s, result, get); spawnEffectFx(fx, s, get);
+  };
+  if (move.effect === 'push') { // 울부짖기·날려버리기: 대상(밀렸으면 원래 칸) 쪽으로 바로
+    const to = result.pushed?.from ?? (defender && defender !== attacker ? defender : null);
+    if (to) spawnSafe(fx, pushFx(move.id, Math.max(Math.abs(to.x - attacker.x), Math.abs(to.y - attacker.y))), // 대각선: 큰 축 거리 (그 축 방향으로 불어 대상과 나란히)
+       feet(attacker), { dir: dirName(to.x - attacker.x, to.y - attacker.y) });
+  }
+  const laid = result.trapsLaid ?? [];
+  let tossAt = null; // 던지기 시작 시각 (total 기준)
+  const burstAt = steps.findIndex((x) => x.k === 'wburst');
+  const TOSS_HOLD = 0.25; // 마지막 압정이 떨어진 뒤 잠깐 (적 압정도 보이게)
+  const tossing = () => tossAt !== null && total - tossAt < TOSS_GAP * (laid.length - 1) + TOSS_FLIGHT + TOSS_HOLD;
+  const live = () => i < steps.length || tossing(); // 대사를 넘겨도 압정이 다 떨어질 때까지
   return {
     defender: target,
-    get done() { return i >= steps.length; },
+    get done() { return !live(); },
     update(dt) {
+      if (!live()) return;
+      total += dt;
       if (i >= steps.length) return;
-      t += dt; total += dt;
+      t += dt;
       if (t >= step().d) { t = 0; i++; const s = step(); enter(s); if (s?.text) { text = s.text; who = s.who; emo = s.emo; } }
     },
     advance() { if (step()?.k === 'msg') t = step().d; },
-    get trapsShown() { return i < steps.length ? result.trapsLaid ?? [] : []; }, // 적이 깐 압정도 까는 동안은 보인다
+    get trapsShown() { return live() ? laid : []; }, // 적이 깐 압정도 까는 동안은 보인다
+    get trapsHidden() { // 던진 압정이 아직 안 떨어진 칸
+      if (!laid.length || !live()) return [];
+      if (tossAt === null) return laid;
+      return laid.filter((_, k) => total - tossAt < TOSS_GAP * k + TOSS_FLIGHT);
+    },
+    get weatherShown() { return !wx || i >= steps.length ? undefined : i < burstAt ? wx.from : wx.to; }, // 펑 전엔 이전 날씨
     unitPose(u) {
       const s = step();
       if (!s) return null;
@@ -309,10 +344,12 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
       const age = stageAge();
       if (age !== null && step()) drawStagePops(ctx, result.stageChanges, get, age);
       if (step()?.pop) drawStatusPop(ctx, step().pop, get);
+      if (step()?.k === 'wburst') { const c = center(attacker); drawBurstRing(ctx, wx.to, t / BURST_TIME, c.x, c.y); }
     },
     drawScreen(ctx) {
       const s = step();
       if (!s) return;
+      if (s.k === 'wburst') drawBurstFlash(ctx, wx.to, t / BURST_TIME);
       drawMessage(ctx, text, { species: who.species, side: who.side, emotion: emo }, s.k === 'msg' && Math.floor(t * 3) % 2 === 0);
     },
   };

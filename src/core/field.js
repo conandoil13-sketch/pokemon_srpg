@@ -102,11 +102,12 @@ export function castWeather(state, user, moveId) {
   const w = WEATHER_OF[moveId];
   if (state.weather === 'fog') return { ok: false, reason: 'fog' };
   if (state.weather === w) return { ok: false, reason: 'already' };
+  const from = state.weather ?? null;
   state.weather = w;
   state.weatherTimer = { side: user.side, turns: FIELD_TURNS };
   const W = effectiveWeather(state);
   for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 이동력 바로 반영
-  return { ok: true };
+  return { ok: true, from, to: w }; // 연출: 펑 전엔 from, 뒤엔 to
 }
 
 // 그 편이 놓은 오라·장판·날씨 턴 감소 (그 편 페이즈 끝)

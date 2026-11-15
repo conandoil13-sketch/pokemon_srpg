@@ -115,3 +115,29 @@ test('heal moves, rest and drain use the short heal glow and drain orbs', () => 
   const d = drainFx(-48, 24);
   assert.deepEqual([d.id, d.opts.fromX, d.opts.fromY], ['pokemon/drain-orbs', -48, 24]);
 });
+
+test('auras and fog get their own fx: wind, a see-through veil, rolling fog, a purple pool', () => {
+  assert.equal(fxForEffect('tailwind', 'tailwind').id, 'pokemon/tailwind-gust');
+  assert.equal(fxForEffect('safeguard', 'safeguard').id, 'pokemon/veil-dome');
+  assert.equal(fxForEffect('mist', 'mist').id, 'pokemon/ground-fog');
+  assert.equal(fxForEffect('haze', 'haze').id, 'pokemon/ground-fog');
+  assert.notDeepEqual(fxForEffect('mist', 'mist').opts.palette, fxForEffect('haze', 'haze').opts.palette); // 흰 / 검정
+  assert.equal(fxForEffect('luckyChant', 'lucky-chant').id, 'pokemon/chant-pool');
+});
+
+import { trapTossFx, TOSS_FLIGHT, TOSS_GAP, POISON_PAL as POISON } from '../src/data/moveFx.js';
+test('spikes are tossed one by one, toxic spikes in purple', () => {
+  const s = trapTossFx('spikes', -48, 0), t = trapTossFx('toxicSpikes', -48, 0);
+  assert.equal(s.id, 'pokemon/caltrop-toss');
+  assert.equal(s.opts.fromX, -48);
+  assert.deepEqual(t.opts.palette, POISON);
+  assert.equal(fxForEffect('spikes', 'spikes').id, 'pokemon/caltrop-toss');
+  assert.ok(TOSS_FLIGHT > 0 && TOSS_GAP > 0);
+});
+
+import { pushFx } from '../src/data/moveFx.js';
+test('whirlwind is a gust that reaches the target, roar keeps the sound wave', () => {
+  assert.equal(pushFx('whirlwind', 2).id, 'pokemon/gust-blast');
+  assert.equal(pushFx('whirlwind', 2).opts.reach, 48);
+  assert.equal(pushFx('roar', 1).id, 'pokemon/sound-wave');
+});

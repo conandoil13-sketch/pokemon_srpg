@@ -48,3 +48,28 @@ export function drawWeather(ctx, weather, time) {
   ctx.restore();
   return true;
 }
+
+// ---- 날씨 부르기 "펑": 쓴 포켓몬에서 고리가 화면 끝까지 퍼지고 화면 전체가 날씨 색으로 번쩍 ----
+export const WEATHER_BURST = { rain: '#4890f0', sun: '#f8c040', sand: '#c8a060', hail: '#c8e8ff' };
+export const BURST_TIME = 0.5;
+const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a.toFixed(3)})`;
+// 고리 (좌표계는 호출 측: 전투는 월드, 미리보기는 화면). k: 0→1
+export function drawBurstRing(ctx, weather, k, x, y) {
+  const c = WEATHER_BURST[weather];
+  if (!c || !ctx || k < 0 || k >= 1) return;
+  const r = 8 + (1 - (1 - k) ** 3) * 360, a = 1 - k;
+  ctx.save();
+  ctx.strokeStyle = rgba(c, 0.9 * a); ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.8, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = rgba('#ffffff', 0.7 * a); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(x, y, r - 3, (r - 3) * 0.8, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.restore();
+}
+// 화면 전체 번쩍 (화면 좌표)
+export function drawBurstFlash(ctx, weather, k, w = W, h = H) {
+  const c = WEATHER_BURST[weather];
+  if (!c || !ctx || k < 0 || k >= 1) return;
+  ctx.save(); ctx.fillStyle = rgba(c, 0.55 * (1 - k) ** 1.5); ctx.fillRect(0, 0, w, h); ctx.restore();
+}
+// 둘 다 (좌표계가 같을 때: 미리보기)
+export function drawWeatherBurst(ctx, weather, k, x, y, w = W, h = H) { drawBurstFlash(ctx, weather, k, w, h); drawBurstRing(ctx, weather, k, x, y); }

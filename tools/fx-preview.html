@@ -68,7 +68,9 @@
 <div class="tablewrap"><table id="leftTable"></table></div>
 <script type="module">
 import { createFxManager } from '../src/render/fx.js';
-import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx } from '../src/data/moveFx.js';
+import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx } from '../src/data/moveFx.js';
+import { drawWeather, drawWeatherBurst, BURST_TIME } from '../src/render/weatherFx.js';
+import { WEATHER_OF } from '../src/core/field.js';
 import { actorFor, bodyAt } from '../src/render/fxActor.js';
 import { requestSprites, drawUnitSprite, drawShadow, idleFrameSource, DIR } from '../src/render/sprites.js';
 import { SPECIES } from '../src/data/species.js';
@@ -128,9 +130,9 @@ function playAil() {
 // 실제 기술: 게임과 같은 순서 (사용자 쪽 cast → 탄이 0.25초 날아감 → 대상에 hit)
 const attacks = Object.values(MOVES).filter((m) => m.learnable && m.category !== 'status').sort((a, b) => (familyOf(a) ?? 'z').localeCompare(familyOf(b) ?? 'z') || a.name.localeCompare(b.name));
 $('move').innerHTML = attacks.map((m) => `<option value="${m.id}" ${m.id === 'bite' ? 'selected' : ''}>${m.name} · ${m.type} · ${m.category === 'physical' ? '물리' : '특수'}${familyOf(m) ? ' · ' + familyOf(m) : ''}</option>`).join('');
-let flying = null, timers = [], lastPlay = null;
+let flying = null, timers = [], lastPlay = null, sky = null; // sky: 날씨 부르기 (펑 → 날씨)
 const later = (fn, ms) => timers.push(setTimeout(fn, ms));
-function reset() { for (const t of timers) clearTimeout(t); timers = []; flying = null; fx.clear(); }
+function reset() { for (const t of timers) clearTimeout(t); timers = []; flying = null; sky = null; fx.clear(); }
 function playMove() {
   lastPlay = playMove;
   reset();
@@ -161,7 +163,13 @@ function playEffect() {
   const { id, effect, mv } = effectMoves.find((e) => e.id === $('effect').value);
   const who = id === 'curse' || mv.kind === 'enemy' || mv.kind === 'enemies' ? 'foe' : mv.kind === 'ally' ? 'ally' : 'me';
   const at = { foe: D, ally: L, me: A }[who];
-  onBody(fxForEffect(effect, id), cast[who], at);
+  if (effect === 'weather') { // 게임처럼: 손끝에 모으기 → 펑 → 날씨
+    onBody(fxForEffect(effect, id), cast.me, A);
+    later(() => { sky = { w: WEATHER_OF[id], t: 0 }; }, 600);
+  } else if (effect === 'spikes' || effect === 'toxicSpikes') { // 적 칸 + 4방에 하나씩 던짐
+    [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy], k) => { const p = { x: D.x + dx * TILE, y: D.y + dy * TILE }; fx.spawn(trapTossFx(effect, A.x - p.x, A.y - p.y), p, { delay: TOSS_GAP * k }); });
+  } else if (effect === 'push') fx.spawn(pushFx(id, Math.round((D.x - A.x) / TILE)), A, { dir: 'right' }); // 나 → 적
+  else onBody(fxForEffect(effect, id), cast[who], at);
   $('info').textContent = `${mv.name} (${id}) → ${effect} · ${fxForEffect(effect, id).id} · 대상 ${{ foe: '적', ally: '아군', me: '나' }[who]}`;
 }
 $('playEffect').onclick = playEffect;
@@ -216,6 +224,7 @@ function frame(now) {
   }
   fx.draw(ctx, 'back', { x: 0, y: 0 });
   fx.draw(ctx, 'front', { x: 0, y: 0 });
+  if (sky) { sky.t += dt; if (sky.t < BURST_TIME) drawWeatherBurst(ctx, sky.w, sky.t / BURST_TIME, A.x, A.y - 8, 256, 192); else drawWeather(ctx, sky.w, clock); }
   if ($('loop').checked && (again += dt) > 1.6) { again = 0; (lastPlay ?? playMove)(); }
   requestAnimationFrame(frame);
 }

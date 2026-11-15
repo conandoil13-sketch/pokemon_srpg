@@ -899,7 +899,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     ui.drawZones(ctx, st); // 장판 테두리
     ui.drawAuras(ctx, st); // 오라 (쓴 포켓몬을 따라다님)
-    ui.drawTraps(ctx, st, anim?.trapsShown ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)
+    ui.drawTraps(ctx, st, anim?.trapsShown ?? [], anim?.trapsHidden ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)
     for (const c of st.chests) drawChest(ctx, c.x, c.y);
     if (mode === 'selected') {
       ui.drawHighlights(ctx, toPts(reach), BLUE);
@@ -924,7 +924,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     fxm.draw(ctx, 'back', { x: cx, y: cy });
     drawUnits(ctx);
     fxm.draw(ctx, 'front', { x: cx, y: cy });
-    ctx.save(); ctx.translate(cx, cy); drawWeather(ctx, st.weather, time); ctx.restore(); // 날씨: 유닛·이펙트 위, 커서·HP 바·숫자·UI 아래
+    ctx.save(); ctx.translate(cx, cy); drawWeather(ctx, anim?.weatherShown !== undefined ? anim.weatherShown : st.weather, time); ctx.restore(); // 날씨: 유닛·이펙트 위, 커서·HP 바·숫자·UI 아래
     if (['idle', 'selected', 'target', 'retreat'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
     if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);
