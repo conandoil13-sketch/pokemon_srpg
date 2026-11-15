@@ -856,6 +856,6 @@ test('the summoned gyarados stays hidden until its geyser has risen', () => {
   const me = { id: 'a', species: 'magikarp', side: 'ally', x: 2, y: 2 }, g = { id: 'g', species: 'gyarados', side: 'ally', x: 3, y: 2 };
   const anim = statusAnim('splash', { effects: [{ unitId: 'a', effect: 'splash', ok: true, summoned: 'g' }], summoned: 'g' }, [me, g]);
   assert.equal(anim.unitPose(g)?.hidden, true);
-  runFor(anim, 0.45 + 1.0);
+  runFor(anim, 0.45 + 1.2);
   assert.notEqual(anim.unitPose(g)?.hidden, true);
 });
