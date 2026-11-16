@@ -109,6 +109,11 @@ export function ensureDitto(party) {
   return [ditto, ...party.filter((m) => m.species !== 'ditto')];
 }
 
+// 깬 던전의 다음 단계를 연다 (던전이 새로 붙었을 때 예전 저장도 이어지게)
+export function unlockFromCleared(game) {
+  for (const d of DUNGEONS) if (d.unlock && game.cleared.includes(d.unlock) && !game.unlocked.includes(d.id)) game.unlocked.push(d.id);
+}
+
 export function loadGame(storage) {
   let raw;
   try {
@@ -164,6 +169,7 @@ export function loadGame(storage) {
       nextUid,
     };
     unifyLines(game); // 같은 계열은 개체값·얻은 성별을 같이 쓴다
+    unlockFromCleared(game); // 던전이 늘어나도 이미 깬 던전 다음 단계는 열려 있게
     return game;
   } catch (e) {
     warn(`invalid save ignored: ${e.message}`); // 어떤 이상한 형태든 부팅을 막지 않는다

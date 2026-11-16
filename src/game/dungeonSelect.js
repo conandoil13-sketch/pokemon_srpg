@@ -6,6 +6,7 @@ import { W, H } from '../render/screen.js';
 import { CHOICE_LOCK } from './learnFlow.js';
 
 const ROW = 18, LIST_X = 8, LIST_Y = 30, LIST_W = 120;
+const VISIBLE = 7; // 한 번에 보이는 줄 (넘치면 커서를 따라 스크롤)
 const YES_NO = [{ label: '예', enabled: true }, { label: '아니요', enabled: true }];
 
 export function createDungeonSelect({ game, onStart, onResume, onBack }) {
@@ -14,7 +15,8 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
     ...(run ? [{ kind: 'resume', label: `이어하기 B${run.floor}F` }] : []),
     ...DUNGEONS.map((d) => ({ kind: 'dungeon', d, label: d.name, locked: !game.unlocked.includes(d.id) })),
   ];
-  let idx = 0, confirm = null, t = 0; // confirm = { id, cursor }
+  let idx = 0, top = 0, confirm = null, t = 0; // confirm = { id, cursor }, top = 맨 위에 보이는 줄
+  const follow = () => { if (idx < top) top = idx; if (idx >= top + VISIBLE) top = idx - VISIBLE + 1; };
 
   function pick() {
     const it = items[idx];
@@ -26,6 +28,7 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
 
   return {
     get confirming() { return !!confirm; },
+    get visibleTop() { return top; },
     handle(ev) {
       const yes = ev.type === 'confirm' || ev.type === 'click';
       if (confirm) {
@@ -34,12 +37,12 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
         else if (yes && t >= CHOICE_LOCK) { if (confirm.cursor === 0) onStart(confirm.id); confirm = null; }
         return;
       }
-      if (ev.type === 'dir' && ev.dy) idx = (idx + ev.dy + items.length) % items.length;
+      if (ev.type === 'dir' && ev.dy) { idx = (idx + ev.dy + items.length) % items.length; follow(); }
       else if (ev.type === 'confirm') pick();
       else if (ev.type === 'cancel') onBack();
       else if ((ev.type === 'cursor' || ev.type === 'click') && ev.px >= LIST_X && ev.px < LIST_X + LIST_W) {
-        const i = Math.floor((ev.py - LIST_Y - 4) / ROW);
-        if (i >= 0 && i < items.length) { idx = i; if (ev.type === 'click') pick(); }
+        const row = Math.floor((ev.py - LIST_Y - 4) / ROW), i = top + row;
+        if (row >= 0 && row < VISIBLE && i < items.length) { idx = i; if (ev.type === 'click') pick(); }
       }
     },
     update(dt) { t += dt; },
@@ -52,9 +55,13 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
       const back = 'X: 마을로';
       drawText(ctx, back, W - 10 - textWidth(back, 'small'), 10, '#a8b8d8', null, 'small');
 
-      ui.drawWindow(ctx, LIST_X, LIST_Y, LIST_W, items.length * ROW + 8);
+      const shown = Math.min(items.length, VISIBLE);
+      ui.drawWindow(ctx, LIST_X, LIST_Y, LIST_W, shown * ROW + 8);
+      if (top > 0) drawText(ctx, '▲', LIST_X + LIST_W / 2 - 4, LIST_Y - 9, '#f8f8f8', '#384868', 'small'); // 위에 더 있음
+      if (top + VISIBLE < items.length) drawText(ctx, '▼', LIST_X + LIST_W / 2 - 4, LIST_Y + shown * ROW + 8, '#f8f8f8', '#384868', 'small'); // 아래에 더 있음
       items.forEach((it, i) => {
-        const y = LIST_Y + 5 + i * ROW;
+        if (i < top || i >= top + VISIBLE) return;
+        const y = LIST_Y + 5 + (i - top) * ROW;
         const dim = it.locked;
         drawText(ctx, it.locked ? '잠김' : it.label, LIST_X + 14, y, dim ? '#a8a8a8' : it.kind === 'resume' ? '#c04040' : '#383838', dim ? null : '#d8d8d0');
         if (it.kind === 'dungeon' && game.cleared.includes(it.d.id)) drawText(ctx, '★', LIST_X + LIST_W - 18, y, '#e0a000', '#d8d8d0');

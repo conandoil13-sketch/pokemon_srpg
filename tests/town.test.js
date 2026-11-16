@@ -648,3 +648,23 @@ test('talking to the water left of the 4th companion spot gives a ten-pull vouch
   town.player.facing = 'left'; town.handle({ type: 'confirm' }); // 다른 방향은 아무 일 없음
   assert.equal(gifts, 2);
 });
+
+import { DUNGEONS as ALL_D } from '../src/data/dungeons.js';
+test('dungeon select scrolls to reach the last stage and clicks map to the scrolled row', () => {
+  const g = newGame(); g.unlocked = ALL_D.map((d) => d.id);
+  let started = null;
+  const sel = createDungeonSelect({ game: g, onStart: (id) => { started = id; }, onResume() {}, onBack() {} });
+  assert.equal(sel.visibleTop, 0);
+  for (let i = 0; i < 9; i++) sel.handle({ type: 'dir', dx: 0, dy: 1 });
+  assert.ok(sel.visibleTop > 0);
+  sel.handle({ type: 'confirm' }); assert.equal(started, 'trial-8');
+  const top = sel.visibleTop;
+  sel.handle({ type: 'click', px: 20, py: 30 + 4 + 2 }); // 보이는 첫 줄
+  assert.equal(started, ALL_D[top].id);
+});
+test('dungeon select with a run in progress scrolls the resume row too', () => {
+  const g = newGame(); g.unlocked = ALL_D.map((d) => d.id); g.run = startRun('sinnoh-field', 1);
+  const sel = createDungeonSelect({ game: g, onStart() {}, onResume() {}, onBack() {} });
+  for (let i = 0; i < 10; i++) sel.handle({ type: 'dir', dx: 0, dy: 1 });
+  assert.ok(sel.visibleTop >= 4); // 11줄 중 마지막이 보이게
+});

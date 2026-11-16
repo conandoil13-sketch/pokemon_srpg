@@ -14,7 +14,7 @@ test('every dungeon follows the dungeon guide (fields, budgets, early species, c
       assert.ok(d.budget[f] > d.budget[f - 1], `${d.id} budget ${f}`);
       assert.ok(d.baseLevel[f] >= d.baseLevel[f - 1], `${d.id} level ${f}`);
     }
-    assert.ok(d.early.length >= 4, d.id);
+    assert.ok(d.filler || d.early.length >= 4, d.id); // 임시 단계는 초반 종 없음
     for (const k of d.early) {
       assert.ok(SPECIES[k], `${d.id}: ${k}`);
       assert.equal(SPECIES[k].stage, 0, k);
@@ -39,7 +39,7 @@ test('field floors 1-2 only use early species; threat and exp multiplier', () =>
 test('level cap: first uncleared dungeon in the chain, last one stays after everything is cleared', () => {
   assert.equal(levelCapFor({ cleared: [] }), 15);
   assert.equal(levelCapFor({ cleared: ['sinnoh-field'] }), 22);
-  assert.equal(levelCapFor({ cleared: ['sinnoh-field', 'sinnoh-cave'] }), 22);
+  assert.equal(levelCapFor({ cleared: ['sinnoh-field', 'sinnoh-cave'] }), 31); // 다음은 시련의 들판 Ⅰ
 });
 
 // ---- 적 굴림 ----
@@ -60,7 +60,7 @@ test('rollEnemies: deterministic, within budget, at least 2, early-only small fl
         assert.ok(total(list) <= d.budget[f - 1] * (1 + budgetBonusMax(d, f)) + 1e-9, `${tag}: ${total(list)}`);
         if (f <= 2) {
           assert.ok(list.length <= 4, tag);
-          for (const e of list) assert.ok(d.early.includes(e.species), `${tag}: ${e.species}`);
+          if (!d.filler) for (const e of list) assert.ok(d.early.includes(e.species), `${tag}: ${e.species}`); // 임시 단계는 초반 종 없음
           for (const e of list) assert.ok(e.level <= d.baseLevel[f - 1] + 1, tag); // 준보스(+2) 없음
         }
       }
@@ -77,7 +77,7 @@ test('threat medians rise floor by floor inside each dungeon (300 seeds)', () =>
 
 test('same seeds keep terrain, chests, stairs, ally slots and weather (enemies only change)', () => {
   const h = createHash('sha1');
-  for (const dg of DUNGEONS) for (let seed = 1; seed <= 40; seed++) for (let fl = 1; fl <= dg.floors; fl++) { const m = generateFloor(dg, fl, seed); h.update(JSON.stringify([m.tiles, m.chests, m.weather, m.stairs, m.allySlots])); }
+  for (const dg of DUNGEONS.slice(0, 2)) for (let seed = 1; seed <= 40; seed++) for (let fl = 1; fl <= dg.floors; fl++) { const m = generateFloor(dg, fl, seed); h.update(JSON.stringify([m.tiles, m.chests, m.weather, m.stairs, m.allySlots])); }
   assert.equal(h.digest('hex'), '19fa3023a2062ce5e5b58bcd5597a142541b88e8');
 });
 

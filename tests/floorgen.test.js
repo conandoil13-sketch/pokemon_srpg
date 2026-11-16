@@ -9,7 +9,7 @@ const cave = dungeonById('sinnoh-cave');
 const key = (p) => `${p.x},${p.y}`;
 
 test('dungeon table', () => {
-  assert.deepEqual(DUNGEONS.map((d) => [d.id, d.floors, d.unlock]), [['sinnoh-field', 5, null], ['sinnoh-cave', 7, 'sinnoh-field']]);
+  assert.deepEqual(DUNGEONS.slice(0, 2).map((d) => [d.id, d.floors, d.unlock]), [['sinnoh-field', 5, null], ['sinnoh-cave', 7, 'sinnoh-field']]); // 뒤는 임시 단계 (fillerStages.test.js)
   assert.deepEqual(field.baseLevel, [6, 7, 9, 10, 12]);
   assert.deepEqual(cave.baseLevel, [13, 14, 15, 16, 17, 18, 19]);
 });
