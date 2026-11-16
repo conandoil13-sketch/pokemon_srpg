@@ -41,3 +41,13 @@ test('level cap continues into the trials', () => {
   assert.equal(levelCapFor({ cleared: ['sinnoh-field', 'sinnoh-cave'] }), 31);
   assert.equal(levelCapFor({ cleared: DUNGEONS.map((d) => d.id) }), 80);
 });
+
+import { encounterPool } from '../src/core/encounters.js';
+test('trial floors 1-2 do not fall back to the early-route bugs and bats', () => {
+  for (const d of DUNGEONS.slice(2)) {
+    const pool = encounterPool(d, 1);
+    assert.ok(pool.length >= 4, d.id);
+    assert.ok(!['caterpie', 'weedle', 'zubat'].every((k) => pool.includes(k)) || pool.length > 18, `${d.id}: ${pool.join(',')}`);
+    assert.deepEqual(d.early, [], d.id);
+  }
+});

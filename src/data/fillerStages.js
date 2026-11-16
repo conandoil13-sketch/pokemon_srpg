@@ -27,7 +27,7 @@ export function fillerStage(n) {
     baseLevel: lv.map((l) => Math.round(l)),
     budget: lv.map((l, f) => Math.round(BUDGET_PER_LEVEL * l * (1 + BUDGET_STEP * f))), // 층마다 2% 더 (같은 레벨 층에서도 적이 세지게)
     levelCap: Math.round(lv[floors - 1]) + 3,
-    early: t.early,
+    early: [], // 초반 종(캐터피·주뱃 등) 없이 1층부터 타입·종족값 규칙대로 (Lv 23+ 에 첫 풀숲 벌레가 나오지 않게)
     types: t.types,
     bstCap: Math.min(670, 470 + 25 * n),
     stageCap: (f) => (f <= third ? 0 : f <= floors - 2 ? 1 : 2), // 마지막 두 층은 최종 진화까지

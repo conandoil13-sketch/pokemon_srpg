@@ -14,7 +14,7 @@ test('every dungeon follows the dungeon guide (fields, budgets, early species, c
       assert.ok(d.budget[f] > d.budget[f - 1], `${d.id} budget ${f}`);
       assert.ok(d.baseLevel[f] >= d.baseLevel[f - 1], `${d.id} level ${f}`);
     }
-    assert.ok(d.early.length >= 4, d.id);
+    assert.ok(d.filler || d.early.length >= 4, d.id); // 임시 단계는 초반 종 없음
     for (const k of d.early) {
       assert.ok(SPECIES[k], `${d.id}: ${k}`);
       assert.equal(SPECIES[k].stage, 0, k);
@@ -60,7 +60,7 @@ test('rollEnemies: deterministic, within budget, at least 2, early-only small fl
         assert.ok(total(list) <= d.budget[f - 1] * (1 + budgetBonusMax(d, f)) + 1e-9, `${tag}: ${total(list)}`);
         if (f <= 2) {
           assert.ok(list.length <= 4, tag);
-          for (const e of list) assert.ok(d.early.includes(e.species), `${tag}: ${e.species}`);
+          if (!d.filler) for (const e of list) assert.ok(d.early.includes(e.species), `${tag}: ${e.species}`); // 임시 단계는 초반 종 없음
           for (const e of list) assert.ok(e.level <= d.baseLevel[f - 1] + 1, tag); // 준보스(+2) 없음
         }
       }
