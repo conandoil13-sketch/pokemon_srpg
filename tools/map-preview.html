@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<base href="../">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>맵 미리보기</title>
+<style>
+  :root { --bg: #141a28; --panel: #1f2738; --ink: #e8ecf4; --muted: #8a94a8; --accent: #f8d050; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 20px 0 6px; }
+  p.note { color: var(--muted); margin: 0 0 12px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+  .asset { background: var(--panel); border-radius: 6px; padding: 8px; text-align: center; color: var(--muted); font-size: 12px; }
+  .asset canvas { display: block; image-rendering: pixelated; margin: 0 auto 4px; }
+  #map { image-rendering: pixelated; border-radius: 6px; max-width: 100%; }
+  button, select { background: var(--panel); color: var(--ink); border: 1px solid #39445c; border-radius: 6px; padding: 6px 10px; font: inherit; }
+</style>
+</head>
+<body>
+<h1>맵 미리보기 — 가을 숲</h1>
+<p class="note">개발용 페이지 (게임에 아직 연결되지 않음). 칸 그림은 pixelfx 로 그린 <code>src/fx-custom/autumn/tiles.js</code> 를 구워서 쓴다. 칸 24px, 그림은 3배로 확대.</p>
+<h2>맵 애셋</h2>
+<div class="row" id="assets"></div>
+<h2>맵 예시</h2>
+<div class="row" style="margin-bottom:8px"><button id="reroll">다른 맵</button><label>층 <select id="floor"></select></label><span id="info" style="color:var(--muted)"></span></div>
+<canvas id="map"></canvas>
+<script type="module">
+import * as autumn from '../src/fx-custom/autumn/tiles.js';
+import { createFrame, clearFrame, createFx, composite } from '../src/vendor/pixelfx/core/index.js';
+import { generateFloor } from '../src/core/floorgen.js';
+import { dungeonById } from '../src/data/dungeons.js';
+const $ = (id) => document.getElementById(id);
+const TILE = 24, [FW, FH] = autumn.meta.size, [OX, OY] = autumn.meta.origin;
+// 조각 하나 굽기: pixelfx 프레임에 그려 캔버스로
+function bake(piece, variant = 0, seed = 1, wx = 0, wy = 0) {
+  const frame = createFrame(FW, FH); clearFrame(frame);
+  createFx(autumn, { piece, variant, seed, wx, wy, x: OX, y: OY }).draw(frame, 'front');
+  const img = new ImageData(FW, FH); composite(frame, img.data, null);
+  const c = document.createElement('canvas'); c.width = FW; c.height = FH; c.getContext('2d').putImageData(img, 0, 0); return c;
+}
+const PIECES = [['ground', 0, '바닥 1'], ['ground', 1, '바닥 2'], ['ground', 2, '바닥 3'], ['leafpile', 0, '낙엽 무더기'], ['bush', 0, '억새 수풀'], ['rock', 0, '이끼 바위'], ['pond', 0, '연못'], ['pond', 1, '연못 2'], ['tree', 0, '단풍 (빨강)'], ['tree', 1, '단풍 (주황)'], ['tree', 2, '단풍 (노랑)'], ['stairs', 0, '계단']];
+for (const [p, v, label] of PIECES) {
+  const box = document.createElement('div'); box.className = 'asset';
+  const big = document.createElement('canvas'); big.width = FW * 3; big.height = FH * 3;
+  const g = big.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(bake(p, v), 0, 0, FW * 3, FH * 3);
+  box.append(big, label); $('assets').append(box);
+}
+// 맵 예시: 지금 층 생성기(신오 들판 규칙)로 지형만 만들고 가을 숲 그림으로 그린다
+const d = dungeonById('sinnoh-field');
+for (let f = 1; f <= d.floors; f++) $('floor').innerHTML += `<option value="${f}">${f}층</option>`;
+let seed = 1;
+const cache = new Map(); const piece = (p, v, s = 1) => { const k = `${p}/${v}/${s}`; if (!cache.has(k)) cache.set(k, bake(p, v, s)); return cache.get(k); };
+const hashXY = (x, y) => ((x * 73856093) ^ (y * 19349663) ^ seed * 83492791) >>> 0;
+function drawMap() {
+  const m = generateFloor(d, Number($('floor').value), seed), rows = m.tiles, h = rows.length, w = rows[0].length;
+  const c = $('map'); c.width = w * TILE; c.height = h * TILE; c.style.width = `${w * TILE * 2}px`;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  const blit = (img, x, y) => g.drawImage(img, x * TILE + TILE / 2 - OX, (y + 1) * TILE - OY);
+  // 1) 바닥·물·계단 (모든 칸에 바닥 먼저)
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const ch = rows[y][x], r = hashXY(x, y);
+    blit(bake(r % 9 === 0 ? 'leafpile' : 'ground', r % 3, r % 5 + 1, x, y), x, y); // 바닥·물은 칸 좌표로 무늬를 이음
+    if (ch === '~') { blit(bake('pond', r % 2, r % 4 + 1, x, y), x, y);
+      g.fillStyle = '#5a4428'; // 물가: 땅 쪽 가장자리
+      if (rows[y - 1]?.[x] !== '~') g.fillRect(x * TILE, y * TILE, TILE, 2);
+      if (rows[y + 1]?.[x] !== '~') g.fillRect(x * TILE, y * TILE + TILE - 2, TILE, 2);
+      if (rows[y][x - 1] !== '~') g.fillRect(x * TILE, y * TILE, 2, TILE);
+      if (rows[y][x + 1] !== '~') g.fillRect(x * TILE + TILE - 2, y * TILE, 2, TILE); }
+    if (ch === '>') blit(piece('stairs', 0), x, y);
+  }
+  if (m.stairs) blit(piece('stairs', 0), m.stairs.x, m.stairs.y);
+  // 2) 위로 솟는 것 (위 줄부터 — 아래가 앞)
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const ch = rows[y][x], r = hashXY(x, y);
+    if (ch === '#') blit(piece('tree', r % 3, r % 7 + 1), x, y);
+    if (ch === '"') blit(piece('bush', r % 3, r % 5 + 1), x, y);
+    if (ch === '^') blit(piece('rock', r % 3, r % 5 + 1), x, y);
+  }
+  $('info').textContent = `시드 ${seed} · ${w}×${h}칸`;
+}
+$('reroll').onclick = () => { seed++; drawMap(); };
+$('floor').onchange = drawMap;
+drawMap();
+</script>
+</body>
+</html>
