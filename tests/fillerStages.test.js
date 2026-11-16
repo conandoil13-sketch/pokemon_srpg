@@ -10,12 +10,12 @@ test('eight filler stages follow the curve and alternate field and cave', () => 
   const t = DUNGEONS.slice(2);
   assert.equal(FILLER_COUNT, 8);
   assert.equal(t.length, 8);
-  assert.deepEqual(t.map((d) => d.theme), ['field', 'cave', 'field', 'cave', 'field', 'cave', 'field', 'cave']);
+  assert.deepEqual(t.map((d) => d.theme), ['autumn', 'cave', 'field', 'cave', 'field', 'cave', 'field', 'cave']); // 1번 자리 = 단풍 숲
   assert.deepEqual(t.map((d) => d.floors), [7, 7, 8, 8, 8, 9, 9, 9]);
   assert.deepEqual(t.map((d) => d.baseLevel[0]), [23, 30, 37, 44, 51, 58, 65, 72]);
   assert.deepEqual(t.map((d) => d.levelCap), [31, 38, 45, 52, 59, 66, 73, 80]);
-  assert.equal(t[0].name, '시련의 들판 Ⅰ'); assert.equal(t[1].name, '시련의 동굴 Ⅰ'); assert.equal(t[7].name, '시련의 동굴 Ⅳ');
-  assert.equal(t[0].unlock, 'sinnoh-cave'); assert.equal(t[1].unlock, 'trial-1');
+  assert.equal(t[0].name, '단풍 숲'); assert.equal(t[1].name, '시련의 동굴 Ⅰ'); assert.equal(t[7].name, '시련의 동굴 Ⅳ');
+  assert.equal(t[0].unlock, 'sinnoh-cave'); assert.equal(t[1].unlock, 'autumn-forest');
 });
 test('a replaced slot keeps the unlock chain in order', () => {
   const fake = { id: 'real-map', name: '진짜 맵' };
@@ -35,7 +35,7 @@ test('loading a save that cleared the cave unlocks trial 1', () => {
   const store = (() => { const data = {}; return { getItem: (k) => data[k] ?? null, setItem: (k, v) => { data[k] = String(v); } }; })();
   const g = newGame(); g.cleared = ['sinnoh-field', 'sinnoh-cave']; g.unlocked = ['sinnoh-field', 'sinnoh-cave'];
   saveGame(store, g);
-  assert.ok(loadGame(store).unlocked.includes('trial-1'));
+  assert.ok(loadGame(store).unlocked.includes('autumn-forest'));
 });
 test('level cap continues into the trials', () => {
   assert.equal(levelCapFor({ cleared: ['sinnoh-field', 'sinnoh-cave'] }), 31);
