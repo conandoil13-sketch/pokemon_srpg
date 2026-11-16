@@ -122,7 +122,7 @@ test('arrive: stairs → result stairs; enemies ignore stairs', () => {
   const s = createBattle(dungeonMap());
   const g = find(s, 'enemy-gible');
   g.x = 4; g.y = 5;
-  assert.deepEqual(arrive(s, 'enemy-gible'), { stairs: false, item: null });
+  assert.deepEqual(arrive(s, 'enemy-gible'), { stairs: false, item: null, piles: [] });
   assert.equal(s.result, null);
   moveUnit(s, 'ally-chimchar', 4, 5);
   assert.equal(arrive(s, 'ally-chimchar').stairs, true);
@@ -133,7 +133,7 @@ test('arrive: stairs → result stairs; enemies ignore stairs', () => {
 test('arrive: chest opens once and is logged', () => {
   const s = createBattle(dungeonMap());
   moveUnit(s, 'ally-chimchar', 3, 5);
-  assert.deepEqual(arrive(s, 'ally-chimchar'), { stairs: false, item: 'candy' });
+  assert.deepEqual(arrive(s, 'ally-chimchar'), { stairs: false, item: 'candy', piles: [] });
   assert.deepEqual(s.chests, []);
   assert.deepEqual(s.log.loot, ['candy']);
   assert.equal(arrive(s, 'ally-chimchar').item, null);

@@ -161,5 +161,34 @@ export function generateFloor(dungeon, floor, seed) {
     enemies.push({ species: encounterPool(dungeon, floor, { boss: true })[0], level: dungeon.baseLevel[floor - 1] + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
   }
 
-  return { tiles: tiles(), allySlots, enemies, stairs, chests, weather: rollWeather(dungeon, seed) };
+  // 9. 낙엽더미 (던전에 piles 가 있을 때만, 별도 난수 — 다른 던전은 결과·난수 소비 그대로)
+  const piles = dungeon.piles ? placePiles(dungeon, floor, seed, g, used, allySlots, anchor) : [];
+
+  return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed) };
+}
+
+// 낙엽더미: 바닥 칸(출발 3열 밖, 출발 칸과 안 붙음)에 '*'. 놓아도 나머지 칸이 모두 이어질 때만. 포켓몬 60% · 상자 40%
+function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
+  const rng = createRng(hashSeed(seed, 2000));
+  const [lo, hi] = dungeon.piles, want = lo + Math.floor(rng() * (hi - lo + 1));
+  const nearAlly = (x, y) => allySlots.some((a) => Math.abs(a.x - x) + Math.abs(a.y - y) <= 1);
+  const cells = [];
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) if (g[y][x] === '.' && !used.has(key(x, y)) && !nearAlly(x, y)) cells.push({ x, y });
+  for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+  const pool = encounterPool(dungeon, floor), out = [];
+  let size = reachableFrom(g.map((r) => r.join('')), anchor).size;
+  for (const p of cells) {
+    if (out.length >= want) break;
+    g[p.y][p.x] = '*';
+    const now = reachableFrom(g.map((r) => r.join('')), anchor).size;
+    if (now !== size - 1) { g[p.y][p.x] = '.'; continue; } // 길을 끊으면 건너뜀
+    size = now; used.add(key(p.x, p.y));
+    if (rng() < 0.6) out.push({ x: p.x, y: p.y, kind: 'mon', species: pool[Math.floor(rng() * pool.length)], level: dungeon.baseLevel[floor - 1] });
+    else {
+      const roll = rng(); // 기존 상자 확률표: 진화의돌 15% · 파우더 10% · 사탕 45% · 코인 30%
+      const powder = `powder-${STATS[Math.floor(rng() * STATS.length)]}`;
+      out.push({ x: p.x, y: p.y, kind: 'chest', item: roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder : roll < 0.7 ? 'candy' : 'coins' });
+    }
+  }
+  return out;
 }
