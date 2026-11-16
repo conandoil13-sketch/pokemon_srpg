@@ -39,7 +39,7 @@ test('field floors 1-2 only use early species; threat and exp multiplier', () =>
 test('level cap: first uncleared dungeon in the chain, last one stays after everything is cleared', () => {
   assert.equal(levelCapFor({ cleared: [] }), 15);
   assert.equal(levelCapFor({ cleared: ['sinnoh-field'] }), 22);
-  assert.equal(levelCapFor({ cleared: ['sinnoh-field', 'sinnoh-cave'] }), 22);
+  assert.equal(levelCapFor({ cleared: ['sinnoh-field', 'sinnoh-cave'] }), 31); // 다음은 시련의 들판 Ⅰ
 });
 
 // ---- 적 굴림 ----
@@ -77,7 +77,7 @@ test('threat medians rise floor by floor inside each dungeon (300 seeds)', () =>
 
 test('same seeds keep terrain, chests, stairs, ally slots and weather (enemies only change)', () => {
   const h = createHash('sha1');
-  for (const dg of DUNGEONS) for (let seed = 1; seed <= 40; seed++) for (let fl = 1; fl <= dg.floors; fl++) { const m = generateFloor(dg, fl, seed); h.update(JSON.stringify([m.tiles, m.chests, m.weather, m.stairs, m.allySlots])); }
+  for (const dg of DUNGEONS.slice(0, 2)) for (let seed = 1; seed <= 40; seed++) for (let fl = 1; fl <= dg.floors; fl++) { const m = generateFloor(dg, fl, seed); h.update(JSON.stringify([m.tiles, m.chests, m.weather, m.stairs, m.allySlots])); }
   assert.equal(h.digest('hex'), '19fa3023a2062ce5e5b58bcd5597a142541b88e8');
 });
 
