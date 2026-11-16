@@ -32,3 +32,9 @@
 2. `npm test` — 데이터 테스트가 필드 누락·`early` 타입·예산 증가·사슬 연결을 검사한다.
 3. `node tools/difficulty-report.js` — 층별 위협도 중앙값이 오르는지, 첫 층이 앞 던전 마지막 일반 층보다 지나치게 높지 않은지 본다.
 4. 결과를 `codex-reviews/` 에 짧게 기록하고, 실제로 한 판 해 본다.
+
+
+## 임시 스테이지와 대체 (2026-11-17)
+- 신오 2개 뒤의 8자리는 `src/data/fillerStages.js` 의 `fillerStage(n)` 곡선으로 만든 임시 단계(시련의 들판·동굴)다. 숫자는 그 파일 위쪽 상수(`START`·`SPAN`·`FLOORS`·`BUDGET_PER_LEVEL`·`BUDGET_STEP`)로 조정한다.
+- 진짜 새 맵을 만들면 위 필드를 다 채운 던전 객체를 `REPLACED[n]` 에 넣는다. `unlock` 은 비워 둬도 자리 순서대로 다시 이어지고, 레벨 상한 규칙도 그대로 따라온다.
+- 예전 저장은 불러올 때 깬 던전의 다음 단계를 자동으로 연다(`unlockFromCleared`).
