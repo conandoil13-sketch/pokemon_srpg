@@ -2,13 +2,13 @@
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1 };
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1, '*': Infinity }; // '*' = 열리지 않은 낙엽더미
 
 // who: 유닛(타입은 유닛 기준 — 메타몽 빌드) 또는 종 키
 // trees: 벽(#)이 나무인 맵 (유연은 나무를 지나갈 수 있음 — 멈추지는 못함, reachable 이 뺀다)
 const ab = (who) => (typeof who === 'object' && !who.abilityOff ? who.ability : null);
 export function canEnter(tile, who, trees = false) {
-  if (tile === undefined) return false;
+  if (tile === undefined || tile === '*') return false; // 낙엽더미: 누구도 못 들어감
   if (tile === '#') return trees && ab(who) === 'limber'; // 유연: 나무 통과
   if (tile === '~') {
     const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;

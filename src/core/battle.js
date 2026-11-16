@@ -77,6 +77,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] }, // defeated: 캡슐 굴림용 쓰러뜨린 적 // 획득 경험치(동료 열쇠별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
+    piles: (mapDef.piles ?? []).map((p) => ({ ...p })), // 열리지 않은 낙엽더미 (칸 문자 '*')
     bossFloor: units.some((u) => u.boss),
     weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
     ...newField(), // 오라 · 장판 · 압정 · 날씨 부르기 (층마다 새로)
@@ -714,11 +715,33 @@ export function applyMove(state, userId, moveId, aim, rng) {
 // 기존 호출 호환
 export const applyAttack = (state, attackerId, targetId, moveId, rng) => applyMove(state, attackerId, moveId, targetId, rng);
 
-// 아군이 이동을 마친 칸 처리: 상자 열기, 계단 도착
+// 낙엽더미 열기: 아군 칸 상하좌우 옆 더미 전부 (위→아래, 왼→오른). 포켓몬 = 그 칸에 적 + 레벨만큼 기습(기절 없음), 상자 = 바로 전리품
+function openPiles(state, u) {
+  const near = (state.piles ?? []).filter((p) => Math.abs(p.x - u.x) + Math.abs(p.y - u.y) === 1).sort((a, b) => a.y - b.y || a.x - b.x);
+  const out = [];
+  for (const p of near) {
+    state.piles.splice(state.piles.indexOf(p), 1);
+    const row = state.grid[p.y]; state.grid[p.y] = row.slice(0, p.x) + '.' + row.slice(p.x + 1);
+    if (p.kind === 'mon') {
+      const e = makeUnit({ species: p.species, side: 'enemy', x: p.x, y: p.y, level: p.level, id: uniqueId(state.units, 'enemy', p.species) });
+      state.units.push(e);
+      const damage = Math.max(0, Math.min(p.level, u.hp - 1));
+      u.hp -= damage;
+      out.push({ x: p.x, y: p.y, kind: 'mon', unitId: e.id, damage });
+    } else {
+      state.log.loot.push(p.item);
+      out.push({ x: p.x, y: p.y, kind: 'chest', item: p.item });
+    }
+  }
+  return out;
+}
+
+// 아군이 이동을 마친 칸 처리: 낙엽더미 열기, 상자 열기, 계단 도착
 export function arrive(state, unitId) {
   const u = byId(state, unitId);
-  const out = { stairs: false, item: null };
+  const out = { stairs: false, item: null, piles: [] };
   if (!u || u.side !== 'ally') return out;
+  out.piles = openPiles(state, u);
   const i = state.chests.findIndex((c) => c.x === u.x && c.y === u.y);
   if (i >= 0) {
     out.item = state.chests[i].item;

@@ -38,3 +38,6 @@
 - 신오 2개 뒤의 8자리는 `src/data/fillerStages.js` 의 `fillerStage(n)` 곡선으로 만든 임시 단계(시련의 들판·동굴)다. 숫자는 그 파일 위쪽 상수(`START`·`SPAN`·`FLOORS`·`BUDGET_PER_LEVEL`·`BUDGET_STEP`)로 조정한다.
 - 진짜 새 맵을 만들면 위 필드를 다 채운 던전 객체를 `REPLACED[n]` 에 넣는다. `unlock` 은 비워 둬도 자리 순서대로 다시 이어지고, 레벨 상한 규칙도 그대로 따라온다.
 - 예전 저장은 불러올 때 깬 던전의 다음 단계를 자동으로 연다(`unlockFromCleared`).
+
+## 낙엽더미 (`piles`, 2026-11-17)
+던전에 `piles: [최소, 최대]` 가 있으면 층마다 그만큼 낙엽더미를 놓는다 (`floorgen.placePiles`, 별도 난수라 다른 던전 결과는 그대로). 열리지 않은 더미는 지형 문자 `*` — `canEnter` 가 막으므로 이동·밀어내기·순간이동·AI 가 저절로 피한다. 아군이 이동을 마친 칸 상하좌우 옆 더미는 `arrive` 가 연다 (포켓몬 60%: 그 칸에 적 + 레벨만큼 기습, HP 1 남김 / 상자 40%: 바로 전리품). 그림은 `theme: 'autumn'` 일 때 `render/autumnTiles.js`.

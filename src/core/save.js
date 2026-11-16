@@ -114,6 +114,16 @@ export function unlockFromCleared(game) {
   for (const d of DUNGEONS) if (d.unlock && game.cleared.includes(d.unlock) && !game.unlocked.includes(d.id)) game.unlocked.push(d.id);
 }
 
+// 자리가 진짜 맵으로 바뀐 던전 id (예전 저장의 해금·돌파·최고 층·진행 중 탐험을 옮긴다)
+const RENAMED = { 'trial-1': 'autumn-forest' };
+function renameDungeons(data, map) {
+  const r = (id) => map[id] ?? id;
+  const list = (a) => (Array.isArray(a) ? a.map(r) : a);
+  const best = data.best && typeof data.best === 'object' ? Object.fromEntries(Object.entries(data.best).map(([k, v]) => [r(k), v])) : data.best;
+  const run = data.run && typeof data.run === 'object' ? { ...data.run, dungeonId: r(data.run.dungeonId) } : data.run;
+  return { ...data, unlocked: list(data.unlocked), cleared: list(data.cleared), best, run };
+}
+
 export function loadGame(storage) {
   let raw;
   try {
@@ -140,6 +150,7 @@ export function loadGame(storage) {
   let speciesRun = false;
   if (data?.version === 8) { data = { ...data, version: 9 }; speciesRun = true; } // v8 → v9: uid 는 아래서 붙이고, 종 이름 출전·기절 기록은 uid 로
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
+  data = renameDungeons(data, RENAMED);
   try {
     const cleaned = (Array.isArray(data.party) ? data.party : []).map(cleanMember).filter(Boolean);
     if (!cleaned.length) return null;
