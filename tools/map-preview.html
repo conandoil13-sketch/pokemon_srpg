@@ -39,7 +39,7 @@ function bake(piece, variant = 0, seed = 1, wx = 0, wy = 0) {
   const img = new ImageData(FW, FH); composite(frame, img.data, null);
   const c = document.createElement('canvas'); c.width = FW; c.height = FH; c.getContext('2d').putImageData(img, 0, 0); return c;
 }
-const PIECES = [['leafpath', 0, '단풍길 빨강'], ['leafpath', 1, '단풍길 주황'], ['leafpath', 2, '단풍길 은행'], ['leafpath', 3, '단풍길 성긴'], ['leafpath', 4, '단풍길 잔가지'], ['leafspill', 0, '단풍길 가장자리'], ['ground', 0, '바닥 1'], ['ground', 1, '바닥 2'], ['ground', 2, '바닥 3'], ['leafpile', 0, '낙엽 무더기'], ['bush', 0, '억새 수풀'], ['rock', 0, '이끼 바위'], ['pond', 0, '연못'], ['pond', 1, '연못 2'], ['tree', 0, '단풍 (빨강)'], ['tree', 1, '단풍 (주황)'], ['tree', 2, '단풍 (노랑)'], ['stairs', 0, '계단']];
+const PIECES = [['leafpath', 0, '단풍길 빨강'], ['leafpath', 1, '단풍길 주황'], ['leafpath', 2, '단풍길 은행'], ['leafpath', 3, '단풍길 성긴'], ['leafpath', 4, '단풍길 잔가지'], ['leafspill', 0, '단풍길 가장자리'], ['pile', 0, '낙엽더미'], ['pile', 1, '낙엽더미 2'], ['ground', 0, '바닥 1'], ['ground', 1, '바닥 2'], ['ground', 2, '바닥 3'], ['leafpile', 0, '낙엽 무더기'], ['bush', 0, '억새 수풀'], ['rock', 0, '이끼 바위'], ['pond', 0, '연못'], ['pond', 1, '연못 2'], ['tree', 0, '단풍 (빨강)'], ['tree', 1, '단풍 (주황)'], ['tree', 2, '단풍 (노랑)'], ['stairs', 0, '계단']];
 for (const [p, v, label] of PIECES) {
   const box = document.createElement('div'); box.className = 'asset';
   const big = document.createElement('canvas'); big.width = FW * 3; big.height = FH * 3;

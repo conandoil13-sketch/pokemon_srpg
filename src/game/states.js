@@ -13,6 +13,8 @@ import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
+import { bakeAutumnGround, drawAutumnMap } from '../render/autumnTiles.js';
+import { leafRoute } from '../core/leafRoute.js';
 import { drawUnitSprite, drawShadow, hasAnim, idleFrameSource, DIR, requestSprites } from '../render/sprites.js';
 import { actorFor, bodyAt } from '../render/fxActor.js';
 import { fxForAilment, HEAL_FX, MOVE_MARKER, markerAt } from '../data/moveFx.js';
@@ -153,6 +155,16 @@ export function phaseNotices(events, expired, get) {
 
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
+// 낙엽더미 대사 (arrive 의 piles 순서대로). 포켓몬: 튀어나옴 + 기습(피해 표시), 상자: 아이템
+export function pileNotices(piles = [], ally, get) {
+  let hp = ally.hp + piles.reduce((n, p) => n + (p.damage ?? 0), 0); // 첫 기습 전 HP
+  return piles.map((p) => {
+    if (p.kind === 'chest') return { lines: [`낙엽 속에 ${josa(ITEM_NAME[p.item] ?? '아이템', '이/가')} 있었다!`], at: { x: p.x, y: p.y }, hp: null, item: true };
+    const e = get(p.unitId), before = hp; hp -= p.damage;
+    return { lines: [`낙엽 속에서 ${josa(e ? unitLabel(e) : '포켓몬', '이/가')} 튀어나왔다!`, `${josa(unitLabel(ally), '은/는')} 기습을 받았다!`], at: { x: ally.x, y: ally.y }, hp: p.damage ? { from: before, to: hp, max: ally.maxHp } : null };
+  });
+}
+
 // 특성 발동 → 대사 (순수). 자주 나오는 가속은 대사 없이 (정보창 랭크로 보임), 습기는 공격 연출이 이미 말함
 const abilityName = (id) => ABILITIES[id]?.name ?? id;
 const HEAL_ABILITIES = ['volt-absorb', 'water-absorb', 'dry-skin', 'rain-dish', 'ice-body', 'poison-heal'];
@@ -203,11 +215,16 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
+  let autumnGround = null;
   function reset() {
     st = createBattle(map, party, { hpRatio });
     st.grid.trees = (theme ?? 'field') !== 'cave'; // 벽이 나무인 맵: 유연이 지나갈 수 있음
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
+    if (theme === 'autumn' && typeof document !== 'undefined') { // 단풍 숲: 바닥 층을 미리 굽는다 (단풍길 = 출발 → 계단, 보스 층이면 보스 자리)
+      const goal = st.stairs ?? st.units.find((u) => u.boss) ?? null;
+      try { autumnGround = bakeAutumnGround(map.tiles, leafRoute(map.tiles, map.allySlots[0], goal)); } catch { autumnGround = null; }
+    }
     mode = 'banner';
     const first = st.units.find((u) => u.side === 'ally');
     cursor = first ? { x: first.x, y: first.y } : { x: 2, y: 5 };
@@ -494,9 +511,24 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     return { x: sx < W / 2 ? W - w - 2 : 2, y: 2 };
   }
 
-  // 아군 이동 완료: 상자 열기 → 행동 메뉴, 계단 → 즉시 층 클리어 (취소 불가)
+  // 낙엽더미가 열렸으면: 잎 터짐 연출 + 대사 (더미 → 그다음 then)
+  function withPiles(a, unit, then) {
+    if (!a.piles?.length) { then(); return; }
+    for (const p of a.piles) {
+      if (p.unitId) { const e = st.units.find((u) => u.id === p.unitId); if (e) { everyone.set(e.id, e); facing[e.id] = DIR.Left; } }
+      try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
+    }
+    if (a.piles.some((p) => p.kind === 'chest')) sound.jingle('item');
+    noticeChain(pileNotices(a.piles, unit, (id) => everyone.get(id)), then);
+  }
+
+  // 아군 이동 완료: 낙엽더미 → 상자 열기 → 행동 메뉴, 계단 → 즉시 층 클리어 (취소 불가)
   function afterAllyMove() {
     const a = arrive(st, sel.id);
+    if (a.piles.length) { moveLocked = true; withPiles(a, sel, () => afterArrive(a)); return; }
+    afterArrive(a);
+  }
+  function afterArrive(a) {
     if (a.stairs) {
       sel.acted = true;
       if (a.item) sound.jingle('item'); // 보물상자
@@ -615,10 +647,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           const unit = sel;
           startWalk(unit, pathTo(st.grid, st.units, unit, cursor.x, cursor.y), () => {
             unit.retreatReady = false; unit.retreated = true;
-            const a = arrive(st, unit.id); // 상자·계단은 보통 이동과 같게
+            const a = arrive(st, unit.id); // 낙엽더미·상자·계단은 보통 이동과 같게
+            withPiles(a, unit, () => {
             if (a.stairs) { if (a.item) sound.jingle('item'); showNotice(a.item ? ['보물상자를 열었다!', '계단을 찾았다!'] : ['계단을 찾았다!'], () => { sel = null; mode = 'result'; }); return; }
             if (a.item) { showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item] ?? '아이템', '을/를')} 얻었다!`], finishAllyAction); return; }
             finishAllyAction();
+            });
           });
         }
         return;
@@ -962,7 +996,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.translate(-cx, -cy);
-    drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
+    if (autumnGround) drawAutumnMap(ctx, st.grid, autumnGround, cx, cy, W, H);
+    else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     ui.drawZones(ctx, st); // 장판 테두리
     ui.drawAuras(ctx, st); // 오라 (쓴 포켓몬을 따라다님)
     ui.drawTraps(ctx, st, anim?.trapsShown ?? [], anim?.trapsHidden ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)

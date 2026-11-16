@@ -58,6 +58,21 @@ function leafpath(p, v, R, wx = 0, wy = 0, spill = false) {
     for (const [ax, ay] of [[4, -6], [6, -5]]) { px(p, ax, ay, B[0]); px(p, ax + 1, ay, B[0]); px(p, ax, ay + 1, hex('#a0682a')); px(p, ax + 1, ay + 1, hex('#c88a3e')); px(p, ax, ay + 2, hex('#7a4a1c')); px(p, ax + 1, ay + 2, hex('#a0682a')); }
   }
 }
+function pile(p, v, R) { // 낙엽더미: 바닥 위로 볼록 솟은 잎 무더기 (위 왼쪽 빛, 아래 그늘), 겉에 잎 몇 장
+  ground(p, 0, R);
+  const C = [LP.red, LP.orange, LP.red][v % 3], D = LP.orange, O = hex('#3a1608');
+  const inside = (x, y) => { const dx = (x + 0.5) / 11, dy = (y + 9.5) / 10; return dx * dx + dy * dy <= 1 && y <= -2; };
+  for (let y = -4; y < 0; y++) for (let x = -12; x < 12; x++) if (Math.abs(x + 0.5) < 12 - (y + 4) * 1.5) p.dot(x, y, OUT, 0.3); // 발밑 그림자
+  for (let y = -21; y < 0; y++) for (let x = -12; x < 12; x++) {
+    if (!inside(x, y)) continue;
+    if (!inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)) { px(p, x, y, O); continue; } // 외곽선
+    const lit = -(x + 0.5) / 11 * 0.5 - (y + 9.5) / 10, n = Math.sin(x * 1.7 + y * 2.3 + v) + Math.sin(x * 0.9 - y * 1.3);
+    const k = lit > 0.55 ? 4 : lit > 0.1 ? 3 : lit > -0.45 ? 2 : 1;
+    px(p, x, y, (n > 1.2 ? D : C)[Math.max(1, Math.min(4, k + (n < -1.1 ? -1 : 0)))]);
+  }
+  for (let i = 0; i < 9; i++) { const x = Math.floor(R.range(-8, 7)), y = Math.floor(R.range(-17, -5)); if (!inside(x, y) || !inside(x + 1, y + 1)) continue;
+    const c = [LP.red, LP.orange, LP.yellow][i % 3]; px(p, x, y, c[3]); px(p, x + 1, y, c[2]); px(p, x, y + 1, c[2]); px(p, x + 1, y + 1, c[1]); } // 위에 얹힌 잎
+}
 function bush(p, v, R) { // 억새: 줄기 다발 + 연한 이삭
   ground(p, v, R);
   const S = H(['#5a4a1e', '#8a7034', '#b89a50', '#e8dcac', '#fff6dc']);
@@ -103,5 +118,5 @@ function stairs(p, v, R) {
 }
 export function draw(p, t, o) {
   const R = new Rng(o.seed * 31 + (o.variant ?? 0)), v = o.variant ?? 0;
-  ({ ground: () => ground(p, v, R, false, o.wx ?? 0, o.wy ?? 0), leafpath: () => leafpath(p, v, R, o.wx ?? 0, o.wy ?? 0), leafspill: () => leafpath(p, v, R, o.wx ?? 0, o.wy ?? 0, true), leafpile: () => ground(p, v, R, true, o.wx ?? 0, o.wy ?? 0), bush: () => bush(p, v, R), rock: () => rock(p, v, R), pond: () => pond(p, v, R, o.wx ?? 0, o.wy ?? 0), tree: () => tree(p, v, R), stairs: () => stairs(p, v, R) })[o.piece]?.();
+  ({ ground: () => ground(p, v, R, false, o.wx ?? 0, o.wy ?? 0), leafpath: () => leafpath(p, v, R, o.wx ?? 0, o.wy ?? 0), leafspill: () => leafpath(p, v, R, o.wx ?? 0, o.wy ?? 0, true), pile: () => pile(p, v, R), leafpile: () => ground(p, v, R, true, o.wx ?? 0, o.wy ?? 0), bush: () => bush(p, v, R), rock: () => rock(p, v, R), pond: () => pond(p, v, R, o.wx ?? 0, o.wy ?? 0), tree: () => tree(p, v, R), stairs: () => stairs(p, v, R) })[o.piece]?.();
 }

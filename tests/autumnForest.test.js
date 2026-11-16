@@ -137,3 +137,12 @@ test('boss floor with piles keeps its boss', () => {
     assert.equal(boss.length, 1); assert.ok(!m.piles.some((p) => p.x === boss[0].x && p.y === boss[0].y));
   }
 });
+
+import { leafRoute } from '../src/core/leafRoute.js';
+test('leaf route links start to goal around trees, water and piles', () => {
+  const tiles = ['..#....', '..#.~..', '.....*.'];
+  const r = leafRoute(tiles, { x: 0, y: 0 }, { x: 6, y: 0 });
+  assert.ok(r.has('0,0') && r.has('6,0'));
+  for (const k of r) { const [x, y] = k.split(',').map(Number); assert.ok(!'#~*'.includes(tiles[y][x]), k); }
+  assert.equal(leafRoute(['.#.'], { x: 0, y: 0 }, { x: 2, y: 0 }).size, 0);
+});
