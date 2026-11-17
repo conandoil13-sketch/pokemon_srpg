@@ -81,14 +81,33 @@ function bush(p, v, R) { // 억새: 줄기 다발 + 연한 이삭
     px(p, Math.round(bx + (top + 2) * lean), top, S[4]); }
   for (let x = -11; x < 12; x++) { px(p, x, -1, S[0]); if (x % 3) px(p, x, -2, S[1]); }
 }
-function rock(p, v, R) {
-  const C = H(['#2a2622', '#5a544c', '#7e766a', '#a49a8a', '#c8beac']), M = H(['#3a5a24', '#5a7a30']);
-  for (let y = -22; y < 0; y++) for (let x = -12; x < 12; x++) { const dx = (x + 0.5) / 11, dy = (y + 10) / 10; const r = Math.hypot(dx, dy * 1.1);
-    if (r > 1) continue; if (r > 0.88) { px(p, x, y, C[0]); continue; }
-    const lit = -dx * 0.6 - dy; px(p, x, y, lit > 0.7 ? C[4] : lit > 0.2 ? C[3] : lit < -0.4 ? C[1] : C[2]);
-    if (dy < -0.4 && Math.sin(x * 2 + v) > 0.3) px(p, x, y, M[(x + y) & 1]); } // 위에 이끼
-  for (let i = 0; i < 4; i++) { const x = Math.floor(R.range(-6, 6)), y = Math.floor(R.range(-19, -15)); px(p, x, y, LEAF[i % 4]); px(p, x + 1, y, LEAF[(i + 1) % 4]); }
-  for (let x = -10; x < 11; x++) p.dot(x, 0, C[0], 0.35);
+function rock(p, v, R) { // 바위: 각진 큰 돌 + 옆 작은 돌. 위 면 밝음 · 왼 면 중간 · 오른 면 어두움, 굵은 외곽선과 금
+  const C = H(['#2a2622', '#4e4840', '#6e665a', '#948a7a', '#bcb2a0', '#ddd4c2']), M = H(['#3a5a24', '#5a7a30']);
+  const big = v % 2 ? [[-9, -2], [-11, -9], [-7, -17], [0, -20], [7, -17], [10, -10], [9, -2]] : [[-10, -2], [-10, -11], [-5, -18], [3, -19], [9, -13], [10, -2]];
+  const small = [[5, -1], [5, -5], [8, -8], [11, -6], [11, -1]];
+  const inPoly = (P, x, y) => { let c = false; for (let i = 0, j = P.length - 1; i < P.length; j = i++) { const [xi, yi] = P[i], [xj, yj] = P[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c; } return c; };
+  for (let y = -4; y < 0; y++) for (let x = -12; x < 12; x++) if (Math.abs(x + 0.5) < 12 - (y + 4) * 1.5) p.dot(x, y, OUT, 0.35); // 발밑 그림자
+  const paint = (P, cx, top) => {
+    const inside = (x, y) => inPoly(P, x + 0.5, y + 0.5);
+    for (let y = -22; y < 0; y++) for (let x = -12; x < 12; x++) {
+      if (!inside(x, y)) continue;
+      if (!inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)) { px(p, x, y, C[0]); continue; } // 외곽선
+      const h = (y - top) / (0 - top); // 0 = 꼭대기, 1 = 바닥
+      const face = h < 0.32 ? 4 : x < cx - 1 ? 3 : x < cx + 3 ? 2 : 1; // 위 면 / 왼 면 / 가운데 / 오른 면 (빛은 위 왼쪽)
+      px(p, x, y, C[face]);
+      if (h < 0.32 && x < cx - 2 && ((x + y) & 3) === 0) px(p, x, y, C[5]); // 위 면 반짝
+      if (h >= 0.32 && h < 0.4) px(p, x, y, C[Math.max(1, face - 1)]); // 위 면과 옆면 사이 각
+    }
+  };
+  paint(big, 0, v % 2 ? -20 : -19);
+  paint(small, 8, -8);
+  // 금: 위에서 아래로 갈라짐 한 줄 + 가지
+  let x = v % 2 ? 2 : -1;
+  for (let y = -16; y < -6; y++) { px(p, x, y, C[0]); if (y % 3 === 0) x += v % 2 ? 1 : -1; }
+  px(p, x + 1, -9, C[0]); px(p, x + 2, -8, C[0]);
+  for (let i = 0; i < 3; i++) { const mx = -8 + i * 2 + (v % 2), my = -14 + i; px(p, mx, my, M[i & 1]); } // 왼쪽 위에 이끼 조금
+  for (let i = 0; i < 3; i++) { const lx = Math.floor(R.range(-7, 4)), ly = Math.floor(R.range(-18, -13)); if (inPoly(big, lx + 0.5, ly + 0.5) && inPoly(big, lx + 1.5, ly + 0.5)) { px(p, lx, ly, LEAF[i % 4]); px(p, lx + 1, ly, LEAF[(i + 1) % 4]); } } // 위에 떨어진 잎
 }
 function pond(p, v, R, wx = 0, wy = 0) {
   const W = H(['#1a3a52', '#24587a', '#2e6a8e', '#7ab4cc']);
