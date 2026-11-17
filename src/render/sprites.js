@@ -28,8 +28,9 @@ function loadImage(src) {
   });
 }
 
+// 반환: { data, sheets, base } | null. 내려받기 실패(네트워크·이미지)는 loadPmd.netFail 로 알려 다시 시도하게 한다
 async function loadPmd(key) {
-  let data, dir, base;
+  let data, dir, base, netFail = false;
   for (const b of PMD_BASES) {
     const d = `${b}/sprite/${pad4(SPECIES[key].dex)}`;
     try {
@@ -38,35 +39,50 @@ async function loadPmd(key) {
       data = parseAnimData(await res.text());
       dir = d; base = b;
       break;
-    } catch { /* 다음 위치 */ }
+    } catch { netFail = true; /* 다음 위치 */ }
   }
-  if (!data) return null;
+  if (!data) { loadPmd.netFail = netFail; return null; }
   const sheets = {};
   const names = new Set(WANT_ANIMS.map((n) => data.anims[n]?.sheet).filter(Boolean));
   await Promise.all([...names].map(async (s) => { sheets[s] = await loadImage(`${dir}/${s}-Anim.png`); }));
-  if (!data.anims.Idle || !sheets[data.anims.Idle.sheet]) return null;
+  if (!data.anims.Idle || !sheets[data.anims.Idle.sheet] || [...names].some((s) => !sheets[s])) { loadPmd.netFail = true; return null; } // 시트 하나라도 못 받으면 다시 시도
   return { data, sheets, base };
 }
 
 // 종족 하나의 PMD 시트·초상화 로드 (기본 로더)
 async function loadOne(key) {
+  loadPmd.netFail = false;
   pmd[key] = await loadPmd(key);
+  const retry = !pmd[key] && loadPmd.netFail; // 데이터는 있는데 내려받기 실패 → 다시
   const dir = `${pmd[key]?.base ?? PMD_BASES[0]}/portrait/${pad4(SPECIES[key].dex)}`;
   await Promise.all(EMOTIONS.map(async (e) => { portraits[`${key}/${e}`] = await loadImage(`${dir}/${e}.png`); }));
-  if (!pmd[key] && !warned) {
+  if (!pmd[key] && !retry && !warned) {
     warned = true;
     console.warn('[sprites] PMD sprite folder not found for some Pokémon — using placeholder pixel art.');
   }
+  return pmd[key] ? 'ok' : retry ? 'retry' : 'missing';
 }
 
 // 지연 로딩: 필요한 종족만, 종족마다 한 번만 요청. 로드 전·실패 시엔 임시 도트로 그린다
 let loader = loadOne;
 const requested = new Map(); // key → Promise
-export const setSpriteLoader = (fn) => { loader = fn; requested.clear(); }; // 테스트용
+export const setSpriteLoader = (fn) => { loader = fn; requested.clear(); tries.clear(); }; // 테스트용
 
+// 로더가 'retry' 를 돌려주면(내려받기 실패) 요청 기록을 지워 다음 요청 때 다시 — 종족마다 최대 3번. 브라우저에선 잠시 뒤 저절로 다시 시도
+export const SPRITE_TRIES = 3;
+const tries = new Map();
 export function requestSprites(keys) {
   return Promise.all([...new Set(keys)].map((key) => {
-    if (!requested.has(key)) requested.set(key, Promise.resolve().then(() => loader(key)).catch(() => {}));
+    if (!requested.has(key)) {
+      requested.set(key, Promise.resolve().then(() => loader(key)).catch(() => {}).then((r) => {
+        if (r !== 'retry') return;
+        const n = (tries.get(key) ?? 0) + 1;
+        tries.set(key, n);
+        if (n >= SPRITE_TRIES) return; // 그만 (임시 도트로)
+        requested.delete(key);
+        if (typeof window !== 'undefined') setTimeout(() => requestSprites([key]), 1500 * n);
+      }));
+    }
     return requested.get(key);
   })).then(() => {});
 }
