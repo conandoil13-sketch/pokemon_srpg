@@ -12,6 +12,7 @@ import { createTitle } from './game/title.js';
 import { createTown } from './game/town.js';
 import { createDungeonSelect } from './game/dungeonSelect.js';
 import { createFloorMenu } from './game/floorMenu.js';
+import { createBag } from './game/bag.js';
 import { generateFloor } from './core/floorgen.js';
 import { deployed } from './core/roster.js';
 import { memberKey, memberByKey } from './core/members.js';
@@ -186,7 +187,7 @@ const go = {
     // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
     const outM = deployed(game).slice(1), out = outM.map((m) => m.species);
     const rest = game.party.filter((m) => m.species !== 'ditto' && !outM.includes(m)).map((m) => m.species);
-    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onTurtwigGift, onWaterGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
+    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onBag: go.bag, onTurtwigGift, onWaterGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
     scene = createDungeonSelect({
@@ -202,6 +203,10 @@ const go = {
   },
   gacha: () => {
     scene = createGachaScene({ game, rng, onBack: () => go.town(null, TOWN.gachaSpot), onPulled: () => { save(); sound.jingle('item'); } });
+  },
+  bag: (spot) => { // X 메뉴 → 가방 (닫으면 같은 자리로)
+    requestSprites(game.party.map((m) => m.species));
+    scene = createBag({ game, onSave: () => save(), onBack: () => go.town(null, spot) });
   },
   party: () => {
     requestSprites(game.party.map((m) => m.species));

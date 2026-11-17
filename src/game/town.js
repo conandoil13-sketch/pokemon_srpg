@@ -14,7 +14,7 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
+export function createTown({ onSortie, onParty, onGacha, onBag = null, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
   let turtwigTalks = 0; // 이스터에그: 모부기에게 5번 말 걸기
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null }); // 톡·클릭 목적지 표시
   const map = TOWN;
@@ -62,6 +62,27 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, o
     }
     const then = o.action === 'sortie' ? onSortie : o.action === 'party' ? onParty : o.action === 'gacha' ? onGacha : null;
     msg = { lines: o.lines, who: o.kind === 'npc' ? o : null, then };
+  }
+
+  // X 메뉴 (마을에서만): 가방 · 닫기
+  let townMenu = null;
+  const MENU = [{ label: '가방', enabled: !!onBag, act: 'bag' }, { label: '닫기', enabled: true, act: 'close' }];
+  const menuRect = () => ({ x: W - 70, y: 22 });
+  function menuInput(ev) {
+    if (ev.type === 'cancel' || ev.type === 'menu') { townMenu = null; return; }
+    if (ev.type === 'dir' && ev.dy && !ev.repeat) townMenu.sel = (townMenu.sel + ev.dy + MENU.length) % MENU.length;
+    let pick = ev.type === 'confirm' ? MENU[townMenu.sel] : null;
+    if (ev.type === 'click' && ev.py !== undefined) {
+      const r = menuRect(), k = ui.menuIndexAt(MENU, r.x, r.y, ev.py);
+      if (ev.px < r.x || k < 0 || k >= MENU.length) { townMenu = null; return; }
+      townMenu.sel = k; pick = MENU[k];
+    }
+    if (!pick?.enabled) return;
+    townMenu = null;
+    if (pick.act === 'bag') {
+      if (walk) { player.x = walk.to.x; player.y = walk.to.y; walk = null; } // 걷던 칸에 도착한 걸로
+      onBag({ x: player.x, y: player.y, facing: player.facing });
+    }
   }
 
   // BFS: 클릭한 칸(또는 클릭한 오브젝트 옆 칸)까지의 경로
@@ -120,6 +141,8 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, o
         if (ev.type === 'confirm' || ev.type === 'click' || ev.type === 'cancel') closeMessage();
         return;
       }
+      if (townMenu) { menuInput(ev); return; } // X 메뉴
+      if (ev.type === 'menu') { held = null; route = []; afterRoute = null; townMenu = { sel: 0 }; return; }
       if (ev.type === 'dir') {
         if (ev.repeat) return;
         held = [ev.dx, ev.dy];
@@ -162,6 +185,7 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, o
     },
 
     get fx() { return fxm; }, // 테스트·디버그용
+    get menuOpen() { return !!townMenu; },
 
     playerWorld() {
       if (!walk) return { x: player.x * TILE, y: player.y * TILE };
@@ -187,10 +211,11 @@ export function createTown({ onSortie, onParty, onGacha, onTurtwigGift = null, o
       ctx.restore();
 
       // 상단 안내
-      const hint = 'Z 조사 · 방향키/클릭 이동';
+      const hint = 'Z 조사 · 방향키/클릭 이동 · C 메뉴';
       ui.drawWindow(ctx, 2, 2, textWidth(hint, 'small') + 16, 16);
       drawText(ctx, hint, 8, 4, '#383838', '#d8d8d0', 'small');
 
+      if (townMenu) { const r = menuRect(); ui.drawMenu(ctx, MENU, townMenu.sel, r.x, r.y); }
       if (msg) {
         const who = msg.who ? { species: msg.who.species, side: 'ally', emotion: 'Normal' } : null;
         ui.drawMessage(ctx, msg.lines, who, Math.floor(time * 3) % 2 === 0);
