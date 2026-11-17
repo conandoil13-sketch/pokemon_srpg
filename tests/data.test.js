@@ -114,7 +114,7 @@ test('status moves: stat changes, targets, learnable rules', () => {
   assert.deepEqual([sd.kind, sd.learnable, sd.statChanges], ['self', true, [{ stat: 'attack', change: 2 }]]);
   assert.deepEqual([MOVES.growl.kind, MOVES.growl.area, MOVES.growl.range], ['enemies', true, [0, 2]]);
   assert.equal(MOVES.agility.statChanges[0].stat, 'speed');
-  assert.equal(MOVES['baton-pass'].learnable, false, 'other status moves stay out');
+  assert.equal(MOVES.metronome.learnable, false, 'other status moves stay out');
   assert.deepEqual([MOVES.crunch.effectKind, MOVES.crunch.statChance, MOVES.crunch.kind], ['damage-lower', 20, 'enemy']);
   assert.equal(MOVES['close-combat'].effectKind, 'damage-raise');
   for (const m of Object.values(MOVES)) if (m.category === 'status' && m.learnable) assert.ok(m.kind, m.id);
@@ -130,7 +130,7 @@ test('every species starts with at least one damaging move', () => {
 });
 
 test('status moves with side effects out of scope are not learnable', () => {
-  for (const k of ['baton-pass', 'teleport']) assert.equal(MOVES[k].learnable, false, k); // 뽐내기·부추기기는 변화기 묶음 1차에서 배울 수 있게 됨
+  for (const k of ['metronome', 'transform']) assert.equal(MOVES[k].learnable, false, k); // 뽐내기·부추기기는 변화기 묶음 1차에서 배울 수 있게 됨
 });
 
 // ---- 상태이상 데이터 ----

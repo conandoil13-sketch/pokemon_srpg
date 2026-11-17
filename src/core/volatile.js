@@ -44,6 +44,7 @@ export function moveBlock(unit, moveId) {
 }
 
 // 효과 하나 적용. 성공/실패를 돌려준다
+export const MAGNET_TURNS = 3, GRAVITY_TURNS = 3;
 export function applyEffect(state, user, target, move, rng, weather) {
   const out = (ok, reason) => ({ unitId: target.id, effect: move.effect, ok, ...(reason ? { reason } : {}) });
   switch (move.effect) {
@@ -119,6 +120,17 @@ export function applyEffect(state, user, target, move, rng, weather) {
     case 'bond': // 길동무: 다음 내 편 페이즈 시작까지. 연속 사용 실패
       if (target.bondPrev) return out(false, 'chain');
       target.bond = true; return out(true);
+    case 'followMe': // 날따름: 다음 내 차례까지 주변 3칸 적의 단일 대상 기술을 끌어옴
+      if (target.followMe) return out(false, 'already');
+      target.followMe = true; return out(true);
+    case 'magnetRise': // 전자부유: 3턴 동안 떠 있음 (물 위 이동·땅 기술 무효). 중력 중엔 실패
+      if (state.gravity || target.magnetRise > 0) return out(false, 'already');
+      target.magnetRise = MAGNET_TURNS; return out(true);
+    case 'gravity': // 중력: 3턴 동안 맵 전체가 땅에 붙음 (비행·부유·전자부유 무효)
+      if (state.gravity) return out(false, 'already');
+      state.gravity = { side: user.side, turns: GRAVITY_TURNS };
+      for (const u of state.units) { u.grounded = true; u.magnetRise = 0; }
+      return out(true);
     case 'weather': { const r = castWeather(state, user, move.id); return r.ok ? { ...out(true), from: r.from, to: r.to } : out(false, r.reason); }
     default:
       if (AURAS.includes(move.effect) || ZONES.includes(move.effect)) { const r = castField(state, user, move.effect); return out(r.ok, r.reason); } // 오라·장판
@@ -138,6 +150,7 @@ export function bindCheck(state, unit, events) {
 
 // 그 유닛 편 페이즈 끝: 턴 감소 (끝나면 effectEnd 이벤트)
 export function tickEnd(state, unit, events, rng) {
+  if (unit.magnetRise > 0) unit.magnetRise -= 1; // 전자부유: 자기 차례 끝마다
   // 속박: 풀림 확인 → 피해 1/8 → 턴 감소
   bindCheck(state, unit, events);
   if (unit.bound) {
@@ -197,6 +210,7 @@ export function tickEnd(state, unit, events, rng) {
 
 // 그 유닛 편 페이즈 시작
 export function tickStart(unit) {
+  unit.followMe = false; // 날따름은 다음 내 차례까지
   unit.guardPrev = unit.guard !== null; unit.guard = null; // 방어·버티기
   unit.bondPrev = unit.bond; unit.bond = false; // 길동무
 }
