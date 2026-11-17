@@ -828,8 +828,20 @@ export function speedBonusUnit(state, side) {
   return best;
 }
 
+// 선제공격손톱: 그 편 페이즈 끝(스피드 보너스 다음)에 지닌 유닛마다 20% — 처음 맞은 하나가 한 번 더 (페이즈마다 1번)
+export function quickClawUnit(state, side, rng) {
+  if (state.quickGiven) return null;
+  for (const u of state.units) {
+    if (u.side !== side || u.hp <= 0 || u.bot || !itemOf(u)?.quickClaw) continue;
+    if ((u.status === 'sleep' || u.status === 'freeze') && (u.statusTurns ?? 1) > 0) continue;
+    if (rng() < itemOf(u).quickClaw) return u;
+  }
+  return null;
+}
+
 export function endPhase(state, rng = Math.random) {
   state.bonusGiven = false; // 다음 페이즈는 다시 보너스 가능
+  state.quickGiven = false;
   const ending = state.phase === 'player' ? 'ally' : 'enemy';
   const events = (state.log.statusEvents = []);
   const abilityLog = (state.log.phaseAbilityEvents = []); // 차례 끝·시작 특성 발동 (화면 알림용)

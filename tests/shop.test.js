@@ -91,3 +91,10 @@ test('shop scene: buy with confirm, sold row does nothing, cancel leaves even wi
   g.coins = 0; shop.handle({ type: 'dir', dx: 0, dy: 1 }); shop.handle({ type: 'confirm' }); assert.equal(shop.mode, 'list');
   shop.handle({ type: 'confirm' }); shop.handle({ type: 'cancel' }); assert.equal(back, 1);
 });
+
+import { coinMult } from '../src/core/run.js';
+test('second-batch items show up in the shop and amulet coin doubles coins', () => {
+  const seen = new Set(); for (let n = 0; n < 300; n++) for (const s of rollStock(n)) seen.add(s.id);
+  for (const id of ['kings-rock', 'big-root', 'choice-scarf', 'iron-ball', 'quick-claw', 'lucky-egg', 'amulet-coin']) assert.ok(seen.has(id), id);
+  assert.equal(coinMult([{ held: null }, { held: 'amulet-coin' }]), 2); assert.equal(coinMult([{ held: 'leftovers' }]), 1);
+});

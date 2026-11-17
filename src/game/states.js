@@ -1,6 +1,6 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
 import { HELD_ITEMS } from '../data/heldItems.js';
-import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute, teleportSpots, speedBonusUnit } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute, teleportSpots, speedBonusUnit, quickClawUnit } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
@@ -347,9 +347,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function enemyPhase() {
     sel = null;
     const bonus = speedBonusUnit(st, 'ally');
-    if (bonus) {
-      st.bonusGiven = true; bonus.moved = bonus.acted = false; bonus.spent = 0; bonus.retreatReady = false; bonus.retreated = false;
-      showBanner('스피드 보너스!', bonusLine(bonus), '#40c8a0', () => { cursor = { x: bonus.x, y: bonus.y }; mode = 'idle'; });
+    const claw = bonus ? null : quickClawUnit(st, 'ally', rng); // 스피드 보너스 다음에 손톱
+    const extra = bonus ?? claw;
+    if (extra) {
+      if (bonus) st.bonusGiven = true; else st.quickGiven = true;
+      extra.moved = extra.acted = false; extra.spent = 0; extra.retreatReady = false; extra.retreated = false;
+      showBanner(bonus ? '스피드 보너스!' : `${unitLabel(extra)}의 선제공격손톱!`, bonusLine(extra), '#40c8a0', () => { cursor = { x: extra.x, y: extra.y }; mode = 'idle'; });
       return;
     }
     endPhase(st, rng);
@@ -370,9 +373,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const id = enemyQueue.shift();
     if (!id) {
       const bonus = speedBonusUnit(st, 'enemy');
-      if (bonus) { // 적 스피드 보너스
-        st.bonusGiven = true; bonus.moved = bonus.acted = false; enemyQueue.push(bonus.id);
-        showBanner('스피드 보너스!', bonusLine(bonus), '#f08040', () => { mode = 'enemy'; nextEnemy(); });
+      const claw = bonus ? null : quickClawUnit(st, 'enemy', rng); // 적은 도구가 없지만 같은 규칙
+      const extra = bonus ?? claw;
+      if (extra) { // 적 스피드 보너스
+        if (bonus) st.bonusGiven = true; else st.quickGiven = true;
+        extra.moved = extra.acted = false; enemyQueue.push(extra.id);
+        showBanner(bonus ? '스피드 보너스!' : `${unitLabel(extra)}의 선제공격손톱!`, bonusLine(extra), '#f08040', () => { mode = 'enemy'; nextEnemy(); });
         return;
       }
       endPhase(st, rng);
