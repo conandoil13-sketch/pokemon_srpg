@@ -41,3 +41,42 @@ test('once per phase, reset when the phase ends', () => {
   s.bonusGiven = true; assert.equal(speedBonusUnit(s, 'ally'), null);
   endPhase(s, () => 0.5); assert.equal(s.bonusGiven, false);
 });
+
+// ---- 화면 흐름 ----
+import { createGame } from '../src/game/states.js';
+import { createRng } from '../src/core/rng.js';
+function run(game, until, maxSec = 60) {
+  for (let t = 0; t < maxSec; t += 0.05) { game.update(0.05); if (until(game.mode)) return true; }
+  return false;
+}
+const fastGame = () => {
+  const game = createGame({ rng: createRng(3) });
+  game.handle({ type: 'confirm' });
+  run(game, (m) => m === 'idle');
+  const s = game.state;
+  for (const u of s.units) u.stats.spe = u.side === 'ally' ? 300 : 10;
+  return { game, s };
+};
+
+test('ending the ally phase first shows the speed bonus, the second end goes to the enemy', () => {
+  const { game, s } = fastGame();
+  game.handle({ type: 'endTurn' });
+  assert.equal(game.mode, 'banner'); assert.equal(s.bonusGiven, true);
+  assert.ok(run(game, (m) => m === 'idle'));
+  const free = s.units.filter((u) => u.side === 'ally' && !u.acted);
+  assert.equal(free.length >= 1, true);
+  game.handle({ type: 'endTurn' });
+  assert.equal(s.phase === 'enemy' || game.mode === 'banner', true);
+  assert.equal(s.bonusGiven, false); // 페이즈가 넘어가며 초기화
+});
+
+test('fast enemies get one more action at the end of their phase', () => {
+  const game = createGame({ rng: createRng(3) });
+  game.handle({ type: 'confirm' }); run(game, (m) => m === 'idle');
+  const s = game.state;
+  for (const u of s.units) u.stats.spe = u.side === 'enemy' ? 300 : 10;
+  let bonusSeen = false;
+  game.handle({ type: 'endTurn' });
+  for (let t = 0; t < 120 && !bonusSeen; t += 0.05) { game.update(0.05); if (s.bonusGiven && s.phase === 'enemy') bonusSeen = true; if (game.mode === 'notice') game.handle({ type: 'confirm' }); }
+  assert.ok(bonusSeen);
+});
