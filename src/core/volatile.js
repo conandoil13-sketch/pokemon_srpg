@@ -1,6 +1,6 @@
 // 포켓몬에 붙는 효과 (순수). 층이 끝나면 유닛째 사라지므로 파티 멤버에는 쓰지 않는다.
 // 남은 턴은 그 포켓몬 편 페이즈 끝에 줄어든다 (tickEnd). 스펙 docs/superpowers/specs/2026-11-15-status-moves-batch-design.md
-import { itemOf } from './items.js';
+import { itemOf, itemHeal } from './items.js';
 import { MOVES } from '../data/moves.js';
 import { typesOf, blocksAilment, magicGuard } from './abilities.js';
 import { cure, canInflict, inflict } from './status.js';
@@ -169,7 +169,7 @@ export function tickEnd(state, unit, events, rng) {
   for (const [flag, kind] of [['aquaRing', 'aquaRing'], ['rooted', 'ingrain']]) {
     if (!unit[flag] || unit.hp >= unit.maxHp || !canHeal(unit)) continue;
     const before = unit.hp;
-    unit.hp = Math.min(unit.maxHp, unit.hp + quarter(unit, 16));
+    unit.hp = Math.min(unit.maxHp, unit.hp + Math.floor(quarter(unit, 16) * itemHeal(unit))); // 큰뿌리
     events.push({ unitId: unit.id, kind, healed: unit.hp - before });
   }
   if (unit.nightmare && unit.status !== 'sleep') unit.nightmare = false; // 깨면 악몽 끝
@@ -190,7 +190,7 @@ export function tickEnd(state, unit, events, rng) {
     unit.hp -= damage;
     const by = state.units.find((u) => u.id === unit.leechBy);
     let healed = 0;
-    if (by && canHeal(by)) { const b = by.hp; by.hp = Math.min(by.maxHp, by.hp + damage); healed = by.hp - b; }
+    if (by && canHeal(by)) { const b = by.hp; by.hp = Math.min(by.maxHp, by.hp + Math.floor(damage * itemHeal(by))); healed = by.hp - b; } // 큰뿌리
     events.push({ unitId: unit.id, kind: 'leech', by: unit.leechBy, damage, healed, hpBefore, maxHp: unit.maxHp, x: unit.x, y: unit.y });
   }
   // 하품: 쓴 포켓몬이 살아 있고 3칸 이내이며 아직 잠들 수 있으면 잠듦
@@ -212,6 +212,7 @@ export function tickEnd(state, unit, events, rng) {
 
 // 그 유닛 편 페이즈 시작
 export function tickStart(unit) {
+  unit.walked = false; // 줌렌즈: 이번 차례 이동 여부
   unit.followMe = false; // 날따름은 다음 내 차례까지
   unit.guardPrev = unit.guard !== null; unit.guard = null; // 방어·버티기
   unit.bondPrev = unit.bond; unit.bond = false; // 길동무
