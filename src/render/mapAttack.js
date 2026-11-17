@@ -75,7 +75,7 @@ export function attackExtraLines(result, attacker) {
 }
 export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
-const BLOCK_TEXT = {
+const BLOCK_TEXT = { choice: '구애 도구 때문에 다른 기술을 쓸 수 없다!',
   taunt: '도발당해서 변화기를 쓸 수 없다!', encore: '앙코르 때문에 다른 기술을 쓸 수 없다!',
   disable: '그 기술은 사슬묶기로 봉인됐다!', torment: '같은 기술을 연달아 쓸 수 없다!', healBlock: '회복봉인으로 회복할 수 없다!',
 };

@@ -4,6 +4,7 @@ import { STATS } from './dittoBuild.js';
 import { rollEnemies } from './difficulty.js';
 import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
+import { rollChestHeld } from '../data/heldItems.js';
 
 const W = 16, H = 12;
 const WALK = '."^>'; // 땅 타입이 지나갈 수 있는 칸
@@ -148,6 +149,7 @@ export function generateFloor(dungeon, floor, seed) {
     const powder = () => `powder-${STATS[Math.floor(createRng(hashSeed(seed, 1000 + i))() * STATS.length)]}`;
     chests.push({ x: p.x, y: p.y, item: roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder() : roll < 0.7 ? 'candy' : 'coins' });
   }
+  chests.forEach((c, i) => { const h = rollChestHeld(hashSeed(seed, 3000 + i)); if (h) c.held = h; }); // 20% 는 지니는 도구 (별도 난수 · 원래 굴림 item 은 그대로 두고 held 가 이김)
 
   // 8. 실제 적: 위협도 예산 굴림(별도 난수). 예약 자리 먼저, 모자라면 상자 뒤 남은 오른쪽 칸, 그래도 없으면 생략
   const spare = right.filter((p) => !used.has(key(p.x, p.y)));
@@ -187,7 +189,8 @@ function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
     else {
       const roll = rng(); // 기존 상자 확률표: 진화의돌 15% · 파우더 10% · 사탕 45% · 코인 30%
       const powder = `powder-${STATS[Math.floor(rng() * STATS.length)]}`;
-      out.push({ x: p.x, y: p.y, kind: 'chest', item: roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder : roll < 0.7 ? 'candy' : 'coins' });
+      const h = rollChestHeld(hashSeed(seed, 3100 + out.length));
+      out.push({ x: p.x, y: p.y, kind: 'chest', item: h ? `held-${h}` : roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder : roll < 0.7 ? 'candy' : 'coins' });
     }
   }
   return out;

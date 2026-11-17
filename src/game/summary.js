@@ -1,4 +1,5 @@
 // 자세히 보기: 정보 · 능력치 · 기술 · 특성 4페이지 (좌우 = 페이지, 위아래 = 다른 동료, 취소 = 닫기)
+import { HELD_ITEMS } from '../data/heldItems.js';
 import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { ABILITIES } from '../data/abilities.js';
@@ -96,6 +97,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
         small(`${SPECIES[lineRoot(m.species)].name} 계열 결정: ${shards(m)}개`, 10, y0 + 38);
         const out = m.species === 'ditto' || game.sortie.some((k) => String(k) === String(memberKey(m)));
         small(out ? '출전 중' : '대기 중', 10, y0 + 52, out ? '#2860c8' : '#808080');
+        small(`도구: ${m.held ? HELD_ITEMS[m.held].name : '없음'}`, 90, y0 + 52, m.held ? '#383838' : '#a0a0a0'); // 지닌 도구
         small(`특성: ${ABILITIES[abilityOf(m)]?.name ?? '-'} · 몸무게 ${m.build?.weight ?? s.weight}kg`, 10, y0 + 66);
         if (!genderFixed(m.species)) small(`확인: 성별 바꾸기 (${usableGenders(m).length > 1 ? '♂/♀' : '다른 성별 없음'})`, 10, y0 + 80, usableGenders(m).length > 1 ? '#c06010' : '#a0a0a0');
       } else if (pg === 1) {

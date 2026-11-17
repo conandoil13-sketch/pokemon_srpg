@@ -4,8 +4,10 @@
 import { moveTypeOf, typesOf, has, magicGuard, airborne } from './abilities.js';
 import { inflict } from './status.js';
 import { effectiveWeather } from './weather.js';
+import { itemOf } from './items.js';
 
 export const FIELD_TURNS = 5, FIELD_RADIUS = 2;
+const BASE_FIELD_TURNS = FIELD_TURNS;
 export const AURAS = ['tailwind', 'safeguard', 'mist', 'luckyChant'];
 export const ZONES = ['reflect', 'lightScreen', 'mudSport', 'waterSport'];
 const SIDE_ZONES = ['reflect', 'lightScreen']; // 쓴 편만 혜택. 흙놀이·물놀이는 장판 안 모두
@@ -15,8 +17,10 @@ export const newField = () => ({ auras: [], zones: [], spikes: [], weatherTimer:
 const blankFlags = () => Object.fromEntries([...AURAS, ...ZONES].map((k) => [k, false]));
 
 // 오라·장판 놓기. 같은 포켓몬이 같은 오라를 다시 쓰면 남은 턴만 5로
+const SCREENS_KIND = ['reflect', 'lightScreen'];
 export function castField(state, user, effect) {
   state.auras ??= []; state.zones ??= [];
+  const FIELD_TURNS = BASE_FIELD_TURNS + (SCREENS_KIND.includes(effect) ? itemOf(user)?.screenTurns ?? 0 : 0); // 빛의점토
   if (AURAS.includes(effect)) {
     const mine = state.auras.find((a) => a.kind === effect && a.ownerId === user.id);
     if (mine) mine.turns = FIELD_TURNS;
@@ -105,7 +109,7 @@ export function castWeather(state, user, moveId) {
   if (state.weather === w) return { ok: false, reason: 'already' };
   const from = state.weather ?? null;
   state.weather = w;
-  state.weatherTimer = { side: user.side, turns: FIELD_TURNS };
+  state.weatherTimer = { side: user.side, turns: FIELD_TURNS + (itemOf(user)?.weatherTurns === w ? 3 : 0) }; // 날씨 바위 +3
   const W = effectiveWeather(state);
   for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 이동력 바로 반영
   return { ok: true, from, to: w }; // 연출: 펑 전엔 from, 뒤엔 to

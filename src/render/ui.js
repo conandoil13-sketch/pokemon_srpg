@@ -1,4 +1,5 @@
 // DS풍 UI 위젯 (화면 좌표)
+import { HELD_ITEMS } from '../data/heldItems.js';
 import { drawText, textWidth } from './font.js';
 import { TYPE_COLORS } from '../data/types.js';
 import { TYPE_KO } from '../data/text.js';
@@ -150,6 +151,8 @@ export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false, warn = nul
   drawWindow(ctx, x, y, w, h);
   const ab = ABILITIES[unit.ability];
   if (ab) drawText(ctx, `특성 ${ab.name}`, x + 6, y + 51, ab.inactive ? '#909090' : '#305830', null, 'small');
+  const it = unit.held ? HELD_ITEMS[unit.held] : null; // 지닌 도구 (특성 줄 오른쪽)
+  if (it) drawText(ctx, it.name, x + w - 6 - textWidth(it.name, 'small'), y + 51, '#8a5418', null, 'small');
   if (stages) drawText(ctx, stages, x + 6, y + 63, '#5848a0', null, 'small');
   if (warn) drawText(ctx, warn, x + 6, y + h - 13, '#e03030', '#f8d0d0', 'small');
   ctx.fillStyle = unit.side === 'ally' ? '#3870f8' : '#f83838';

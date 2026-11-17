@@ -29,6 +29,7 @@ export function addLoot(run, item, floor) {
   else if (item === 'pickupCoins') run.loot.coins = (run.loot.coins ?? 0) + PICKUP_COINS * floor; // 픽업·꿀모으기
   else if (typeof item === 'string' && item.startsWith('powder-')) { run.loot.powders ??= emptyPowders(); run.loot.powders[item.slice(7)] = (run.loot.powders[item.slice(7)] ?? 0) + 1; } // 메타몽 파우더
   else if (item && typeof item === 'object' && item.kind) (run.loot.capsules ??= []).push(item); // 메타몽 캡슐
+  else if (typeof item === 'string' && item.startsWith('held-')) { run.loot.held ??= {}; const id = item.slice(5); run.loot.held[id] = (run.loot.held[id] ?? 0) + 1; } // 지니는 도구
 }
 
 export const addBattleCoins = (run, n) => { run.loot.coins = (run.loot.coins ?? 0) + n; };
@@ -43,9 +44,11 @@ export function settleLoot(game, run) {
   const exp = each ? Object.fromEntries(game.party.map((m) => [m.uid ?? m.species, each])) : {}; // 동료 열쇠별
   game.items.powders ??= emptyPowders();
   for (const [k, n] of Object.entries(run.loot.powders ?? {})) game.items.powders[k] = (game.items.powders[k] ?? 0) + n;
+  game.items.held ??= {};
+  for (const [k, n] of Object.entries(run.loot.held ?? {})) game.items.held[k] = (game.items.held[k] ?? 0) + n;
   const capsules = run.loot.capsules ?? [];
   const dropped = addCapsules(game, capsules); // 가방이 넘치면 오래된 것부터
-  return { evoStone: run.loot.evoStone, coins, exp, capsules: capsules.length, dropped };
+  return { evoStone: run.loot.evoStone, coins, exp, capsules: capsules.length, dropped, held: { ...(run.loot.held ?? {}) } };
 }
 
 // outcome: 'cleared' | 'retreat' | 'wiped'. 보물 지급은 호출 측(settleLoot)

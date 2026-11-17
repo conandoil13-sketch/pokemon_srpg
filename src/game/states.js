@@ -1,4 +1,5 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
+import { HELD_ITEMS } from '../data/heldItems.js';
 import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute, teleportSpots } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
@@ -49,7 +50,7 @@ import { ABILITIES } from '../data/abilities.js';
 import { POWDER_KO } from '../core/dittoBuild.js';
 import { has as hasAbility, typeEffect } from '../core/abilities.js';
 
-const ITEM_NAME = { evoStone: '진화의돌', candy: '경험 사탕', coins: '코인 주머니', ...Object.fromEntries(Object.entries(POWDER_KO).map(([k, v]) => [`powder-${k}`, v])) };
+const ITEM_NAME = { ...Object.fromEntries(Object.entries(HELD_ITEMS).map(([k, v]) => [`held-${k}`, v.name])), evoStone: '진화의돌', candy: '경험 사탕', coins: '코인 주머니', ...Object.fromEntries(Object.entries(POWDER_KO).map(([k, v]) => [`powder-${k}`, v])) };
 export const itemName = (id) => ITEM_NAME[id] ?? '아이템';
 const TARGET_LABEL = { self: '자신', enemy: '적 하나', enemies: '주변 적 전체', ally: '아군 하나', allies: '주변 아군' };
 const isAttack = (mv) => mv.category !== 'status';
@@ -170,10 +171,20 @@ const abilityName = (id) => ABILITIES[id]?.name ?? id;
 const HEAL_ABILITIES = ['volt-absorb', 'water-absorb', 'dry-skin', 'rain-dish', 'ice-body', 'poison-heal'];
 const WEATHER_START = { drizzle: '비가 내리기 시작했다!', drought: '햇살이 강해졌다!', 'sand-stream': '모래바람이 불기 시작했다!', 'snow-warning': '싸라기눈이 내리기 시작했다!' };
 const QUIET_ABILITIES = ['speed-boost', 'damp'];
+// 지니는 도구 발동 문구
+export function itemLine(e, who) {
+  const name = HELD_ITEMS[e.item]?.name ?? '도구';
+  if (e.survived) return `${josa(who, '은/는')} ${josa(name, '으로/로')} 버텼다!`;
+  if (e.item === 'life-orb') return `${josa(who, '은/는')} 생명이 조금 깎였다!`;
+  if (e.item === 'white-herb') return `${who}의 하얀허브! 떨어진 능력이 돌아왔다!`;
+  if (e.damage) return `${josa(who, '은/는')} ${name} 때문에 피해를 입었다!`;
+  return `${who}의 ${name}!`;
+}
 export function abilityNotices(events = [], get) {
-  return events.filter((e) => !QUIET_ABILITIES.includes(e.ability)).flatMap((e) => {
+  return events.filter((e) => e.item || !QUIET_ABILITIES.includes(e.ability)).flatMap((e) => {
     const u = get(e.unitId);
     if (!u) return [];
+    if (e.item) return [{ lines: [itemLine(e, unitLabel(u))], at: { x: u.x, y: u.y }, hp: null }]; // 지니는 도구
     const who = unitLabel(u), name = abilityName(e.ability), t = e.target ? get(e.target) : null;
     let text, at = { x: u.x, y: u.y };
     if (e.ability === 'intimidate' && t) text = e.applied ? `${who}의 위협! ${unitLabel(t)}의 공격이 떨어졌다!` : `${who}의 위협! 그러나 ${unitLabel(t)}의 공격은 떨어지지 않았다!`;

@@ -1,5 +1,6 @@
 // 상태이상 (순수). 본가 4~5세대 규칙을 SRPG 페이즈 단위로.
 // unit.status: 주 상태이상 하나, unit.statusTurns: 잠듦 남은 수면 / 얼음 남은 턴 / 맹독 n, unit.confusion: 혼란 남은 턴
+import { itemOf } from './items.js';
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { weatherBlocksAilment } from './weather.js';
@@ -27,6 +28,8 @@ export function canInfatuate(target, source, { breaker = false } = {}) {
 export function infatuate(target, source, opts) {
   const r = canInfatuate(target, source, opts);
   if (r.ok) { target.infatuation = INFATUATION_TURNS; target.infatuatedBy = source.id; }
+  if (r.ok && itemOf(target)?.destinyKnot && !source.infatuation && canInfatuate(source, target, {}).ok) { source.infatuation = INFATUATION_TURNS; source.infatuatedBy = target.id; r.knot = true; } // 붉은실
+  if (r.ok && itemOf(target)?.mentalHerb && !target.mentalUsed) { target.infatuation = 0; target.infatuatedBy = null; target.mentalUsed = true; return { ...r, ok: false, reason: 'item', item: target.held }; } // 멘탈허브 (층마다 1번)
   return r;
 }
 

@@ -1,5 +1,6 @@
 // 포켓몬에 붙는 효과 (순수). 층이 끝나면 유닛째 사라지므로 파티 멤버에는 쓰지 않는다.
 // 남은 턴은 그 포켓몬 편 페이즈 끝에 줄어든다 (tickEnd). 스펙 docs/superpowers/specs/2026-11-15-status-moves-batch-design.md
+import { itemOf } from './items.js';
 import { MOVES } from '../data/moves.js';
 import { typesOf, blocksAilment, magicGuard } from './abilities.js';
 import { cure, canInflict, inflict } from './status.js';
@@ -40,6 +41,7 @@ export function moveBlock(unit, moveId) {
   if (unit.disable && moveId === unit.disable.move) return 'disable';
   if (unit.torment > 0 && moveId === unit.lastMove) return 'torment';
   if (unit.healBlock > 0 && isHealMove(m)) return 'healBlock';
+  if (unit.choiceLock && moveId !== unit.choiceLock && itemOf(unit)?.choice) return 'choice'; // 구애: 그 층 첫 기술만
   return null;
 }
 

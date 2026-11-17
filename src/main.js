@@ -1,5 +1,6 @@
 // 부트스트랩 + 장면 관리 + 게임 루프
 // 흐름: 타이틀 → 마을 → 던전 선택 → [층 시작(저장) → 전투 → 결산 → 진화… → 다음 층/귀환]… → 마을 · 편성소
+import { HELD_ITEMS } from './data/heldItems.js';
 import { createScreen } from './render/screen.js';
 import { requestSprites } from './render/sprites.js';
 import { loadFonts } from './render/font.js';
@@ -134,7 +135,9 @@ function endRun(outcome, reached = game.run.floor) {
     ? [`${josa(d.name, '을/를')} 돌파했다!`, opened.length ? `${josa(opened[0], '이/가')} 열렸다!` : loot]
     : outcome === 'retreat' ? ['마을로 돌아왔다.', loot]
     : ['눈앞이 캄캄해졌다...', '모은 보물을 잃고 마을로 돌아왔다.'];
-  const pages = reward.dropped ? [lines, ['가방이 가득 차서', `오래된 캡슐 ${reward.dropped}개를 버렸다.`]] : lines; // 조용히 버리지 않는다
+  const heldGot = Object.entries(reward.held ?? {}).map(([id, n]) => `${HELD_ITEMS[id]?.name ?? id}${n > 1 ? ` ×${n}` : ''}`); // 얻은 지니는 도구
+  const pages0 = heldGot.length ? [lines, ['도구를 가방에 넣었다:', heldGot.join(', ')]] : lines;
+  const pages = reward.dropped ? [...(heldGot.length ? pages0 : [pages0]), ['가방이 가득 차서', `오래된 캡슐 ${reward.dropped}개를 버렸다.`]] : pages0; // 조용히 버리지 않는다
   const toTown = () => { sound.bgm('route1'); go.town(pages, TOWN.returnSpot); sound.jingle('healed'); }; // 마을로: 회복 효과음
   if (!Object.keys(reward.exp).length) { toTown(); return; }
   // 경험 사탕: 탐험 보상 결산
