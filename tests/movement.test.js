@@ -19,3 +19,22 @@ test('ditto moves by its build: speed powders and a flying build type count', ()
   const bird = makeUnit({ species: 'ditto', side: 'ally', x: 0, y: 0, level: 20, base: { ...SPECIES.ditto.base, spe: 75 }, types: ['normal', 'flying'] });
   assert.equal(moveBudget(bird), 6);
 });
+
+import { generateFloor, reachableFrom } from '../src/core/floorgen.js';
+import { dungeonById } from '../src/data/dungeons.js';
+test('later trials get wider maps that still generate cleanly', () => {
+  const size = (id, f = 1, s = 1) => { const m = generateFloor(dungeonById(id), f, s); return [m.tiles[0].length, m.tiles.length]; };
+  assert.deepEqual(size('sinnoh-field'), [16, 12]); assert.deepEqual(size('trial-3'), [16, 12]);
+  assert.deepEqual(size('trial-4'), [18, 13]); assert.deepEqual(size('trial-7'), [20, 14]);
+  for (const id of ['trial-4', 'trial-7']) {
+    const d = dungeonById(id);
+    for (let seed = 1; seed <= 3; seed++) for (let f = 1; f <= d.floors; f++) {
+      const m = generateFloor(d, f, seed);
+      assert.ok(m.tiles.every((r) => r.length === m.tiles[0].length));
+      const reach = reachableFrom(m.tiles, { x: 1, y: Math.floor(m.tiles.length / 2) });
+      m.tiles.forEach((row, y) => [...row].forEach((c, x) => { if ('."^>'.includes(c)) assert.ok(reach.has(`${x},${y}`), `${id} f${f} s${seed}`); }));
+      assert.ok(m.enemies.length >= 1); assert.ok(m.allySlots.every((a) => a.x <= 2));
+      if (f === d.floors) assert.ok(m.enemies.some((e) => e.boss)); else assert.ok(m.stairs);
+    }
+  }
+});
