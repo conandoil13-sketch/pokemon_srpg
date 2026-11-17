@@ -1,13 +1,14 @@
 // 마우스/키보드 → 게임 이벤트
 import { W, H } from '../render/screen.js';
 
-const KEYS = {
+export const KEYS = {
   ArrowUp: { type: 'dir', dx: 0, dy: -1 }, ArrowDown: { type: 'dir', dx: 0, dy: 1 },
   ArrowLeft: { type: 'dir', dx: -1, dy: 0 }, ArrowRight: { type: 'dir', dx: 1, dy: 0 },
   z: { type: 'confirm' }, Z: { type: 'confirm' }, Enter: { type: 'confirm' }, ' ': { type: 'confirm' },
   x: { type: 'cancel' }, X: { type: 'cancel' }, Escape: { type: 'cancel' }, Backspace: { type: 'cancel' },
   e: { type: 'endTurn' }, E: { type: 'endTurn' },
   s: { type: 'sort' }, S: { type: 'sort' }, // 편성소 박스 정렬
+  c: { type: 'menu' }, C: { type: 'menu' }, // X 메뉴 (키보드 X 는 취소라서 C)
 };
 
 // 화면 터치 (순수): 닿으면 그 칸으로 커서 + 클릭, 누른 채 끌면 커서만. 화면 밖이면 아무것도

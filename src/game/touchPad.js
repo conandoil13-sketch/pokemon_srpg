@@ -3,7 +3,7 @@
 export const PAD_EVENTS = {
   up: { type: 'dir', dx: 0, dy: -1 }, down: { type: 'dir', dx: 0, dy: 1 },
   left: { type: 'dir', dx: -1, dy: 0 }, right: { type: 'dir', dx: 1, dy: 0 },
-  a: { type: 'confirm' }, b: { type: 'cancel' }, start: { type: 'endTurn' }, select: { type: 'sort' },
+  a: { type: 'confirm' }, b: { type: 'cancel' }, start: { type: 'endTurn' }, select: { type: 'sort' }, x: { type: 'menu' },
 };
 export const REPEAT_DELAY = 300, REPEAT_EVERY = 90; // ms — 키보드 반복과 비슷하게
 
@@ -67,7 +67,7 @@ export function mountPad(root, onEvent) {
     <div class="pad-dpad" aria-label="십자키">
       <span class="arm up"></span><span class="arm down"></span><span class="arm left"></span><span class="arm right"></span><span class="hub"></span>
     </div>
-    <div class="pad-ab"><button class="pad-b" data-k="b" aria-label="B 취소">B</button><button class="pad-a" data-k="a" aria-label="A 확인">A</button></div>
+    <div class="pad-ab"><button class="pad-b" data-k="b" aria-label="B 취소">B</button><button class="pad-a" data-k="a" aria-label="A 확인">A</button><button class="pad-x" data-k="x" aria-label="X 메뉴">X</button></div>
     <div class="pad-sys"><button data-k="select" aria-label="SELECT 정렬">SELECT</button><button data-k="start" aria-label="START 턴 종료">START</button></div>`;
   const rep = createRepeater();
   const send = (evs) => { for (const ev of evs) onEvent(ev); };
