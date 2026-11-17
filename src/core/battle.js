@@ -138,6 +138,7 @@ export function moveUnit(state, id, x, y, cost = 0, path = null) {
     }
   }
   u.spent = (u.spent ?? 0) + cost;
+  if (!stayed) u.walked = true; // 줌렌즈
   u.x = x; u.y = y; u.moved = true;
   refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
   state.log.arriveAbilityEvents = [];
@@ -163,6 +164,7 @@ function awardExp(state, attacker, defender) {
   for (const u of state.units) {
     if (u.side === 'ally' && !u.bot && u !== attacker && u.hp > 0) gained[unitKey(u)] = (gained[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
   }
+  for (const u of state.units) if (u.side === 'ally' && gained[unitKey(u)] && itemOf(u)?.expMult) gained[unitKey(u)] = Math.floor(gained[unitKey(u)] * itemOf(u).expMult); // 행복의알
   for (const [sp, n] of Object.entries(gained)) state.log.exp[sp] = (state.log.exp[sp] ?? 0) + n;
   return gained;
 }
@@ -172,7 +174,7 @@ function awardShare(state, defender) {
   if (defender.side !== 'enemy') return;
   const full = expYield(SPECIES[defender.species].baseExp, defender.level, BALANCE.expMultiplier);
   for (const u of state.units) {
-    if (u.side === 'ally' && !u.bot && u.hp > 0) state.log.exp[unitKey(u)] = (state.log.exp[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio);
+    if (u.side === 'ally' && !u.bot && u.hp > 0) state.log.exp[unitKey(u)] = (state.log.exp[unitKey(u)] ?? 0) + Math.floor(full * BALANCE.shareRatio * (itemOf(u)?.expMult ?? 1)); // 행복의알
   }
 }
 
@@ -456,6 +458,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   if (restrict) { a.moved = true; return { kind: move.category === 'status' ? 'status' : 'attack', blocked: restrict, stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; } // 도발·앙코르 …
   if (has(a, 'truant')) a.loafNext = true; // 게으름: 다음 자기 차례는 쉰다
   if (itemOf(a)?.choice && !a.choiceLock) a.choiceLock = moveId; // 구애: 그 층 첫 기술로 고정
+  if (itemOf(a)?.metronome) { a.metroStreak = a.metroMove === moveId ? (a.metroStreak ?? 0) + 1 : 0; a.metroMove = moveId; } // 메트로놈: 연속 사용 (막힌 기술은 위에서 돌아가 안 셈)
   a.moved = true;
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
@@ -578,6 +581,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   if (move.varPower === 'present') { const r = rng() * 100; if (r < 20) presentHeal = true; else dmgMove = { ...dmgMove, varPower: null, power: r < 60 ? 40 : r < 90 ? 80 : 120 }; } // 프레젠트: 20% 회복, 40% 40, 30% 80, 10% 120
   if (has(a, 'reckless') && dmgMove.power && (move.drain < 0 || CRASH_MOVES.has(move.id))) dmgMove = { ...dmgMove, power: dmgMove.power * 1.2 }; // 이판사판: 반동기 1.2배
   if (ranged && dmgMove.power) dmgMove = { ...dmgMove, power: dmgMove.power * Math.max(0, 1 - RANGE_FALLOFF * Math.max(0, dist(a, ranged) - move.range[1])) }; // 사거리 밖
+  if (itemOf(a)?.metronome && dmgMove.power) dmgMove = { ...dmgMove, power: dmgMove.power * Math.min(2, 1 + itemOf(a).metronome * (a.metroStreak ?? 0)) }; // 메트로놈
   a.helped = false;
   if (RECHARGE_MOVES.has(move.id)) a.recharge = true; // 파괴광선류: 기술이 나갔으면 다음 차례 반동
   const spread = targets.length >= 2 ? 0.75 : 1;
@@ -590,7 +594,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const flinched = [], bound = [], screensBroken = [];
   let countered = null;
   if (targets.length && move.power) a.ncTouched = true; // 자연회복: 공격함
-  const flinchChance = move.flinchChance || (has(a, 'stench') && move.power ? STENCH_FLINCH : 0); // 악취: 풀죽음 10%
+  const flinchChance = move.flinchChance || (has(a, 'stench') && move.power ? STENCH_FLINCH : 0) || (itemOf(a)?.flinch && move.power ? itemOf(a).flinch : 0); // 악취·왕의징표석: 풀죽음 10%
   if (move.id === 'brick-break') { // 깨뜨리다: 피해 전에 대상을 덮는 상대 편 장벽을 부숨
     state.zones = (state.zones ?? []).filter((z) => {
       const hitIt = SCREENS.includes(z.kind) && targets.some((d) => d.side === z.side && d.side !== a.side && dist(d, z) <= FIELD_RADIUS && d.guard !== 'protect' && typeEffect(a, d, move, W) > 0); // 방어·무효면 안 깨짐
@@ -691,7 +695,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 흡수(+)·반동(−): 실제로 깎인 HP 합 기준
   let drained = 0, recoilDamage = 0;
   if (dealt > 0 && move.drain > 0 && state.units.includes(a)) {
-    const amt = Math.max(1, Math.floor(dealt * move.drain / 100));
+    const amt = Math.max(1, Math.floor(dealt * move.drain / 100 * (itemOf(a)?.healMult ?? 1))); // 큰뿌리
     if (targets.some((t) => t.ability === 'liquid-ooze')) { // 해감액: 흡수가 피해로 (틀깨기로도 못 막음, 매직가드는 막음)
       if (!magicGuard(a)) { a.hp = Math.max(0, a.hp - amt); drained = -amt; }
       abilityEvents.push({ unitId: targets.find((t) => t.ability === 'liquid-ooze').id, ability: 'liquid-ooze', damage: true });
@@ -824,8 +828,20 @@ export function speedBonusUnit(state, side) {
   return best;
 }
 
+// 선제공격손톱: 그 편 페이즈 끝(스피드 보너스 다음)에 지닌 유닛마다 20% — 처음 맞은 하나가 한 번 더 (페이즈마다 1번)
+export function quickClawUnit(state, side, rng) {
+  if (state.quickGiven) return null;
+  for (const u of state.units) {
+    if (u.side !== side || u.hp <= 0 || u.bot || !itemOf(u)?.quickClaw) continue;
+    if ((u.status === 'sleep' || u.status === 'freeze') && (u.statusTurns ?? 1) > 0) continue;
+    if (rng() < itemOf(u).quickClaw) return u;
+  }
+  return null;
+}
+
 export function endPhase(state, rng = Math.random) {
   state.bonusGiven = false; // 다음 페이즈는 다시 보너스 가능
+  state.quickGiven = false;
   const ending = state.phase === 'player' ? 'ally' : 'enemy';
   const events = (state.log.statusEvents = []);
   const abilityLog = (state.log.phaseAbilityEvents = []); // 차례 끝·시작 특성 발동 (화면 알림용)

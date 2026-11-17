@@ -18,7 +18,7 @@ import { generateFloor } from './core/floorgen.js';
 import { deployed } from './core/roster.js';
 import { memberKey, memberByKey } from './core/members.js';
 import { createGachaScene } from './game/gacha.js';
-import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun, addBattleCoins, addFloorCoins } from './core/run.js';
+import { startRun, floorSeed, floorStartHp, afterFloor, addLoot, settleLoot, finishRun, addBattleCoins, addFloorCoins, coinMult } from './core/run.js';
 import { dungeonById } from './data/dungeons.js';
 import { josa } from './data/text.js';
 import { pickupLoot } from './core/abilities.js';
@@ -99,8 +99,9 @@ function afterBattle(result, log) {
   }
   for (const item of log.loot) addLoot(run, item, run.floor);
   const before = run.loot.coins;
-  addBattleCoins(run, log.coins);
-  if (result !== 'lose') addFloorCoins(run, run.floor);
+  const amulet = coinMult(deployed(game)); // 부적금화
+  addBattleCoins(run, log.coins * amulet);
+  if (result !== 'lose') for (let i = 0; i < amulet; i++) addFloorCoins(run, run.floor);
   scene = createResults({
     game, result, log, firstClear: false, members: deployed(game), coins: run.loot.coins - before,
     onDone: (evos) => evolveChain(evos, () => afterResults(result, log)),

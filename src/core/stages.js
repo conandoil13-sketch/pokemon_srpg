@@ -1,5 +1,6 @@
 // 능력치 랭크 (순수). −6~+6, 3턴 지속 (그 유닛 편 페이즈 종료마다 −1)
 import { stageGuard, speedMult, ignoresParalysisSlow } from './abilities.js';
+import { itemSpeedMult } from './items.js';
 export const STAT_KEYS = ['atk', 'def', 'spa', 'spd', 'spe', 'acc', 'eva'];
 export const API_STAT = { attack: 'atk', defense: 'def', 'special-attack': 'spa', 'special-defense': 'spd', speed: 'spe', accuracy: 'acc', evasion: 'eva' };
 export const STAT_KO = { atk: '공격', def: '방어', spa: '특공', spd: '특방', spe: '스피드', acc: '명중률', eva: '회피율' };
@@ -15,7 +16,7 @@ export const stageMultiplier = (n) => (n >= 0 ? (2 + n) / 2 : 2 / (2 - n));
 
 // 마비면 스피드 ×0.5 (status.js 와 같은 규칙, 순환 import 를 피해 여기서 직접 본다)
 export const effectiveStat = (unit, key) => unit.stats[key] * stageMultiplier(unit.stages?.[key] ?? 0)
-  * (key === 'spe' ? (unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? 0.5 : 1) * speedMult(unit) * (unit.field?.tailwind ? 1.25 : 1) : 1); // 순풍 ×1.25
+  * (key === 'spe' ? (unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? 0.5 : 1) * speedMult(unit) * itemSpeedMult(unit) * (unit.field?.tailwind ? 1.25 : 1) : 1); // 순풍 ×1.25 · 구애스카프·검은철구
 
 // 꿰뚫어보기·미라클아이: 회피 상승은 무시 (하락은 그대로)
 export const accuracyShift = (attacker, defender) => {

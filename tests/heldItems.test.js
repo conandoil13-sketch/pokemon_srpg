@@ -11,7 +11,7 @@ import { createBattle } from '../src/core/battle.js';
 const memStore = () => { const data = {}; return { data, getItem: (k) => data[k] ?? null, setItem: (k, v) => { data[k] = String(v); } }; };
 
 test('the item table has the first batch without berries', () => {
-  assert.ok(HELD_IDS.length >= 45 && HELD_IDS.length <= 55, String(HELD_IDS.length));
+  assert.ok(HELD_IDS.length >= 60 && HELD_IDS.length <= 66, String(HELD_IDS.length)); // 1차 52 + 2차 11
   for (const id of HELD_IDS) { assert.ok(HELD_ITEMS[id].name, id); assert.ok(HELD_ITEMS[id].desc, id); }
   assert.ok(!HELD_IDS.some((id) => id.endsWith('-berry')));
 });
@@ -174,4 +174,64 @@ test('item notices read naturally', () => {
   assert.match(lines[0].lines[0], /의 먹다남은음식!$/);
   assert.match(itemLine({ item: 'focus-sash', survived: 'sash' }, '피카츄'), /기합의띠로 버텼다!$/);
   assert.match(itemLine({ item: 'life-orb', damage: 3 }, '피카츄'), /생명이 조금 깎였다!$/);
+});
+
+// ---- 2차 ----
+import { moveBudget } from '../src/core/status.js';
+import { effectiveStat } from '../src/core/stages.js';
+import { refreshField } from '../src/core/field.js';
+import { typeEffect } from '../src/core/abilities.js';
+
+test('choice scarf: speed x1.5, +1 move, locks like the other choice items', () => {
+  const { s, a, e } = duel(null, { foeLevel: 60 });
+  const spe = effectiveStat(a, 'spe'), mv = moveBudget(a);
+  a.held = 'choice-scarf';
+  assert.equal(effectiveStat(a, 'spe'), spe * 1.5); assert.equal(moveBudget(a), mv + 1);
+  assert.equal(itemAttackMult(a, e, MOVES.tackle, 1), 1);
+  a.moves = ['tackle', 'growl']; applyMove(s, a.id, 'tackle', e.id, rng0); a.acted = a.moved = false;
+  assert.equal(applyMove(s, a.id, 'growl', e.id, rng0).blocked, 'choice');
+});
+
+test('iron ball: half speed, -1 move (min 1), grounded even after gravity ends', () => {
+  const p = duel('iron-ball', { ally: 'starly' });
+  refreshField(p.s);
+  assert.equal(p.a.grounded, true); assert.ok(typeEffect(p.e, p.a, MOVES.earthquake) > 0);
+  p.a.held = null; refreshField(p.s); const base = moveBudget(p.a); p.a.held = 'iron-ball'; refreshField(p.s);
+  assert.equal(moveBudget(p.a), Math.max(1, base - 1 - 1)); // 철구 −1, 땅에 붙은 비행 +1 없음
+  p.s.gravity = { side: 'ally', turns: 1 }; endPhase(p.s, rng0);
+  assert.equal(p.a.grounded, true);
+});
+
+test('smoke ball ignores mean look', () => {
+  const { a } = duel('smoke-ball'); a.noMove = 2;
+  assert.ok(moveBudget(a) > 0);
+  a.held = null; assert.equal(moveBudget(a), 0);
+});
+
+test('metronome adds 20% per repeat up to double, resets on a different move', () => {
+  const { s, a, e } = duel('metronome', { foeLevel: 90 });
+  a.moves = ['tackle', 'growl'];
+  const use = (m) => { a.acted = a.moved = false; applyMove(s, a.id, m, e.id, () => 0.99); return a.metroStreak; };
+  assert.equal(use('tackle'), 0); assert.equal(use('tackle'), 1); assert.equal(use('tackle'), 2);
+  assert.equal(use('growl'), 0); assert.equal(use('tackle'), 0);
+});
+
+test('zoom lens boosts accuracy only when the holder has not moved', () => {
+  const { a, e } = duel('zoom-lens');
+  a.walked = false; assert.ok(Math.abs(accuracyFor(a, e, MOVES.tackle, 100).value - 120) < 1e-9);
+  a.walked = true; assert.ok(Math.abs(accuracyFor(a, e, MOVES.tackle, 100).value - 100) < 1e-9);
+});
+
+test('big root heals 1.3x from drain moves', () => {
+  const run = (held) => { const { s, a, e } = duel(held, { foeLevel: 40 }); a.stats.spa = 150; a.maxHp = 999; a.moves = ['absorb']; a.hp = 1; applyMove(s, a.id, 'absorb', e.id, () => 0); return a.hp - 1; };
+  const plain = run(null), root = run('big-root');
+  assert.ok(root >= Math.floor(plain * 1.3) - 1 && root > plain, `${plain} → ${root}`);
+});
+
+test('kings rock flinches 10% on damaging hits', () => {
+  const { s, a, e } = duel('kings-rock', { foeLevel: 90 });
+  a.moves = ['tackle']; applyMove(s, a.id, 'tackle', e.id, () => 0.05); // 0.05×100 = 5 < 10
+  assert.equal(e.flinch, true);
+  const n = duel('kings-rock', { foeLevel: 90 }); n.a.moves = ['tackle']; applyMove(n.s, n.a.id, 'tackle', n.e.id, () => 0.11); // 11 ≥ 10
+  assert.ok(!n.e.flinch);
 });

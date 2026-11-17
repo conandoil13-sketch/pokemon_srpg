@@ -32,9 +32,12 @@ export function itemDefMult(d, move) {
   const k = move.category === 'physical' ? 'def' : 'spd';
   return it.statMult[k] ? 1 / it.statMult[k] : 1;
 }
+export const itemSpeedMult = (u) => itemOf(u)?.speedMult ?? 1; // 구애스카프·검은철구
+export const itemMove = (u) => itemOf(u)?.move ?? 0;
+export const itemHeal = (u) => itemOf(u)?.healMult ?? 1; // 큰뿌리
 export const itemCritBonus = (u) => itemOf(u)?.crit ?? 0;
 export function itemAcc(a, d) {
-  return (itemOf(a)?.accMult ?? 1) * (itemOf(d)?.foeAccMult ?? 1);
+  return (itemOf(a)?.accMult ?? 1) * (itemOf(d)?.foeAccMult ?? 1) * (itemOf(a)?.still && !a.walked ? itemOf(a).still : 1); // 줌렌즈: 이번 차례 이동 안 함
 }
 // 차례 끝: { heal, damage, ailment } (최대 HP 기준으로 계산된 정수)
 export function itemPhaseEnd(u) {

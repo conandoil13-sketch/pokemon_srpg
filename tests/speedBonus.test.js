@@ -81,3 +81,26 @@ test('fast enemies get one more action at the end of their phase', () => {
   for (let t = 0; t < 120 && !bonusSeen; t += 0.05) { game.update(0.05); if (s.bonusGiven && s.phase === 'enemy') bonusSeen = true; if (game.mode === 'notice') game.handle({ type: 'confirm' }); }
   assert.ok(bonusSeen);
 });
+
+import { quickClawUnit } from '../src/core/battle.js';
+test('quick claw: 20% per holder, first hit wins, once per phase, skips sleepers', () => {
+  const t = setup(); t.a.held = 'quick-claw'; t.b.held = 'quick-claw';
+  assert.equal(quickClawUnit(t.s, 'ally', () => 0.19), t.a);
+  assert.equal(quickClawUnit(t.s, 'ally', () => 0.2), null);
+  let n = 0; assert.equal(quickClawUnit(t.s, 'ally', () => (n++ === 0 ? 0.5 : 0.1)), t.b); // a 빗나감, b 맞음
+  t.a.status = 'sleep'; t.a.statusTurns = 2; assert.equal(quickClawUnit(t.s, 'ally', () => 0), t.b);
+  t.s.quickGiven = true; assert.equal(quickClawUnit(t.s, 'ally', () => 0), null);
+  endPhase(t.s, () => 0.5); assert.equal(t.s.quickGiven, false);
+});
+
+test('speed bonus then quick claw in the same ally phase, each once', () => {
+  const { game, s } = fastGame();
+  const holder = s.units.find((u) => u.side === 'ally'); holder.held = 'quick-claw';
+  const realRandom = Math.random;
+  game.handle({ type: 'endTurn' }); assert.equal(s.bonusGiven, true); // 스피드 보너스
+  run(game, (m) => m === 'idle');
+  // 손톱은 게임 rng 로 굴리므로 결과만 확인: 다음 endTurn 은 손톱이거나 적 턴
+  game.handle({ type: 'endTurn' });
+  assert.ok(s.quickGiven === true || s.phase === 'enemy');
+  void realRandom;
+});

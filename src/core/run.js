@@ -33,6 +33,8 @@ export function addLoot(run, item, floor) {
   else if (typeof item === 'string' && item.startsWith('held-')) { run.loot.held ??= {}; const id = item.slice(5); run.loot.held[id] = (run.loot.held[id] ?? 0) + 1; } // 지니는 도구
 }
 
+// 부적금화: 출전 중(메타몽 + 출전 4) 하나라도 지니면 전투·층 돌파 코인 2배 (그 층에서 기절해도)
+export const coinMult = (team) => (team.some((m) => m.held === 'amulet-coin') ? 2 : 1);
 export const addBattleCoins = (run, n) => { run.loot.coins = (run.loot.coins ?? 0) + n; };
 export const addFloorCoins = (run, floor) => { run.loot.coins = (run.loot.coins ?? 0) + FLOOR_COINS * floor; };
 

@@ -59,13 +59,13 @@ export function inflict(unit, ailment, rng, move, weather = null, opts = {}) {
 export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 
 export const moveBudget = (unit) => {
-  const runAway = has(unit, 'run-away'); // 도주: 상대가 거는 이동 제한(이동 불가·속박·묶기 특성)을 무시
+  const runAway = has(unit, 'run-away') || !!itemOf(unit)?.escape; // 도주 · 연기구슬: 상대가 거는 이동 제한(이동 불가·속박·묶기 특성)을 무시
   if (unit.rooted || (!runAway && (unit.noMove > 0 || unit.bound))) return 0; // 검은눈빛·블록·거미집·뿌리박기·속박
   const m = SPECIES[unit.species].move;
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
   if (unit.trapped && !runAway) return 1; // 개미지옥·그림자밟기·자력
   const grounded = unit.grounded && (unit.types ?? SPECIES[unit.species].types).includes('flying') ? 1 : 0; // 중력: 비행 +1 없어짐
-  return Math.max(1, base + moveBonus(unit) - grounded) + (unit.field?.tailwind ? 1 : 0); // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1, 순풍 +1
+  return Math.max(1, base + moveBonus(unit) - grounded + (itemOf(unit)?.move ?? 0)) + (unit.field?.tailwind ? 1 : 0); // 구애스카프 +1 · 검은철구 −1 // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1, 순풍 +1
 };
 
 export const speedMultiplier = (unit) => (unit.status === 'paralysis' ? 0.5 : 1);

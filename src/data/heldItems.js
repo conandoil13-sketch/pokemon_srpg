@@ -47,14 +47,26 @@ export const HELD_ITEMS = {
   'metal-powder': { name: '메탈파우더', desc: '변신하지 않은 메타몽의 방어 2배', species: ['ditto'], statMult: { def: 2 }, plainDitto: true },
   'lucky-punch': { name: '럭키펀치', desc: '럭키의 급소율이 크게 오름', species: ['chansey'], crit: 2 },
   stick: { name: '대파', desc: '파오리의 급소율이 크게 오름', species: ['farfetchd'], crit: 2 },
+  // ---- 2차 (2026-11-17) ----
+  'kings-rock': { name: '왕의징표석', desc: '공격이 맞으면 10% 로 상대가 풀죽음', flinch: 10 }, // 확률 % (기술 풀죽음과 같은 단위)
+  'razor-fang': { name: '예리한이빨', desc: '공격이 맞으면 10% 로 상대가 풀죽음', flinch: 10 },
+  'big-root': { name: '큰뿌리', desc: '흡수·씨뿌리기·아쿠아링·뿌리박기 회복 1.3배', healMult: 1.3 },
+  metronome: { name: '메트로놈', desc: '같은 기술을 연달아 쓸수록 위력 +20% (최대 2배)', metronome: 0.2 },
+  'zoom-lens': { name: '줌렌즈', desc: '이동하지 않고 공격하면 명중 1.2배', still: 1.2 },
+  'choice-scarf': { name: '구애스카프', desc: '스피드 1.5배·이동력 +1, 그 층에서 처음 쓴 기술만 쓸 수 있음', choice: 'any', speedMult: 1.5, move: 1 },
+  'iron-ball': { name: '검은철구', desc: '스피드 절반·이동력 −1, 땅에 붙음', speedMult: 0.5, move: -1, grounded: true },
+  'smoke-ball': { name: '연기구슬', desc: '이동을 막는 효과(검은눈빛·속박·개미지옥 등)를 무시', escape: true },
+  'quick-claw': { name: '선제공격손톱', desc: '차례 끝에 20% 로 한 번 더 움직임', quickClaw: 0.2 },
+  'lucky-egg': { name: '행복의알', desc: '받는 경험치 1.5배', expMult: 1.5 },
+  'amulet-coin': { name: '부적금화', desc: '출전하면 전투·층 돌파 코인 2배', coins: 2 },
 };
 
 // 상점 가격 (SRPG 가치 기준 · 스펙 2026-11-17-town-shop-design.md)
 const PRICES = {
-  150: ['flame-orb', 'toxic-orb', 'sticky-barb', 'destiny-knot', 'grip-claw', 'damp-rock', 'heat-rock', 'smooth-rock', 'icy-rock'],
+  150: ['flame-orb', 'toxic-orb', 'sticky-barb', 'destiny-knot', 'grip-claw', 'damp-rock', 'heat-rock', 'smooth-rock', 'icy-rock', 'iron-ball', 'smoke-ball'],
   500: ['light-ball', 'thick-club', 'deep-sea-tooth', 'deep-sea-scale', 'lucky-punch', 'stick'],
-  600: ['scope-lens', 'razor-claw', 'wide-lens', 'bright-powder', 'lax-incense', 'expert-belt', 'white-herb', 'black-sludge', 'shell-bell', 'focus-band', 'choice-band', 'choice-specs'],
-  1200: ['leftovers', 'life-orb', 'focus-sash', 'metal-powder'],
+  600: ['kings-rock', 'razor-fang', 'metronome', 'choice-scarf', 'quick-claw', 'scope-lens', 'razor-claw', 'wide-lens', 'bright-powder', 'lax-incense', 'expert-belt', 'white-herb', 'black-sludge', 'shell-bell', 'focus-band', 'choice-band', 'choice-specs'],
+  1200: ['leftovers', 'life-orb', 'focus-sash', 'metal-powder', 'lucky-egg', 'amulet-coin'],
 };
 for (const [p, ids] of Object.entries(PRICES)) for (const id of ids) HELD_ITEMS[id].price = Number(p);
 for (const it of Object.values(HELD_ITEMS)) it.price ??= 300; // 나머지 = 타입 강화 17 · 힘의머리띠 · 박식안경 · 빛의점토 · 멘탈허브
