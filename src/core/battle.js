@@ -23,7 +23,7 @@ import { newParty, abilityOf } from './progress.js';
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base, ivs, gender, weight, memberKey }) {
+export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base, ivs, gender, weight, memberKey, held = null }) {
   // 개체값·성별: 아군은 멤버 값, 적은 위치·레벨로 정해지는 무작위 (같은 층이면 같음). 메타몽은 31·성별 없음
   ivs ??= species === 'ditto' ? null : hashIvs(species, x, y, level);
   if (gender === undefined) gender = hashGender(species, x, y, level);
@@ -36,6 +36,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss, ability,
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES, species),
     moved: false, acted: false,
     healUses: HEAL_USES, // 회복기 (층마다 2번)
+    held: side === 'ally' ? held : null, // 지닌 도구 (적은 없음)
     // 특성: 동료는 멤버 값, 적은 위치·레벨로 정해지는 무작위 (같은 층이면 같은 특성)
     ability: ability ?? SPECIES[species].abilities[Math.floor(hash(species, x, y, level) * SPECIES[species].abilities.length)],
     ...newStages(),
@@ -61,7 +62,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
     const { x, y } = mapDef.allySlots[i];
     const build = m.species === 'ditto' && m.build ? { types: m.build.types, base: effectiveBase(m.build), ...(m.build.weight ? { weight: m.build.weight } : {}) } : {}; // 메타몽 빌드
-    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ivs: m.ivs ?? (m.species === 'ditto' ? null : hashIvs(m.species)), gender: m.gender ?? null, memberKey: keyOf(m), ...build });
+    const u = makeUnit({ species: m.species, side: 'ally', x, y, level: m.level, moves: m.moves, id: uniqueId(units, 'ally', m.species), ability: abilityOf(m), ivs: m.ivs ?? (m.species === 'ditto' ? null : hashIvs(m.species)), gender: m.gender ?? null, memberKey: keyOf(m), held: m.held ?? null, ...build });
     if (hpRatio[keyOf(m)]) u.hp = Math.max(1, Math.floor(u.maxHp * hpRatio[keyOf(m)]));
     units.push(u);
   });
@@ -777,7 +778,7 @@ export function arrive(state, unitId) {
   out.piles = openPiles(state, u);
   const i = state.chests.findIndex((c) => c.x === u.x && c.y === u.y);
   if (i >= 0) {
-    out.item = state.chests[i].item;
+    out.item = state.chests[i].held ? `held-${state.chests[i].held}` : state.chests[i].item; // 도구가 든 상자
     state.chests.splice(i, 1);
     state.log.loot.push(out.item);
   }

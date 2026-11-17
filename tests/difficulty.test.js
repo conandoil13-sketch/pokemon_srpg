@@ -77,7 +77,7 @@ test('threat medians rise floor by floor inside each dungeon (300 seeds)', () =>
 
 test('same seeds keep terrain, chests, stairs, ally slots and weather (enemies only change)', () => {
   const h = createHash('sha1');
-  for (const dg of DUNGEONS.slice(0, 2)) for (let seed = 1; seed <= 40; seed++) for (let fl = 1; fl <= dg.floors; fl++) { const m = generateFloor(dg, fl, seed); h.update(JSON.stringify([m.tiles, m.chests, m.weather, m.stairs, m.allySlots])); }
+  for (const dg of DUNGEONS.slice(0, 2)) for (let seed = 1; seed <= 40; seed++) for (let fl = 1; fl <= dg.floors; fl++) { const m = generateFloor(dg, fl, seed); h.update(JSON.stringify([m.tiles, m.chests.map(({ held, ...c }) => c), m.weather, m.stairs, m.allySlots])); } // 도구 상자(held)는 별도 난수라 빼고 비교
   assert.equal(h.digest('hex'), '19fa3023a2062ce5e5b58bcd5597a142541b88e8');
 });
 

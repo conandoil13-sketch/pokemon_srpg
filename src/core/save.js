@@ -1,4 +1,5 @@
 // 저장 / 불러오기 (순수 + 주입한 storage). storage = { getItem(key), setItem(key, value) }
+import { isHeldItem } from '../data/heldItems.js';
 import { IV_KEYS, IV_MAX, maxIvs, hashIvs, hashGender, genderFits } from './individual.js';
 import { cleanBuild, cleanCapsule, cleanPowders, emptyPowders, CAPSULE_BAG_MAX } from './dittoBuild.js';
 import { SPECIES } from '../data/species.js';
@@ -51,10 +52,13 @@ function cleanMember(m) {
   const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
   const out = { ...(Number.isInteger(m.uid) && m.uid > 0 ? { uid: m.uid } : {}), species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
   if (m.species === 'ditto') out.build = cleanBuild(m.build, level); // 메타몽만 빌드
+  if (isHeldItem(m.held)) out.held = m.held; // 지닌 도구 (없으면 칸 없음)
   Object.assign(out, cleanIndividual(m));
   return out;
 }
 
+const nonEmpty = (k, o) => (Object.keys(o).length ? { [k]: o } : {});
+const cleanHeldBag = (b) => Object.fromEntries(Object.entries(b && typeof b === 'object' ? b : {}).filter(([k]) => isHeldItem(k)).map(([k, n]) => [k, clampInt(n, 0, 99)]).filter(([, n]) => n > 0));
 const isDungeon = (id) => typeof id === 'string' && DUNGEONS.some((d) => d.id === id);
 const dungeonIds = (arr) => [...new Set((Array.isArray(arr) ? arr : []).filter(isDungeon))];
 
@@ -73,6 +77,7 @@ function cleanRun(r) {
       coins: clampInt(r.loot?.coins, 0, 9999999),
       capsules: (Array.isArray(r.loot?.capsules) ? r.loot.capsules : []).map(cleanCapsule).filter(Boolean).slice(-CAPSULE_BAG_MAX),
       powders: cleanPowders(r.loot?.powders),
+      ...nonEmpty('held', cleanHeldBag(r.loot?.held)),
     },
   };
 }
@@ -165,6 +170,7 @@ export function loadGame(storage) {
         evoStone: clampInt(data.items?.evoStone, 0, 999),
         tenVoucher: clampInt(data.items?.tenVoucher, 0, 99), // 10연속 뽑기 바우처
         powders: cleanPowders(data.items?.powders),
+        ...nonEmpty('held', cleanHeldBag(data.items?.held)), // 지니는 도구 가방 (비면 칸 없음)
         capsules: (Array.isArray(data.items?.capsules) ? data.items.capsules : []).map(cleanCapsule).filter(Boolean).slice(-CAPSULE_BAG_MAX),
       },
       unlocked: [...new Set([FIRST_DUNGEON, ...dungeonIds(data.unlocked)])],
