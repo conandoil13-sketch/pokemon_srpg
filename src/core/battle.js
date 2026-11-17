@@ -1,4 +1,5 @@
 // 전투 상태 (순수 로직, 상태 객체를 직접 갱신)
+import { itemOf, itemPhaseEnd, survives } from './items.js';
 import { hashIvs, hashGender } from './individual.js';
 import { effectiveBase } from './dittoBuild.js';
 import { MAP } from '../data/map.js';
@@ -225,7 +226,15 @@ function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false, br
     const r = applyStageChange(unit, key, change, turns, { fromOther, breaker });
     out.push({ unitId: unit.id, key, change, applied: r.applied, after: r.after });
   }
+  if (itemOf(unit)?.whiteHerb && !unit.whiteUsed && Object.values(unit.stages ?? {}).some((n) => n < 0)) { // 하얀허브: 떨어진 랭크 되돌림 (층마다 1번)
+    for (const k of Object.keys(unit.stages)) if (unit.stages[k] < 0) {
+      unit.layers = (unit.layers ?? []).filter((l) => !(l.key === k && l.amount < 0));
+      const ls = unit.layers.filter((l) => l.key === k); unit.stages[k] = Math.max(-6, Math.min(6, ls.reduce((s, l) => s + l.amount, 0))); unit.turns[k] = ls.reduce((m, l) => Math.max(m, l.turns), 0);
+    }
+    unit.whiteUsed = true; itemLog?.push({ unitId: unit.id, item: unit.held });
+  }
 }
+let itemLog = null; // 지금 기술의 특성·도구 알림 (applyMove 가 맞춤)
 
 // 피뢰침·마중물: 주변 2칸 안의 대상을 노린 단일 전기/물 기술을 끌어온다 (아군·적 모두, 사거리·편 무시).
 // 끌어온 유닛(대상이 원래 그 유닛이면 null)을 돌려준다. 화면도 연출 대상을 정할 때 쓴다
@@ -446,10 +455,12 @@ export function applyMove(state, userId, moveId, aim, rng) {
   if (restrict && a.charging?.moveId === moveId) a.charging = null;
   if (restrict) { a.moved = true; return { kind: move.category === 'status' ? 'status' : 'attack', blocked: restrict, stageChanges: [], statusChanges: [], thawed: [], missed: [], abilityEvents: [] }; } // 도발·앙코르 …
   if (has(a, 'truant')) a.loafNext = true; // 게으름: 다음 자기 차례는 쉰다
+  if (itemOf(a)?.choice && !a.choiceLock) a.choiceLock = moveId; // 구애: 그 층 첫 기술로 고정
   a.moved = true;
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
   const abilityEvents = (state.log.abilityEvents = []); // 이번 기술에서 발동한 특성 (연출용)
+  itemLog = abilityEvents;
   state.log.unbound = []; // 이번 기술로 쓰러진 묶은 쪽 → 풀린 속박
   state.log.bonded = []; // 이번 기술에서 길동무로 같이 쓰러진 유닛
   const moldBreaker = has(a, 'mold-breaker'); // 틀깨기: 상대의 방어 특성(클리어바디·유연·습기 …) 무시
@@ -611,6 +622,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (d.hp === 0 && move.id === 'false-swipe' && r.damage > 0) d.hp = 1; // 칼등치기: 최소 1 남김
       // 옹골참: HP 가득에서 한 방이면 1 남김 (한 층 한 번, 연속 공격은 첫 타만)
       if (k === 0 && d.hp === 0 && hpBefore === d.maxHp && has(d, 'sturdy') && !d.sturdyUsed && !breaksDef) { d.hp = 1; d.sturdyUsed = true; abilityEvents.push({ unitId: d.id, ability: 'sturdy' }); }
+      if (d.hp === 0 && r.damage > 0 && d !== a) { const sv = survives(d, hpBefore, rng); if (sv) { d.hp = 1; abilityEvents.push({ unitId: d.id, item: d.held, survived: sv }); } } // 기합의띠·기합의머리띠
       dealt += hpBefore - d.hp;
       fainted = d.hp === 0;
       // 반격 자세: 맞고 버텼으면 때린 상대에게 바로 돌려줌 (한 번)
@@ -665,7 +677,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       flinched.push(d.id);
     }
     if (landed && !fainted && last?.damage > 0 && BIND_MOVES.has(move.id) && !d.bound && state.units.includes(a)) { // 속박기
-      d.bound = { by: a.id, moveId: move.id, turns: BIND_TURNS, reach: move.range?.[1] ?? 1 };
+      d.bound = { by: a.id, moveId: move.id, turns: BIND_TURNS + (itemOf(a)?.bindTurns ?? 0), reach: move.range?.[1] ?? 1 };
       bound.push({ unitId: d.id, moveId: move.id });
     }
     if (landed && !fainted && last?.damage > 0) {
@@ -690,6 +702,13 @@ export function applyMove(state, userId, moveId, aim, rng) {
     recoilDamage = Math.max(1, Math.floor(dealt * -move.drain / 100));
     a.hp = Math.max(0, a.hp - recoilDamage);
     if (a.hp === 0) knockOut(state, a, null, { reward: false }); // 반동 기절: 보상 없음
+  }
+  const aItem = state.units.includes(a) ? itemOf(a) : null; // 생명의구슬 반동 · 조개껍질방울 회복
+  if (aItem?.shellBell && dealt > 0 && canHeal(a) && a.hp < a.maxHp) { a.hp = Math.min(a.maxHp, a.hp + Math.max(1, Math.floor(dealt * aItem.shellBell))); abilityEvents.push({ unitId: a.id, item: a.held }); }
+  if (aItem?.lifeOrb && dealt > 0 && !magicGuard(a)) {
+    const loss = Math.min(a.hp, Math.max(1, Math.floor(a.maxHp / 10)));
+    a.hp -= loss; abilityEvents.push({ unitId: a.id, item: a.held, damage: loss });
+    if (a.hp === 0) knockOut(state, a, null, { reward: false });
   }
   // 경험치는 공격이 끝난 뒤 살아 있는 아군 기준 (목록 순서에 따라 달라지지 않게)
   for (const d of knocked) for (const [sp, n] of Object.entries(awardExp(state, a, d))) expGained[sp] = (expGained[sp] ?? 0) + n;
@@ -819,6 +838,14 @@ export function endPhase(state, rng = Math.random) {
       events.push({ unitId: u.id, kind: w.kind, damage: w.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
+    // 지니는 도구: 먹다남은음식·검은진흙·끈적끈적바늘·화염구슬·독독구슬
+    const ip = itemPhaseEnd(u);
+    if (ip?.heal && canHeal(u)) { u.hp = Math.min(u.maxHp, u.hp + ip.heal); abilityLog.push({ unitId: u.id, item: u.held }); }
+    if (ip?.damage && !magicGuard(u)) {
+      u.hp = Math.max(0, u.hp - ip.damage); abilityLog.push({ unitId: u.id, item: u.held, damage: ip.damage });
+      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
+    }
+    if (ip?.ailment && inflict(u, ip.ailment, () => 0, null, W).ok) abilityLog.push({ unitId: u.id, item: u.held });
     // 특성: 날씨 회복·피해, 가속, 탈피, 촉촉바디
     const hpRate = phaseEndHp(u, W);
     if (hpRate > 0 && u.hp < u.maxHp && canHeal(u)) { u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * hpRate))); abilityLog.push({ unitId: u.id, ability: u.ability }); }

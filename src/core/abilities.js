@@ -1,6 +1,7 @@
 // 특성 효과 (순수). 전투 코드가 정해진 시점에 부르는 훅 모음 (스펙 §3·§4)
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
+import { itemAttackMult, itemDefMult, itemCritBonus, itemAcc } from './items.js';
 
 export const PUNCH = ['ice-punch', 'fire-punch', 'thunder-punch', 'mach-punch', 'mega-punch', 'comet-punch', 'dizzy-punch', 'dynamic-punch', 'focus-punch', 'hammer-arm', 'meteor-mash', 'drain-punch', 'bullet-punch', 'shadow-punch', 'sky-uppercut'];
 export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell'];
@@ -56,7 +57,7 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   if (attacker.slowTurns > 0 && physical) m *= 0.5;            // 슬로스타트
   if (attacker.plusActive && !physical) m *= 1.5;               // 플러스·마이너스 (전투가 옆 동료를 보고 켬)
   if (attacker.flowerActive && physical) m *= 1.5;              // 플라워기프트 (쾌청 + 본인/옆)
-  return m;
+  return m * itemAttackMult(attacker, defender, move, typeMult, type); // 지니는 도구
 }
 // 화상의 물리 반감을 무시하는가 (근성)
 export const ignoresBurn = (attacker) => has(attacker, 'guts');
@@ -71,7 +72,7 @@ export function defendMult(attacker, defender, move, { typeMult }) {
   if (def(attacker, defender, 'marvel-scale') && defender.status && physical) m /= 1.5;
   if (def(attacker, defender, 'dry-skin') && type === 'fire') m *= 1.25;
   if (defender.flowerActive && !physical) m /= 1.5;
-  return m;
+  return m * itemDefMult(defender, move); // 심해의비늘·메탈파우더
 }
 
 // 무효·흡수: null 또는 { ability, heal?(최대 HP 비율), boost?(랭크), flashFire? }
@@ -99,6 +100,7 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
   if (has(attacker, 'hustle') && move.category === 'physical') v *= 0.8;
   if ((def(attacker, defender, 'sand-veil') && weather === 'sand') || (def(attacker, defender, 'snow-cloak') && weather === 'hail')) v -= 20;
   if (def(attacker, defender, 'tangled-feet') && defender.confusion > 0) v -= 20;
+  v *= itemAcc(attacker, defender); // 광각렌즈·빛의가루
   return { value: v, sure: false };
 }
 
@@ -107,7 +109,7 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
 export function critRate(attacker, defender, move = null) {
   if (defender?.field?.luckyChant) return 0; // 주술 오라
   if (def(attacker, defender, 'battle-armor') || def(attacker, defender, 'shell-armor')) return 0;
-  const stage = (move?.critRate ?? 0) + (has(attacker, 'super-luck') ? 1 : 0) + (attacker.focusEnergy ? 2 : 0); // 기충전 +2
+  const stage = (move?.critRate ?? 0) + (has(attacker, 'super-luck') ? 1 : 0) + (attacker.focusEnergy ? 2 : 0) + itemCritBonus(attacker); // 기충전 +2 · 초점렌즈 등
   return stage >= 2 ? 1 / 4 : stage === 1 ? 1 / 8 : 1 / 16;
 }
 export const critMult = (attacker) => (has(attacker, 'sniper') ? 2.25 : 1.5);

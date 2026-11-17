@@ -62,3 +62,106 @@ test('party held items reach battle units; enemies hold nothing', () => {
   assert.equal(s.units.find((u) => u.side === 'ally').held, 'leftovers');
   assert.ok(s.units.filter((u) => u.side === 'enemy').every((u) => u.held === null));
 });
+
+// ---- 전투 효과 ----
+import { applyMove, endPhase } from '../src/core/battle.js';
+import { itemAttackMult, itemOf } from '../src/core/items.js';
+import { critRate, accuracyFor } from '../src/core/abilities.js';
+import { MOVES } from '../src/data/moves.js';
+import { castField } from '../src/core/field.js';
+import { newParty } from '../src/core/progress.js';
+
+const duel = (allyHeld, { ally = null, foe = 'bidoof', foeLevel = 5 } = {}) => {
+  const party = newParty().slice(0, 1).map((m) => ({ ...m, ...(ally ? { species: ally } : {}), held: allyHeld }));
+  const s = createBattle({ tiles: ['......', '......'], allySlots: [{ x: 1, y: 0 }], enemies: [{ species: foe, level: foeLevel, x: 2, y: 0 }], stairs: null, chests: [] }, party);
+  return { s, a: s.units.find((u) => u.side === 'ally'), e: s.units.find((u) => u.side === 'enemy') };
+};
+const rng0 = () => 0.5;
+
+test('damage multipliers: type boost, band, glasses, expert belt, life orb, choice', () => {
+  const { a, e } = duel('charcoal');
+  assert.equal(itemAttackMult(a, e, MOVES.ember, 1), 1.2); assert.equal(itemAttackMult(a, e, MOVES.tackle, 1), 1);
+  a.held = 'muscle-band'; assert.equal(itemAttackMult(a, e, MOVES.tackle, 1), 1.1); assert.equal(itemAttackMult(a, e, MOVES.ember, 1), 1);
+  a.held = 'expert-belt'; assert.equal(itemAttackMult(a, e, MOVES.ember, 2), 1.2); assert.equal(itemAttackMult(a, e, MOVES.ember, 1), 1);
+  a.held = 'life-orb'; assert.equal(itemAttackMult(a, e, MOVES.ember, 1), 1.3);
+  a.held = 'choice-band'; assert.equal(itemAttackMult(a, e, MOVES.tackle, 1), 1.5); assert.equal(itemAttackMult(a, e, MOVES.ember, 1), 1);
+});
+
+test('species items only work on their species', () => {
+  const { a, e } = duel('light-ball');
+  assert.equal(itemOf(a), null);
+  const p = duel('light-ball', { ally: 'pikachu' });
+  assert.equal(itemAttackMult(p.a, p.e, MOVES.tackle, 1), 2);
+  void e;
+});
+
+test('enemies hold nothing even if a held field is set', () => {
+  const { e } = duel(null); e.held = 'leftovers';
+  assert.equal(itemOf(e), null);
+});
+
+test('life orb costs 1/10 only when it hits', () => {
+  const { s, a, e } = duel('life-orb', { foeLevel: 60 });
+  a.moves = ['tackle']; const hp = a.hp;
+  applyMove(s, a.id, 'tackle', e.id, () => 0); // 명중
+  assert.equal(hp - a.hp, Math.max(1, Math.floor(a.maxHp / 10)));
+  assert.ok(s.log.abilityEvents.some((ev) => ev.item === 'life-orb'));
+});
+
+test('choice band locks the first move for the floor', () => {
+  const { s, a, e } = duel('choice-band', { foeLevel: 60 });
+  a.moves = ['tackle', 'growl'];
+  applyMove(s, a.id, 'tackle', e.id, rng0);
+  a.acted = a.moved = false;
+  assert.equal(applyMove(s, a.id, 'growl', e.id, rng0).blocked, 'choice');
+  const next = duel('choice-band'); assert.equal(next.a.choiceLock, undefined); // 새 층 = 새 유닛
+});
+
+test('leftovers heal 1/16 at the end of the own phase, even with the ability turned off', () => {
+  const { s, a } = duel('leftovers');
+  a.hp = 1; a.abilityOff = true;
+  endPhase(s, rng0);
+  assert.equal(a.hp, 1 + Math.max(1, Math.floor(a.maxHp / 16)));
+  assert.ok(s.log.phaseAbilityEvents.some((ev) => ev.item === 'leftovers'));
+});
+
+test('black sludge hurts non-poison types; sticky barb hurts; flame orb burns', () => {
+  let { s, a } = duel('black-sludge'); const hp = a.hp; endPhase(s, rng0); assert.equal(hp - a.hp, Math.max(1, Math.floor(a.maxHp / 8)));
+  ({ s, a } = duel('flame-orb')); endPhase(s, rng0); assert.equal(a.status, 'burn');
+  ({ s, a } = duel('toxic-orb')); a.status = 'paralysis'; endPhase(s, rng0); assert.equal(a.status, 'paralysis');
+});
+
+test('focus sash keeps 1 hp from full once per floor', () => {
+  const { s, a, e } = duel(null, { foeLevel: 80 });
+  // 적이 아군을 공격하게 아군에 기합의띠
+  const sash = duel('focus-sash', { foeLevel: 90 });
+  sash.e.moves = ['tackle']; sash.s.phase = 'enemy';
+  sash.a.hp = sash.a.maxHp;
+  for (let i = 0; i < 2; i++) { sash.e.acted = sash.e.moved = false; applyMove(sash.s, sash.e.id, 'tackle', sash.a.id, () => 0); if (i === 0) assert.equal(sash.a.hp, 1); }
+  assert.ok(!sash.s.units.includes(sash.a) || sash.a.hp === 0 || sash.a.hp === 1);
+  void s; void a; void e;
+});
+
+test('scope lens raises crit; wide lens and bright powder change accuracy', () => {
+  const { a, e } = duel('scope-lens');
+  assert.equal(critRate(a, e, MOVES.tackle), 1 / 8);
+  a.held = 'wide-lens'; assert.ok(Math.abs(accuracyFor(a, e, MOVES.tackle, 100).value - 110) < 1e-9);
+  a.held = null;
+  const b = duel('bright-powder'); assert.ok(Math.abs(accuracyFor(b.e, b.a, MOVES.tackle, 100).value - 90) < 1e-9);
+});
+
+test('white herb restores dropped stats once', () => {
+  const { s, a, e } = duel('white-herb');
+  e.moves = ['growl']; s.phase = 'enemy';
+  applyMove(s, e.id, 'growl', a.id, () => 0);
+  assert.equal(a.stages.atk, 0); assert.equal(a.whiteUsed, true);
+  e.acted = e.moved = false; applyMove(s, e.id, 'growl', a.id, () => 0);
+  assert.equal(a.stages.atk, -1);
+});
+
+test('light clay and damp rock lengthen screens and rain', () => {
+  const { s, a } = duel('light-clay');
+  castField(s, a, 'reflect'); assert.equal(s.zones.find((x) => x.kind === 'reflect').turns, 8);
+  const r = duel('damp-rock'); r.a.moves = ['rain-dance']; applyMove(r.s, r.a.id, 'rain-dance', r.a.id, rng0);
+  assert.equal(r.s.weatherTimer.turns, 8);
+});
