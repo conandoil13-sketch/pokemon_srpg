@@ -811,7 +811,7 @@ export function arrive(state, unitId) {
 // 페이즈 전환: 끝나는 편 상태 데미지·혼란 → 랭크 만료 → 시작하는 편 잠듦·얼음
 // 스피드 보너스: 그 편 가장 느린 유닛이 상대 편 가장 느린 유닛보다 2배 이상 빠르면, 그 편 가장 빠른 유닛이 한 번 더 (페이즈마다 1번)
 export const SPEED_BONUS_RATIO = 2;
-export const speedOf = (u) => effectiveStat(u, 'spe'); // 랭크·마비·순풍 반영
+export const speedOf = (u) => effectiveStat(u.status === 'paralysis' ? { ...u, status: null } : u, 'spe'); // 랭크·순풍 반영, 마비는 뺌 (마비가 이득을 두 번 보지 않게)
 export function speedBonusUnit(state, side) {
   if (state.bonusGiven) return null;
   const live = (s) => state.units.filter((u) => u.side === s && u.hp > 0 && !u.bot);

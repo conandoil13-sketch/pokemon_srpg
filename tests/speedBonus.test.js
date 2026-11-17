@@ -19,7 +19,8 @@ test('the side whose slowest is twice the foes slowest gets its fastest unit', (
 
 test('the 2x edge, paralysis and stat stages count', () => {
   let t = setup(); t.e.stats.spe = 50.1; assert.equal(speedBonusUnit(t.s, 'ally'), null);
-  t = setup(); t.a.status = 'paralysis'; assert.equal(speedBonusUnit(t.s, 'ally'), null); // 100 → 50
+  t = setup(); t.a.status = 'paralysis'; assert.equal(speedBonusUnit(t.s, 'ally'), t.b); // 마비는 비교에서 뺌 (100 그대로)
+  t = setup(); t.e.stats.spe = 90; t.f.stats.spe = 90; t.e.status = 'paralysis'; assert.equal(speedBonusUnit(t.s, 'ally'), null); // 상대를 마비시켜도 90 그대로
   t = setup(); t.e.stats.spe = 80; t.f.stats.spe = 80; t.a.stages.spe = 2; assert.equal(speedBonusUnit(t.s, 'ally'), null); // a 200 · b 150 < 160
   t = setup(); t.e.stats.spe = 70; t.f.stats.spe = 70; t.a.stages.spe = 2; assert.equal(speedBonusUnit(t.s, 'ally'), t.a); // a 200 · b 150 ≥ 140
 });
