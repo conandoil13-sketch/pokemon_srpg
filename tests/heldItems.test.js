@@ -165,3 +165,13 @@ test('light clay and damp rock lengthen screens and rain', () => {
   const r = duel('damp-rock'); r.a.moves = ['rain-dance']; applyMove(r.s, r.a.id, 'rain-dance', r.a.id, rng0);
   assert.equal(r.s.weatherTimer.turns, 8);
 });
+
+// ---- 화면 문구 ----
+import { abilityNotices, itemLine } from '../src/game/states.js';
+test('item notices read naturally', () => {
+  const u = { id: 'ally-x', species: 'pikachu', side: 'ally', x: 1, y: 1 };
+  const lines = abilityNotices([{ unitId: u.id, item: 'leftovers' }], () => u);
+  assert.match(lines[0].lines[0], /의 먹다남은음식!$/);
+  assert.match(itemLine({ item: 'focus-sash', survived: 'sash' }, '피카츄'), /기합의띠로 버텼다!$/);
+  assert.match(itemLine({ item: 'life-orb', damage: 3 }, '피카츄'), /생명이 조금 깎였다!$/);
+});

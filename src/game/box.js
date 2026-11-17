@@ -1,4 +1,6 @@
 // 편성소 박스: 아이콘 격자(6×5) + 왼쪽 패널 + 아래 출전 줄. 확인 = 동료 메뉴(출전·자세히 보기·진화의돌·특성)
+import { HELD_ITEMS } from '../data/heldItems.js';
+import { equip, unequip } from '../core/heldBag.js';
 import { SPECIES } from '../data/species.js';
 import { ABILITIES } from '../data/abilities.js';
 import { abilityOf, typesOfMember } from '../core/progress.js';
@@ -58,6 +60,22 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     return { label: `한 마리 더 (결정 ${COPY_COST})`, enabled: !why, act: 'copy', why };
   }
 
+  // 도구: 지닌 것 + 가방 → 고르면 지니기 / 바꾸기, 맨 위는 빼기
+  function heldMenuItem(m) {
+    const owned = Object.values(game.items.held ?? {}).some((n) => n > 0);
+    const why = !owned && !m.held ? '가방에 도구가 없다. 보물상자에서 얻을 수 있다.' : null;
+    return { label: m.held ? `도구: ${HELD_ITEMS[m.held].name}` : '도구 지니기', enabled: !why, act: 'held', why };
+  }
+  function openHeld(m) {
+    const bag = Object.entries(game.items.held ?? {}).filter(([, n]) => n > 0);
+    menu = [
+      ...(m.held ? [{ label: `${HELD_ITEMS[m.held].name} 빼기`, enabled: true, act: 'unequip' }] : []),
+      ...bag.map(([id, n]) => ({ label: `${HELD_ITEMS[id].name} ×${n}`, enabled: true, act: `equip:${id}` })),
+      { label: '그만둔다', enabled: true, act: 'close' },
+    ];
+    menuSel = 0; mode = 'menu';
+  }
+
   function openMenu() {
     const m = current();
     if (!m) return;
@@ -67,6 +85,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       { label: '자세히 보기', enabled: true, act: 'summary' },
       { label: `진화의돌 (${game.items.evoStone}개)`, enabled: canStone, act: 'stone' },
       ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }, copyItem(m)]),
+      heldMenuItem(m), // 지니는 도구
       { label: '그만둔다', enabled: true, act: 'close' },
     ];
     menuSel = 0; mode = 'menu';
@@ -90,6 +109,9 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     const m = current();
     if (!m) return;
     if (!item.enabled) { if (item.why) say(item.why); return; } // 회색 항목: 이유만 알려 준다
+    if (item.act === 'held') { openHeld(m); return; }
+    if (item.act === 'unequip') { const name = HELD_ITEMS[m.held].name; unequip(game, memberKey(m)); onSave(); say([`${josa(name, '을/를')} 가방에 넣었다.`]); return; }
+    if (item.act.startsWith('equip:')) { const id = item.act.slice(6); equip(game, memberKey(m), id); onSave(); say([`${josa(HELD_ITEMS[id].name, '을/를')} 지니게 했다.`, HELD_ITEMS[id].desc]); return; }
     if (item.act === 'close') { back(); return; }
     if (item.act === 'summary') { openSummary(0); return; }
     if (item.act === 'ability') { openSummary(3); return; }
