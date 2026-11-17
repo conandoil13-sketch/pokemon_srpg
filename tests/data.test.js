@@ -53,10 +53,10 @@ test('korean names, learnable flags, movement and range rules', () => {
   assert.equal(MOVES['close-combat'].name, '인파이트');
   assert.equal(MOVES.growl.learnable, true); // 능력치 변화기는 이제 배운다
   assert.equal(MOVES['thunder-wave'].learnable, true); // 상태이상 기술도 배운다
-  assert.equal(SPECIES.bronzor.move, 3);
+  assert.equal(SPECIES.bronzor.move, 2); // 스피드 23 → 2 (2026-11-18 구간 넓힘)
   assert.equal(SPECIES.gible.move, 3);
   assert.equal(SPECIES.chimchar.move, 4);
-  assert.equal(SPECIES.murkrow.move, 6);
+  assert.equal(SPECIES.murkrow.move, 7); // 91 → 6 + 비행 1
   assert.deepEqual(MOVES['aura-sphere'].range, [2, 3]);
   assert.deepEqual(MOVES.scratch.range, [1, 1]);
   assert.deepEqual(MOVES.ember.range, [1, 2]);

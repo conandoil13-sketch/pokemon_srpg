@@ -11,8 +11,8 @@ test('tile costs', () => {
 });
 
 test('open field: diamond of radius = move', () => {
-  // bronzor 이동력 3, 7x7 중앙
-  const u = unit('bronzor', 'ally', 3, 3);
+  // gible 이동력 3 (bronzor 는 2026-11-18 구간 변경으로 2), 7x7 중앙
+  const u = unit('gible', 'ally', 3, 3);
   const r = reachable(open(7, 7), [u], u);
   assert.equal(r.size, 25); // 1+4+8+12
   assert.equal(r.get('3,3'), 0);
@@ -90,7 +90,7 @@ test('paralysis halves the movement budget', () => {
   const grid = Array.from({ length: 11 }, () => '.'.repeat(11));
   const u = { species: 'pikachu', side: 'ally', x: 5, y: 5, hp: 1 };
   const far = (m) => Math.max(...[...m.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return Math.abs(x - 5) + Math.abs(y - 5); }));
-  assert.equal(far(reachable(grid, [u], u)), 5);
+  assert.equal(far(reachable(grid, [u], u)), 6); // 피카츄 스피드 90 → 6 (2026-11-18)
   u.status = 'paralysis';
-  assert.equal(far(reachable(grid, [u], u)), 2);
+  assert.equal(far(reachable(grid, [u], u)), 3);
 });

@@ -6,7 +6,7 @@ import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
 import { rollChestHeld } from '../data/heldItems.js';
 
-const W = 16, H = 12;
+import { DEFAULT_SIZE } from '../data/mapSize.js'; // 후반 던전은 넓음 (data/mapSize.js)
 const WALK = '."^>'; // 땅 타입이 지나갈 수 있는 칸
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const SAFE_COLS = 3; // 아군 출발 구역 (x < 3) 에는 지형을 칠하지 않는다
@@ -17,6 +17,7 @@ const key = (x, y) => `${x},${y}`;
 
 // 땅 이동 기준 BFS. 반환: Map<"x,y", 거리>
 function distances(tiles, start) {
+  const W = tiles[0].length, H = tiles.length;
   const dist = new Map([[key(start.x, start.y), 0]]);
   const queue = [start];
   while (queue.length) {
@@ -61,11 +62,12 @@ export function generateFloor(dungeon, floor, seed) {
   const pick = (arr) => arr[Math.floor(rng() * arr.length)];
   const shuffle = (arr) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
 
-  // 1~2. 바닥 + 지형 덩어리 (무작위 걸음)
+  // 1~2. 바닥 + 지형 덩어리 (무작위 걸음). 넓은 맵은 덩어리 수를 면적비로 늘림
+  const [W, H] = dungeon.size ?? DEFAULT_SIZE, area = (W * H) / (DEFAULT_SIZE[0] * DEFAULT_SIZE[1]);
   const g = Array.from({ length: H }, () => new Array(W).fill('.'));
   for (const tile of ['~', '#', '^', '"']) {
     const c = dungeon.clusters[tile];
-    const n = Array.isArray(c) ? int(c[0], c[1]) : c;
+    const n0 = Array.isArray(c) ? int(c[0], c[1]) : c, n = area === 1 ? n0 : Math.round(n0 * area);
     for (let i = 0; i < n; i++) {
       let x = int(SAFE_COLS, W - 1), y = int(0, H - 1);
       for (let s = int(4, 12); s > 0; s--) {
@@ -171,6 +173,7 @@ export function generateFloor(dungeon, floor, seed) {
 
 // 낙엽더미: 바닥 칸(출발 3열 밖, 출발 칸과 안 붙음)에 '*'. 놓아도 나머지 칸이 모두 이어질 때만. 포켓몬 60% · 상자 40%
 function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
+  const W = g[0].length, H = g.length;
   const rng = createRng(hashSeed(seed, 2000));
   const [lo, hi] = dungeon.piles, want = lo + Math.floor(rng() * (hi - lo + 1));
   const nearAlly = (x, y) => allySlots.some((a) => Math.abs(a.x - x) + Math.abs(a.y - y) <= 1);

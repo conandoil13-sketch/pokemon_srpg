@@ -1,7 +1,7 @@
 // 상태이상 (순수). 본가 4~5세대 규칙을 SRPG 페이즈 단위로.
 // unit.status: 주 상태이상 하나, unit.statusTurns: 잠듦 남은 수면 / 얼음 남은 턴 / 맹독 n, unit.confusion: 혼란 남은 턴
 import { itemOf } from './items.js';
-import { SPECIES } from '../data/species.js';
+import { SPECIES, movementFor } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { weatherBlocksAilment } from './weather.js';
 import { blocksAilment, has, moveBonus, ignoresParalysisSlow } from './abilities.js';
@@ -61,7 +61,7 @@ export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 export const moveBudget = (unit) => {
   const runAway = has(unit, 'run-away') || !!itemOf(unit)?.escape; // 도주 · 연기구슬: 상대가 거는 이동 제한(이동 불가·속박·묶기 특성)을 무시
   if (unit.rooted || (!runAway && (unit.noMove > 0 || unit.bound))) return 0; // 검은눈빛·블록·거미집·뿌리박기·속박
-  const m = SPECIES[unit.species].move;
+  const m = unit.baseSpe !== undefined ? movementFor(unit.types ?? SPECIES[unit.species].types, unit.baseSpe) : SPECIES[unit.species].move; // 메타몽: 빌드 스피드·타입
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
   if (unit.trapped && !runAway) return 1; // 개미지옥·그림자밟기·자력
   const grounded = unit.grounded && (unit.types ?? SPECIES[unit.species].types).includes('flying') ? 1 : 0; // 중력: 비행 +1 없어짐

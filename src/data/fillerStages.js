@@ -2,6 +2,7 @@
 // 진짜 새 맵을 만들면 REPLACED 에 { 번호: 던전 } 으로 넣어 그 자리를 대체한다 (해금 사슬은 순서대로 다시 이어짐).
 // 스펙 docs/superpowers/specs/2026-11-17-filler-stages-design.md
 import { SINNOH_DUNGEONS } from './sinnohDungeons.js';
+import { mapSizeFor } from './mapSize.js';
 
 export const FILLER_COUNT = 8;
 export const REPLACED = {}; // 예: { 1: myNewDungeon }
@@ -35,6 +36,7 @@ export function fillerStage(n) {
     boss: { levelBonus: 3 },
     clusters: t.clusters,
     weather: t.weather,
+    size: mapSizeFor(s), // 후반 단계는 맵이 넓음
     filler: true, // 임시 단계 표시 (나중에 진짜 맵으로 대체)
   };
 }

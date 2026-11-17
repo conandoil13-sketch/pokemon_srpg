@@ -32,6 +32,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss, ability,
   return {
     id: id ?? `${side}-${species}`, species, side, x, y, level, stats,
     types: [...(types ?? SPECIES[species].types)], // 타입은 유닛 기준 (메타몽 빌드)
+    baseSpe: (base ?? SPECIES[species].base).spe, // 이동력용 종족값 스피드 (메타몽 빌드 반영)
     ivs, gender, weight: weight ?? SPECIES[species].weight,
     hp: stats.hp, maxHp: stats.hp,
     moves: moves?.length ? [...moves] : startingMoves(SPECIES[species].learnset, level, MOVES, species),
