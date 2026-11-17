@@ -20,9 +20,14 @@ export function typesOf(unit, weather = null) {
 export const moveTypeOf = (attacker, move) => (has(attacker, 'normalize') ? 'normal' : move.type);
 
 // 상성 (배짱: 노말·격투가 고스트에게 맞음)
+// 떠 있음: 비행 타입·부유·전자부유 (중력이면 모두 땅에 붙음)
+export const airborne = (u) => !u.grounded && (typesOf(u).includes('flying') || has(u, 'levitate') || u.magnetRise > 0);
+
 export function typeEffect(attacker, defender, move, weather = null) {
   const type = moveTypeOf(attacker, move);
   let types = typesOf(defender, weather);
+  if (type === 'ground' && defender.grounded) types = types.filter((t) => t !== 'flying'); // 중력: 비행도 땅 기술을 맞음
+  else if (type === 'ground' && defender.magnetRise > 0) return 0; // 전자부유: 땅 기술 무효
   if ((has(attacker, 'scrappy') || defender.identNormal) && (type === 'normal' || type === 'fighting')) types = types.filter((t) => t !== 'ghost'); // 배짱·꿰뚫어보기
   if (defender.identPsychic && type === 'psychic') types = types.filter((t) => t !== 'dark'); // 미라클아이
   return types.length ? typeMultiplier(type, types) : 1;
@@ -73,7 +78,7 @@ export function defendMult(attacker, defender, move, { typeMult }) {
 export function immunity(attacker, defender, move, typeMult = 1) {
   if (breaks(attacker) || attacker === defender) return null;
   const type = moveTypeOf(attacker, move), a = defender.ability;
-  if (a === 'levitate' && type === 'ground') return { ability: a };
+  if (a === 'levitate' && type === 'ground' && !defender.grounded) return { ability: a };
   if (a === 'volt-absorb' && type === 'electric') return { ability: a, heal: 1 / 4 };
   if (a === 'water-absorb' && type === 'water') return { ability: a, heal: 1 / 4 };
   if (a === 'dry-skin' && type === 'water') return { ability: a, heal: 1 / 4 };
@@ -174,7 +179,7 @@ export const SYNC_AILMENTS = ['poison', 'toxic', 'paralysis', 'burn'];
 // 묶기: 옆의 상대(trapper 기준)를 다음 차례 이동력 1로
 export function traps(trapper, foe) {
   if (has(trapper, 'shadow-tag')) return true;
-  if (has(trapper, 'arena-trap')) return !typesOf(foe).includes('flying') && !has(foe, 'levitate');
+  if (has(trapper, 'arena-trap')) return !airborne(foe);
   if (has(trapper, 'magnet-pull')) return typesOf(foe).includes('steel');
   return false;
 }

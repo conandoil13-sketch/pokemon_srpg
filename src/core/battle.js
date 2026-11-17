@@ -228,11 +228,26 @@ function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false, br
 
 // 피뢰침·마중물: 주변 2칸 안의 대상을 노린 단일 전기/물 기술을 끌어온다 (아군·적 모두, 사거리·편 무시).
 // 끌어온 유닛(대상이 원래 그 유닛이면 null)을 돌려준다. 화면도 연출 대상을 정할 때 쓴다
+export const FOLLOW_RANGE = 3, TELEPORT_RANGE = [1, 4];
+// 순간이동으로 갈 수 있는 칸: 반경 1~4, 들어갈 수 있고 빈 칸 (계단·상자·상대 압정 칸 제외)
+export function teleportSpots(state, u) {
+  const out = [];
+  for (let y = u.y - 4; y <= u.y + 4; y++) for (let x = u.x - 4; x <= u.x + 4; x++) {
+    const d = Math.abs(x - u.x) + Math.abs(y - u.y), tile = state.grid[y]?.[x];
+    if (d < TELEPORT_RANGE[0] || d > TELEPORT_RANGE[1] || tile === undefined || tile === '#' || tile === '>' || !canEnter(tile, u)) continue;
+    if (state.units.some((o) => o.x === x && o.y === y) || (state.chests ?? []).some((c) => c.x === x && c.y === y) || (state.spikes ?? []).some((t) => t.x === x && t.y === y && t.side !== u.side)) continue; // 상대 압정 칸도 제외
+    out.push({ x, y });
+  }
+  return out;
+}
+
 export function redirectTarget(state, userId, moveId, aim) {
   if (!(typeof aim === 'string' || aim?.unitId)) return null;
   const mv = MOVES[moveId], user = byId(state, userId), tgt = byId(state, typeof aim === 'string' ? aim : aim.unitId);
   if (!user || !tgt || (mv.shape?.type ?? 'single') !== 'single' || has(user, 'mold-breaker')) return null;
   if (mv.category === 'status' && mv.kind === 'self') return null;
+  const follow = state.units.filter((o) => o.followMe && o.hp > 0 && o.side !== user.side && dist(o, user) <= FOLLOW_RANGE).sort((p, q) => dist(p, user) - dist(q, user))[0]; // 날따름이 먼저
+  if (follow) return follow !== tgt ? follow : null;
   const type = moveTypeOf(user, mv);
   const rod = state.units.filter((o) => o.id !== userId && REDIRECT[o.ability] === type && dist(o, tgt) <= 2).sort((p, q) => dist(p, tgt) - dist(q, tgt))[0];
   return rod && rod !== tgt ? rod : null;
@@ -255,7 +270,7 @@ export function retreatMove(state, id, x, y, cost = 0) {
 // 보스·뿌리박기는 안 밀림. 밀려난 포켓몬은 랭크 변화가 지워지고, 지난 압정은 밟은 것
 export const PUSH_TILES = 3;
 // ---- 회복·상태 조작 (SRPG식) ----
-const SUPPORT = new Set(['refresh', 'teamCure', 'wish', 'stockpile', 'swallow', 'sacrificeHeal', 'memento', 'painSplit', 'bellyDrum', 'acupressure', 'psychUp', 'powerSwap', 'guardSwap', 'heartSwap', 'psychoShift', 'nightmare', 'teeterDance', 'splash']);
+const SUPPORT = new Set(['batonPass', 'refresh', 'teamCure', 'wish', 'stockpile', 'swallow', 'sacrificeHeal', 'memento', 'painSplit', 'bellyDrum', 'acupressure', 'psychUp', 'powerSwap', 'guardSwap', 'heartSwap', 'psychoShift', 'nightmare', 'teeterDance', 'splash']);
 const FLOOR_TURNS = 9999; // 그 층 동안 유지되는 랭크 (비축하기·추억의선물·배북)
 const SWAP_RESET = 3; // 스왑: 바꾼 랭크 변화는 남은 턴이 3으로
 export const SPLASH_GYARADOS = 0.02; // 튀어오르기 이스터에그: 아군 갸라도스 등장 확률
@@ -284,6 +299,18 @@ function releaseStock(u) {
 function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out) {
   const res = (ok, extra = {}) => ({ unitId: t.id, effect: move.effect, ok, ...extra });
   switch (move.effect) {
+    case 'batonPass': { // 배턴터치: 자리를 바꾸고 내 랭크 변화를 그 아군에게 (나는 원래대로). 뿌리박기·속박이면 실패
+      if (t === a || t.side !== a.side || a.rooted || t.rooted || a.bound || t.bound || !canEnter(state.grid[a.y][a.x], t) || !canEnter(state.grid[t.y][t.x], a)) return res(false);
+      const keys = [...new Set((a.layers ?? []).map((l) => l.key))];
+      for (const k of keys) {
+        t.layers = (t.layers ?? []).concat(a.layers.filter((l) => l.key === k).map((l) => ({ ...l })));
+        a.layers = a.layers.filter((l) => l.key !== k);
+        for (const u of [a, t]) { const ls = u.layers.filter((l) => l.key === k); u.stages[k] = Math.max(-6, Math.min(6, ls.reduce((s, l) => s + l.amount, 0))); u.turns[k] = ls.reduce((m, l) => Math.max(m, l.turns), 0); }
+      }
+      const from = { x: a.x, y: a.y };
+      a.x = t.x; a.y = t.y; t.x = from.x; t.y = from.y; refreshField(state);
+      return res(true, { swapped: { a: a.id, t: t.id, from, to: { x: a.x, y: a.y } }, passed: keys });
+    }
     case 'refresh': if (!['burn', 'poison', 'toxic', 'paralysis'].includes(t.status)) return res(false); cure(t); return res(true); // 리프레시: 독·화상·마비
     case 'teamCure': if (!t.status) return res(false); cure(t); return res(true); // 아로마테라피·치료방울: 주변 2칸 아군
     case 'wish': if (t.wish) return res(false); t.wish = true; return res(true); // 희망사항: 다음 자기 차례 시작에 1/2 회복
@@ -486,6 +513,12 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, healed: { unitId: a.id, amount: a.hp - before } };
   }
 
+  if (move.effect === 'teleport') { // 순간이동: 고른 빈 칸으로 바로 (지나가는 칸은 밟지 않음)
+    const ok = aim && teleportSpots(state, a).some((p) => p.x === aim.x && p.y === aim.y);
+    const from = { x: a.x, y: a.y };
+    if (ok) { a.x = aim.x; a.y = aim.y; refreshField(state); }
+    return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, effects: [{ unitId: a.id, effect: 'teleport', ok: !!ok, from, to: ok ? { x: aim.x, y: aim.y } : from, ...(ok ? {} : { reason: 'range' }) }], protectedIds: [] };
+  }
   if (kind === 'status' && move.aimTile) { // 압정: 칸 조준 (사거리 1~3)
     const ok = aim && aim.x !== undefined && state.grid[aim.y]?.[aim.x] !== undefined && dist(a, aim) >= TRAP_RANGE[0] && dist(a, aim) <= TRAP_RANGE[1];
     const r = ok ? layTraps(state, a, move.effect, aim) : { ok: false, tiles: [] };

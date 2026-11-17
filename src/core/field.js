@@ -1,7 +1,7 @@
 // 전장에 놓이는 것 (순수): 오라(쓴 포켓몬을 따라다님) · 장판(칸에 고정) · 압정 · 날씨 부르기 타이머.
 // 위치가 바뀔 때마다 refreshField 가 유닛마다 u.field 플래그를 다시 계산하고, 데미지·상태이상·랭크·이동 계산은 그 플래그만 읽는다.
 // 스펙 docs/superpowers/specs/2026-11-15-status-moves-batch-design.md (2차)
-import { moveTypeOf, typesOf, has, magicGuard } from './abilities.js';
+import { moveTypeOf, typesOf, has, magicGuard, airborne } from './abilities.js';
 import { inflict } from './status.js';
 import { effectiveWeather } from './weather.js';
 
@@ -30,6 +30,7 @@ export function castField(state, user, effect) {
 
 // 유닛마다 지금 받는 오라·장판 효과
 export function refreshField(state) {
+  for (const u of state.units) u.grounded = !!state.gravity; // 중력 (새로 나온 유닛도)
   state.auras = (state.auras ?? []).filter((a) => state.units.some((u) => u.id === a.ownerId)); // 주인이 쓰러지면 사라짐
   for (const u of state.units) {
     const f = blankFlags();
@@ -66,7 +67,7 @@ export function stepOn(state, unit, x, y) {
   const out = [];
   for (const t of (state.spikes ?? []).filter((s) => s.x === x && s.y === y && s.side !== unit.side)) {
     if (unit.side === 'ally') t.revealed = true;
-    if (typesOf(unit).includes('flying') || has(unit, 'levitate')) continue;
+    if (airborne(unit)) continue;
     if (t.kind === 'spikes') {
       if (magicGuard(unit)) continue;
       const hpBefore = unit.hp, damage = Math.min(unit.hp, Math.max(1, Math.floor(unit.maxHp / 8)));
@@ -88,7 +89,7 @@ export function lethalTrapCut(state, unit, path) {
   for (let i = 1; i < path.length; i++) {
     for (const t of state.spikes ?? []) {
       if (t.x !== path[i].x || t.y !== path[i].y || t.side === unit.side || t.kind !== 'spikes') continue;
-      if (typesOf(unit).includes('flying') || has(unit, 'levitate') || magicGuard(unit)) continue;
+      if (airborne(unit) || magicGuard(unit)) continue;
       hp -= Math.max(1, Math.floor(unit.maxHp / 8));
     }
     if (hp <= 0) return path.slice(0, i + 1);
@@ -112,6 +113,11 @@ export function castWeather(state, user, moveId) {
 
 // 그 편이 놓은 오라·장판·날씨 턴 감소 (그 편 페이즈 끝)
 export function tickField(state, side, events) {
+  if (state.gravity?.side === side && --state.gravity.turns <= 0) { // 중력 끝
+    state.gravity = null;
+    for (const u of state.units) u.grounded = false;
+    events.push({ kind: 'fieldEnd', what: 'gravity', side });
+  }
   if (state.weatherTimer?.side === side && --state.weatherTimer.turns <= 0) {
     state.weatherTimer = null;
     state.weather = state.baseWeather ?? null;

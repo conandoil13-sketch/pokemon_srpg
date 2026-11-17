@@ -133,6 +133,8 @@ const FOG_WHITE = ['#6a6a7a', '#9a9aac', '#c4c4d4', '#e2e2ee', '#f8f8ff'];
 const FOG_DARK = ['#0c0814', '#1e1630', '#342a4a', '#4e4266', '#7a6a90'];
 const fxOn = (id, opts = {}, timeScale = 2) => spec(id, opts, timeScale, 'front', { life: 1.2 });
 export const EFFECT_FX = {
+  teleport: spec('pokemon/teleport-blink', {}, 1, 'front', { life: 1 }), batonPass: spec('pokemon/baton-swap', {}, 1, 'front', { life: 1.1 }), // 위치 기술
+  followMe: spec('pokemon/follow-me', {}, 1, 'front', { life: 1.2 }), gravity: spec('pokemon/gravity-press', {}, 1, 'front', { life: 1.3 }), magnetRise: spec('pokemon/magnet-rise', {}, 1, 'front', { life: 1.2 }),
   protect: fxOn('holy/divine-shield', { palette: PAL.holy, radius: 14 }, 1.5),
   endure: fxOn('holy/divine-shield', { palette: PAL.ember, radius: 14 }, 1.5),
   focusEnergy: fxOn('status/rage', {}, 1.5),

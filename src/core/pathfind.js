@@ -12,7 +12,9 @@ export function canEnter(tile, who, trees = false) {
   if (tile === '#') return trees && ab(who) === 'limber'; // 유연: 나무 통과
   if (tile === '~') {
     const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;
-    return t.includes('water') || t.includes('flying') || ab(who) === 'levitate'; // 부유: 비행처럼 물 위로
+    if (t.includes('water')) return true;
+    if (typeof who === 'object' && who.grounded) return false; // 중력: 땅에 붙어 물 위로 못 감
+    return t.includes('flying') || ab(who) === 'levitate' || (typeof who === 'object' && who.magnetRise > 0); // 부유·전자부유: 비행처럼 물 위로
   }
   return true;
 }

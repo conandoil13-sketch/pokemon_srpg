@@ -20,6 +20,7 @@ export const EFFECT_MOVES = {
   acupressure: 'acupressure', 'psych-up': 'psychUp', 'power-swap': 'powerSwap', 'guard-swap': 'guardSwap', 'heart-swap': 'heartSwap',
   'psycho-shift': 'psychoShift', nightmare: 'nightmare', 'teeter-dance': 'teeterDance', splash: 'splash', // 회복·상태 조작 (SRPG식)
   counter: 'counterStance', 'mirror-coat': 'counterStance', 'metal-burst': 'counterStance', bide: 'bide', // 반격 자세 · 참기
+  teleport: 'teleport', 'baton-pass': 'batonPass', 'follow-me': 'followMe', gravity: 'gravity', 'magnet-rise': 'magnetRise', // 위치 기술
 };
 const SELF = { kind: 'self', range: [0, 0], area: false };
 
@@ -42,5 +43,7 @@ export const KIND_OVERRIDES = {
   'psych-up': { kind: 'enemy', range: [1, 2], area: false }, 'power-swap': { kind: 'enemy', range: [1, 2], area: false },
   'guard-swap': { kind: 'enemy', range: [1, 2], area: false }, 'heart-swap': { kind: 'enemy', range: [1, 2], area: false },
   'psycho-shift': { kind: 'enemy', range: [1, 1], area: false }, nightmare: { kind: 'enemy', range: [1, 2], area: false },
+  teleport: { kind: 'tile', range: [1, 4], area: false, aimTile: true }, // 반경 4칸 빈 칸으로 순간 이동
+  'baton-pass': { kind: 'ally', range: [1, 3], area: false }, 'follow-me': SELF, gravity: SELF, 'magnet-rise': SELF,
   haze: SELF, // 4세대 '???' → 고스트로. 대상은 쓰는 유닛 타입에 따라 (volatile.moveFor)
 };

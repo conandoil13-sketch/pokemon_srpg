@@ -1,5 +1,5 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
-import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute, teleportSpots } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
@@ -273,8 +273,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 조준의 대표 칸 (커서 위치)
   // 압정(칸 조준): 사거리 1~3 의 벽 아닌 칸 / 덮는 칸 = 그 칸 + 4방
   const trapAims = (unit) => tilesInRange(unit.x, unit.y, [1, 3], st.width, st.height).filter((t) => st.grid[t.y][t.x] !== '#').map((t) => ({ x: t.x, y: t.y }));
-  const aimsFor = (unit, mv) => (mv.aimTile ? trapAims(unit) : attackAims(unit, mv));
-  const coverOf = (unit, mv, aim) => (mv.aimTile ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: aim.x + dx, y: aim.y + dy })).filter((t) => st.grid[t.y]?.[t.x] !== undefined && st.grid[t.y][t.x] !== '#') : tilesOf(st, unit, mv, aim));
+  const aimsFor = (unit, mv) => (mv.effect === 'teleport' ? teleportSpots(st, unit) : mv.aimTile ? trapAims(unit) : attackAims(unit, mv)); // 순간이동: 갈 수 있는 빈 칸
+  const coverOf = (unit, mv, aim) => (mv.effect === 'teleport' ? [{ x: aim.x, y: aim.y }] : mv.aimTile ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: aim.x + dx, y: aim.y + dy })).filter((t) => st.grid[t.y]?.[t.x] !== undefined && st.grid[t.y][t.x] !== '#') : tilesOf(st, unit, mv, aim));
   function aimPoint(aim) {
     if (aim.unitId) { const u = st.units.find((o) => o.id === aim.unitId); return { x: u.x, y: u.y }; }
     if (aim.dir) return tilesOf(st, sel, MV(move), aim)[0] ?? { x: sel.x, y: sel.y };
