@@ -3,10 +3,11 @@ import POKEDEX from './generated/pokedex.js';
 import { TYPES } from './types.js';
 import { MOVES } from './moves.js';
 
-// 이동력: 스피드 종족값 기준, 비행 타입 +1 (최대 6)
+// 이동력: 스피드 종족값 20 단위 2~8 (30 미만 2 … 130 이상 8), 비행 타입 +1 (최대 8) — 2026-11-18
+export const MOVE_MAX = 8;
 export function movementFor(types, speed) {
-  const base = speed < 50 ? 3 : speed < 80 ? 4 : speed < 100 ? 5 : 6;
-  return Math.min(6, base + (types.includes('flying') ? 1 : 0));
+  const base = speed < 30 ? 2 : Math.min(MOVE_MAX, 3 + Math.floor((speed - 30) / 20));
+  return Math.min(MOVE_MAX, base + (types.includes('flying') ? 1 : 0));
 }
 
 export const SPECIES = Object.fromEntries(
