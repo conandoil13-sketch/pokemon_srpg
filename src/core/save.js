@@ -1,4 +1,5 @@
 // 저장 / 불러오기 (순수 + 주입한 storage). storage = { getItem(key), setItem(key, value) }
+import { rollStock } from './shop.js';
 import { isHeldItem } from '../data/heldItems.js';
 import { IV_KEYS, IV_MAX, maxIvs, hashIvs, hashGender, genderFits } from './individual.js';
 import { cleanBuild, cleanCapsule, cleanPowders, emptyPowders, CAPSULE_BAG_MAX } from './dittoBuild.js';
@@ -21,7 +22,7 @@ const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg
 // GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
 export const newGame = () => {
   const party = newParty().map((m, i) => ({ uid: i + 1, ...m })); // uid 1..5
-  return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {}, nextUid: party.length + 1 };
+  return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {}, nextUid: party.length + 1, shop: { seq: 0, stock: rollStock(0) } };
 };
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
@@ -57,6 +58,12 @@ function cleanMember(m) {
   return out;
 }
 
+// 상점: 진열 8칸 (모르는 id 버림). 없거나 깨졌으면 seq 0 으로 굴림
+function cleanShop(s) {
+  const seq = Number.isInteger(s?.seq) && s.seq >= 0 ? s.seq : 0;
+  const stock = (Array.isArray(s?.stock) ? s.stock : []).filter((x) => isHeldItem(x?.id)).map((x) => ({ id: x.id, sold: x.sold === true }));
+  return stock.length ? { seq, stock } : { seq, stock: rollStock(seq) };
+}
 const nonEmpty = (k, o) => (Object.keys(o).length ? { [k]: o } : {});
 const cleanHeldBag = (b) => Object.fromEntries(Object.entries(b && typeof b === 'object' ? b : {}).filter(([k]) => isHeldItem(k)).map(([k, n]) => [k, clampInt(n, 0, 99)]).filter(([, n]) => n > 0));
 const isDungeon = (id) => typeof id === 'string' && DUNGEONS.some((d) => d.id === id);
@@ -184,6 +191,7 @@ export function loadGame(storage) {
       sortie: cleanSortie(data.sortie, party),
       eggs: Object.fromEntries(['turtwig', 'water'].filter((k) => data.eggs?.[k] === true).map((k) => [k, true])), // 이스터에그 받은 기록
       nextUid,
+      shop: cleanShop(data.shop),
     };
     unifyLines(game); // 같은 계열은 개체값·얻은 성별을 같이 쓴다
     unlockFromCleared(game); // 던전이 늘어나도 이미 깬 던전 다음 단계는 열려 있게

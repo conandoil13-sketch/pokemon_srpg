@@ -13,6 +13,7 @@ import { createTown } from './game/town.js';
 import { createDungeonSelect } from './game/dungeonSelect.js';
 import { createFloorMenu } from './game/floorMenu.js';
 import { createBag } from './game/bag.js';
+import { createShop } from './game/shop.js';
 import { generateFloor } from './core/floorgen.js';
 import { deployed } from './core/roster.js';
 import { memberKey, memberByKey } from './core/members.js';
@@ -183,11 +184,11 @@ const go = {
     });
   },
   town: (message = null, spawn = TOWN.start) => {
-    requestSprites(game.party.map((m) => m.species));
+    requestSprites([...game.party.map((m) => m.species), 'kecleon']); // 켈리몬 = 상점 주인
     // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
     const outM = deployed(game).slice(1), out = outM.map((m) => m.species);
     const rest = game.party.filter((m) => m.species !== 'ditto' && !outM.includes(m)).map((m) => m.species);
-    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onBag: go.bag, onTurtwigGift, onWaterGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
+    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onBag: go.bag, onShop: go.shop, onTurtwigGift, onWaterGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
     scene = createDungeonSelect({
@@ -203,6 +204,9 @@ const go = {
   },
   gacha: () => {
     scene = createGachaScene({ game, rng, onBack: () => go.town(null, TOWN.gachaSpot), onPulled: () => { save(); sound.jingle('item'); } });
+  },
+  shop: () => { // 상점 (켈리몬·표지판)
+    scene = createShop({ game, onSave: () => save(), onBack: () => go.town(null, TOWN.shopSpot) });
   },
   bag: (spot) => { // X 메뉴 → 가방 (닫으면 같은 자리로)
     requestSprites(game.party.map((m) => m.species));
