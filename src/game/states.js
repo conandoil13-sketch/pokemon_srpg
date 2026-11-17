@@ -515,7 +515,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function withPiles(a, unit, then) {
     if (!a.piles?.length) { then(); return; }
     for (const p of a.piles) {
-      if (p.unitId) { const e = st.units.find((u) => u.id === p.unitId); if (e) { everyone.set(e.id, e); facing[e.id] = DIR.Left; } }
+      if (p.unitId) { const e = st.units.find((u) => u.id === p.unitId); if (e) { everyone.set(e.id, e); facing[e.id] = DIR.Left; requestSprites([e.species]); } } // 미리 못 받았어도 여기서
       try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
     }
     if (a.piles.some((p) => p.kind === 'chest')) sound.jingle('item');
