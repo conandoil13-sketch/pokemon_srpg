@@ -55,3 +55,39 @@ test('every finished expedition rerolls the stock', () => {
     assert.notEqual(JSON.stringify(g.shop), before, outcome);
   }
 });
+
+// ---- 마을·상점 화면 ----
+import { TOWN, WATER_GIFT_SPOT } from '../src/data/town.js';
+import { createShop } from '../src/game/shop.js';
+
+test('town is 28 wide and keeps every old spot', () => {
+  assert.ok(TOWN.tiles.every((r) => r.length === 28)); assert.equal(TOWN.tiles.length, 14);
+  const at = (id) => TOWN.objects.find((o) => o.id === id);
+  assert.deepEqual([at('board').x, at('board').y, at('team').x, at('team').y, at('gacha').x, at('gacha').y], [9, 6, 4, 3, 13, 3]);
+  assert.deepEqual(TOWN.start, { x: 9, y: 9, facing: 'up' }); assert.deepEqual(WATER_GIFT_SPOT, { x: 13, y: 9, facing: 'down' });
+  assert.ok(at('shop') && at('shopkeeper')?.species === 'kecleon' && TOWN.shopSpot);
+});
+
+test('every sign, npc spot and the shop can be reached on foot from the start', () => {
+  const T = TOWN.tiles, H = T.length, W = T[0].length;
+  const blocked = new Set([...TOWN.objects, ...TOWN.npcSpots].map((o) => `${o.x},${o.y}`));
+  const ok = (x, y) => x >= 0 && y >= 0 && x < W && y < H && !'#^~'.includes(T[y][x]) && !blocked.has(`${x},${y}`);
+  const seen = new Set([`${TOWN.start.x},${TOWN.start.y}`]), q = [[TOWN.start.x, TOWN.start.y]];
+  while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = `${x + dx},${y + dy}`; if (ok(x + dx, y + dy) && !seen.has(k)) { seen.add(k); q.push([x + dx, y + dy]); } } }
+  for (const o of [...TOWN.objects, ...TOWN.npcSpots]) assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => seen.has(`${o.x + dx},${o.y + dy}`)), `${o.id ?? 'npc'} ${o.x},${o.y}`);
+  for (const s of [TOWN.returnSpot, TOWN.partySpot, TOWN.gachaSpot, TOWN.shopSpot, WATER_GIFT_SPOT]) assert.ok(seen.has(`${s.x},${s.y}`));
+});
+
+test('shop scene: buy with confirm, sold row does nothing, cancel leaves even with no coins', () => {
+  const g = newGame(); g.coins = 200; let saves = 0, back = 0;
+  const shop = createShop({ game: g, onSave: () => { saves++; }, onBack: () => { back++; } });
+  const id = g.shop.stock[0].id;
+  shop.handle({ type: 'confirm' }); assert.equal(shop.mode, 'confirm');
+  shop.handle({ type: 'confirm' }); // 예
+  assert.equal(g.coins, 50); assert.equal(g.items.held[id], 1); assert.equal(saves, 1);
+  shop.handle({ type: 'confirm' }); // 메시지 닫기
+  shop.handle({ type: 'confirm' }); assert.equal(shop.mode, 'list'); // 품절 → 메시지
+  shop.handle({ type: 'confirm' });
+  g.coins = 0; shop.handle({ type: 'dir', dx: 0, dy: 1 }); shop.handle({ type: 'confirm' }); assert.equal(shop.mode, 'list');
+  shop.handle({ type: 'confirm' }); shop.handle({ type: 'cancel' }); assert.equal(back, 1);
+});

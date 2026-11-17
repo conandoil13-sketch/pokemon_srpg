@@ -167,12 +167,12 @@ test('floor menu sits at the bottom right and clicks on its rows count', async (
 
 test('town NPCs are the party companions (everyone but the leader)', () => {
   const town = createTown({ onSortie() {}, leader: 'ditto', companions: ['chimchar', 'piplup', 'turtwig', 'shinx'] });
-  const npcs = town.objects.filter((o) => o.kind === 'npc');
+  const npcs = town.objects.filter((o) => o.kind === 'npc' && o.id.startsWith('npc-')); // 동료 NPC (상점 켈리몬은 고정 NPC)
   assert.deepEqual(npcs.map((o) => o.species), ['chimchar', 'piplup', 'turtwig', 'shinx']);
   for (const o of npcs) assert.ok(!'#^~'.includes(TOWN.tiles[o.y][o.x]), `${o.species} on blocked tile`);
   assert.ok(TOWN.npcSpots.length >= 6, 'room for more companions');
   // 동료가 없으면 NPC 도 없음
-  assert.equal(createTown({ onSortie() {}, companions: [] }).objects.filter((o) => o.kind === 'npc').length, 0);
+  assert.equal(createTown({ onSortie() {}, companions: [] }).objects.filter((o) => o.id.startsWith('npc-')).length, 0);
 });
 
 test('recruit office sign opens the gacha; mashing after a pull never double-spends', async () => {

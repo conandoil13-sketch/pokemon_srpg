@@ -14,7 +14,7 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, onParty, onGacha, onBag = null, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
+export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = null, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
   let turtwigTalks = 0; // 이스터에그: 모부기에게 5번 말 걸기
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null }); // 톡·클릭 목적지 표시
   const map = TOWN;
@@ -60,7 +60,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onTurtwig
       msg = { lines: ['…모부기가 꼭 쥐고 있던 코인을 건네주었다!', '200코인을 받았다!'], who: o, then: null };
       return;
     }
-    const then = o.action === 'sortie' ? onSortie : o.action === 'party' ? onParty : o.action === 'gacha' ? onGacha : null;
+    const then = o.action === 'sortie' ? onSortie : o.action === 'party' ? onParty : o.action === 'gacha' ? onGacha : o.action === 'shop' ? onShop : null;
     msg = { lines: o.lines, who: o.kind === 'npc' ? o : null, then };
   }
 
