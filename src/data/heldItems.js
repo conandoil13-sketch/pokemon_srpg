@@ -49,6 +49,16 @@ export const HELD_ITEMS = {
   stick: { name: '대파', desc: '파오리의 급소율이 크게 오름', species: ['farfetchd'], crit: 2 },
 };
 
+// 상점 가격 (SRPG 가치 기준 · 스펙 2026-11-17-town-shop-design.md)
+const PRICES = {
+  150: ['flame-orb', 'toxic-orb', 'sticky-barb', 'destiny-knot', 'grip-claw', 'damp-rock', 'heat-rock', 'smooth-rock', 'icy-rock'],
+  500: ['light-ball', 'thick-club', 'deep-sea-tooth', 'deep-sea-scale', 'lucky-punch', 'stick'],
+  600: ['scope-lens', 'razor-claw', 'wide-lens', 'bright-powder', 'lax-incense', 'expert-belt', 'white-herb', 'black-sludge', 'shell-bell', 'focus-band', 'choice-band', 'choice-specs'],
+  1200: ['leftovers', 'life-orb', 'focus-sash', 'metal-powder'],
+};
+for (const [p, ids] of Object.entries(PRICES)) for (const id of ids) HELD_ITEMS[id].price = Number(p);
+for (const it of Object.values(HELD_ITEMS)) it.price ??= 300; // 나머지 = 타입 강화 17 · 힘의머리띠 · 박식안경 · 빛의점토 · 멘탈허브
+
 export const HELD_IDS = Object.keys(HELD_ITEMS);
 export const isHeldItem = (id) => typeof id === 'string' && Object.hasOwn(HELD_ITEMS, id);
 export const CHEST_HELD_CHANCE = 0.2;
