@@ -29,11 +29,13 @@
     .pad-dpad .hub { position: absolute; left: 33.3%; top: 33.3%; width: 33.4%; height: 33.4%; background: #3c4150; }
     .pad-dpad.on-up .arm.up, .pad-dpad.on-down .arm.down, .pad-dpad.on-left .arm.left, .pad-dpad.on-right .arm.right { background: #5a6072; box-shadow: inset 0 2px 0 #23262f; }
 
-    .pad-ab { position: absolute; right: 6vw; top: 14%; width: min(40vw, 180px); height: min(30vw, 130px); }
+    /* A·B·X: 십자키와 같은 높이의 정사각형 안에 마름모 (X 위 · A 오른쪽 · B 아래) */
+    .pad-ab { position: absolute; right: 6vw; top: 12%; width: min(38vw, 170px); aspect-ratio: 1; --btn: min(16vw, 70px); --xbtn: min(12.5vw, 54px); }
     .pad-ab button, .pad-sys button { font: 700 18px system-ui, sans-serif; color: #f4f4f8; border: 0; touch-action: none; }
-    .pad-ab button { position: absolute; width: min(17vw, 76px); aspect-ratio: 1; border-radius: 50%; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35), 0 3px 0 #0f1015; }
-    .pad-a { right: 0; top: 0; background: #d23a4a; } .pad-b { left: 0; bottom: 0; background: #3a6ad2; }
-    .pad-ab .pad-x { left: 0; top: -12%; width: min(13vw, 58px); background: #3a9a5a; font-size: 15px; } /* X: 메뉴 (마을) */
+    .pad-ab button { position: absolute; width: var(--btn); aspect-ratio: 1; border-radius: 50%; box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.35), 0 3px 0 #0f1015; }
+    .pad-a { right: 0; top: calc(50% - var(--btn) / 2); background: #d23a4a; }
+    .pad-b { left: calc(50% - var(--btn) / 2 - 8%); bottom: 0; background: #3a6ad2; }
+    .pad-ab .pad-x { width: var(--xbtn); left: calc(50% - var(--xbtn) / 2 - 8%); top: 2%; background: #3a9a5a; font-size: 15px; } /* X: 메뉴 (마을) */
     .pad-ab button.on { transform: translateY(2px); box-shadow: inset 0 3px 0 rgba(0, 0, 0, 0.35); filter: brightness(0.9); }
 
     .pad-sys { position: absolute; left: 0; right: 0; bottom: var(--gap); display: flex; justify-content: center; gap: 22px; }
@@ -47,8 +49,7 @@
       body.touch #pad { position: absolute; inset: 0; flex: none; pointer-events: none; }
       body.touch #pad > * { pointer-events: auto; }
       .pad-dpad { left: max(3vw, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); width: min(22vw, 170px); }
-      .pad-ab { right: max(3vw, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); width: min(24vw, 180px); height: min(18vw, 130px); }
-      .pad-ab button { width: min(10vw, 76px); }
+      .pad-ab { right: max(3vw, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%); width: min(22vw, 170px); --btn: min(9.5vw, 70px); --xbtn: min(7.5vw, 54px); }
       .pad-sys { bottom: 8px; }
     }
   </style>
