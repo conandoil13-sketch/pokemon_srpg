@@ -809,7 +809,23 @@ export function arrive(state, unitId) {
 }
 
 // 페이즈 전환: 끝나는 편 상태 데미지·혼란 → 랭크 만료 → 시작하는 편 잠듦·얼음
+// 스피드 보너스: 그 편 가장 느린 유닛이 상대 편 가장 느린 유닛보다 2배 이상 빠르면, 그 편 가장 빠른 유닛이 한 번 더 (페이즈마다 1번)
+export const SPEED_BONUS_RATIO = 2;
+export const speedOf = (u) => effectiveStat(u, 'spe'); // 랭크·마비·순풍 반영
+export function speedBonusUnit(state, side) {
+  if (state.bonusGiven) return null;
+  const live = (s) => state.units.filter((u) => u.side === s && u.hp > 0 && !u.bot);
+  const mine = live(side), foes = live(side === 'ally' ? 'enemy' : 'ally');
+  if (!mine.length || !foes.length) return null;
+  const slow = (list) => Math.min(...list.map(speedOf));
+  if (slow(mine) < SPEED_BONUS_RATIO * slow(foes)) return null;
+  const best = mine.reduce((b, u) => (speedOf(u) > speedOf(b) ? u : b), mine[0]);
+  if ((best.status === 'sleep' || best.status === 'freeze') && (best.statusTurns ?? 1) > 0) return null; // 잠듦·얼음이면 없음
+  return best;
+}
+
 export function endPhase(state, rng = Math.random) {
+  state.bonusGiven = false; // 다음 페이즈는 다시 보너스 가능
   const ending = state.phase === 'player' ? 'ally' : 'enemy';
   const events = (state.log.statusEvents = []);
   const abilityLog = (state.log.phaseAbilityEvents = []); // 차례 끝·시작 특성 발동 (화면 알림용)
