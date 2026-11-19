@@ -55,3 +55,18 @@ test('muting stops everything; without Audio (tests, old browsers) it does nothi
   const none = createSound(undefined);
   assert.doesNotThrow(() => { none.unlock(); none.bgm('route1'); none.jingle('item'); });
 });
+
+test('volume scales every sound and is remembered in storage', () => {
+  const f = fakeAudio(), store = new Map();
+  const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const s = createSound(f.Audio, storage);
+  assert.equal(s.volume, 1);
+  s.unlock(); s.bgm('route1');
+  s.setVolume(0.5);
+  assert.equal(f.by('route1').volume, 0.45 * 0.5);
+  s.setMuted(true);
+  const again = createSound(f.Audio, storage);
+  assert.equal(again.volume, 0.5);
+  assert.equal(again.muted, true);
+  s.setVolume(3); assert.equal(s.volume, 1); s.setVolume(-1); assert.equal(s.volume, 0);
+});
