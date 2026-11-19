@@ -3,7 +3,7 @@ import { SPECIES } from '../data/species.js';
 import { effectiveWeather } from './weather.js';
 import { MOVES } from '../data/moves.js';
 import { reachable, tilesInRange, manhattan, canEnter, TILE_COST } from './pathfind.js';
-import { expectedDamage, hitChance } from './damage.js';
+import { expectedDamage, hitChance, terrainCtx } from './damage.js';
 import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { canInflict, canInfatuate } from './status.js';
@@ -52,7 +52,7 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   const spread = hit.length >= 2 ? 0.75 : 1;
   let score = 0, enemies = 0, kos = 0, mates = 0;
   for (const t of hit) {
-    const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W);
+    const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W, terrainCtx(sim, ghost, t));
     const ko = e >= t.hp;
     if (t.side !== unit.side && unseen.has(t.id)) continue; // 안 보이는 상대는 노리지 않는다
     if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0) + (ko ? 0 : bindValue(move, t)) + (t.ability === 'illuminate' && e > 0 ? ILLUMINATE_LURE : 0); } // 발광: 먼저 노림
@@ -62,7 +62,7 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   if (mates && score <= 0) return null; // 같은 편을 휘말려 손해면 쓰지 않는다
   // 흡수는 기대 회복만큼 가산, 반동은 감산 — 반동으로 자기가 쓰러질 기대면 쓰지 않는다
   if (move.drain) {
-    const dealt = hit.filter((t) => t.side !== unit.side).reduce((s, t) => s + Math.min(t.hp, expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W)), 0);
+    const dealt = hit.filter((t) => t.side !== unit.side).reduce((s, t) => s + Math.min(t.hp, expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W, terrainCtx(sim, ghost, t))), 0);
     const amt = dealt * Math.abs(move.drain) / 100;
     if (move.drain > 0 && hit.some((t) => t.ability === 'liquid-ooze')) { if (amt >= unit.hp) return null; score -= amt; } // 해감액: 흡수가 피해
     else if (move.drain > 0) score += Math.min(amt, unit.maxHp - unit.hp) * 0.5;
@@ -255,7 +255,7 @@ function positionalStatus(state, unit, ghost, move, foes) {
     if (!same && immunity(ghost, r, move)) return 0; // 축전에 전기자석파·방음에 노래 등은 쓰지 않는다
     if (move.id === 'captivate' && !(r.gender && ghost.gender && r.gender !== ghost.gender)) return 0; // 유혹: 반대 성별만
     const v = ch.reduce((s, c) => s + changeValue(ghost, foes, same, r, c), 0) + (same ? 0 : ailmentValue(state, ghost, r, move));
-    return same ? v : v * hitChance(ghost, r, acc, tile(r), W) / 100;
+    return same ? v : v * hitChance(ghost, r, acc, tile(r), W, terrainCtx(state, ghost, r)) / 100;
   };
   const near = (list, lo, hi) => list.filter((u) => { const d = manhattan(ghost, u); return d >= lo && d <= hi; });
   const mates = state.units.filter((u) => u.side === unit.side && u.id !== unit.id);
@@ -361,7 +361,7 @@ function effectCandidate(state, unit, ghost, move, foes, threat, risk) {
   for (const r of foes) {
     const d = manhattan(ghost, r);
     if (d < move.range[0] || d > move.range[1]) continue;
-    const v = hinderValue(state, ghost, r, move) * hitChance(ghost, r, acc, state.grid[r.y][r.x], W) / 100 - risk;
+    const v = hinderValue(state, ghost, r, move) * hitChance(ghost, r, acc, state.grid[r.y][r.x], W, terrainCtx(state, ghost, r)) / 100 - risk;
     if (v > 0 && (!top || v > top.score)) top = { score: v, targetId: r.id };
   }
   return top;

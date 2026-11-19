@@ -4,6 +4,14 @@ import { moveBudget } from './status.js';
 
 export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1, '*': Infinity }; // '*' = 열리지 않은 낙엽더미
 
+// 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
+const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
+export function tileCost(tile, who) {
+  if (tile === '#') return 1; // 유연이 지나는 나무는 1
+  if (tile === '^' && typesOfWho(who).some((t) => t === 'rock' || t === 'ground')) return 1;
+  return TILE_COST[tile];
+}
+
 // who: 유닛(타입은 유닛 기준 — 메타몽 빌드) 또는 종 키
 // trees: 벽(#)이 나무인 맵 (유연은 나무를 지나갈 수 있음 — 멈추지는 못함, reachable 이 뺀다)
 const ab = (who) => (typeof who === 'object' && !who.abilityOff ? who.ability : null);
@@ -42,7 +50,7 @@ function search(grid, units, unit, budgetOverride = null) {
       if (!canEnter(tile, unit, !!grid.trees)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side) continue;
-      const c = cur.c + (tile === '#' ? 1 : TILE_COST[tile]); // 유연이 지나는 나무는 1
+      const c = cur.c + tileCost(tile, unit);
       if (c > budget) continue;
       const k = `${x},${y}`;
       if (best.has(k) && best.get(k) <= c) continue;
