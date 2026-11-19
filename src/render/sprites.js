@@ -195,6 +195,18 @@ export function drawUnitSprite(ctx, key, anim, dir, t, cx, cy, loop = true) {
   ctx.restore();
 }
 
+// 안개 속 정체 모를 포켓몬: 모든 종이 같은 회색 임시 도트 (모양·색으로 유추 못 하게)
+export function drawUnknownSprite(ctx, dir, t, cx, cy) {
+  ctx.save();
+  ctx.filter = 'grayscale(1) brightness(0.55)';
+  const c = creature('unown', 22);
+  const bob = Math.floor(t / 0.5) % 2;
+  ctx.translate(Math.round(cx), Math.round(cy + 8 - 22 + bob));
+  if (dir === DIR.Left || dir === DIR.UpLeft || dir === DIR.DownLeft) ctx.scale(-1, 1);
+  ctx.drawImage(c, -11, 0);
+  ctx.restore();
+}
+
 export function drawShadow(ctx, cx, cy, color = 'rgba(0,0,0,0.28)') {
   ctx.fillStyle = color;
   ctx.fillRect(Math.round(cx) - 6, Math.round(cy) + 6, 12, 3);
