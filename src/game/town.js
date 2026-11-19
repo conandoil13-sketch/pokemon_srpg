@@ -8,13 +8,14 @@ import { drawText, textWidth } from '../render/font.js';
 import { W, H } from '../render/screen.js';
 import { createFxManager } from '../render/fx.js';
 import { MOVE_MARKER, markerAt } from '../data/moveFx.js';
+import { sound } from '../audio/sound.js';
 
 const STEP = 0.16; // 한 칸 이동 시간(초)
 const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = null, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [] }) {
+export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = null, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [], sound: snd = sound }) {
   let turtwigTalks = 0; // 이스터에그: 모부기에게 5번 말 걸기
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null }); // 톡·클릭 목적지 표시
   const map = TOWN;
@@ -66,7 +67,20 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
 
   // X 메뉴 (마을에서만): 가방 · 닫기
   let townMenu = null;
-  const MENU = [{ label: '가방', enabled: !!onBag, act: 'bag' }, { label: '닫기', enabled: true, act: 'close' }];
+  const MENU = [{ label: '가방', enabled: !!onBag, act: 'bag' }, { label: '설정', enabled: true, act: 'settings' }, { label: '닫기', enabled: true, act: 'close' }];
+  // 설정: 음악 켜기/끄기 · 볼륨 (좌우 10% 단위)
+  let settings = null;
+  const settingRows = () => [
+    { label: `음악: ${snd.muted ? '꺼짐' : '켜짐'}`, enabled: true },
+    { label: `볼륨: ${Math.round(snd.volume * 100)}%`, enabled: true },
+  ];
+  function settingsInput(ev) {
+    if (ev.type === 'cancel' || ev.type === 'menu') { settings = null; return; }
+    if (ev.type === 'click') { settings = null; return; }
+    if (ev.type === 'dir' && ev.dy && !ev.repeat) settings.sel = (settings.sel + ev.dy + 2) % 2;
+    if (settings.sel === 0 && (ev.type === 'confirm' || (ev.type === 'dir' && ev.dx))) snd.setMuted(!snd.muted);
+    if (settings.sel === 1 && ev.type === 'dir' && ev.dx) snd.setVolume(snd.volume + ev.dx * 0.1);
+  }
   const menuRect = () => ({ x: W - 70, y: 22 });
   function menuInput(ev) {
     if (ev.type === 'cancel' || ev.type === 'menu') { townMenu = null; return; }
@@ -79,6 +93,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
     }
     if (!pick?.enabled) return;
     townMenu = null;
+    if (pick.act === 'settings') { settings = { sel: 0 }; return; }
     if (pick.act === 'bag') {
       if (walk) { player.x = walk.to.x; player.y = walk.to.y; walk = null; } // 걷던 칸에 도착한 걸로
       onBag({ x: player.x, y: player.y, facing: player.facing });
@@ -141,6 +156,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
         if (ev.type === 'confirm' || ev.type === 'click' || ev.type === 'cancel') closeMessage();
         return;
       }
+      if (settings) { settingsInput(ev); return; } // 설정 창
       if (townMenu) { menuInput(ev); return; } // X 메뉴
       if (ev.type === 'menu') { held = null; route = []; afterRoute = null; townMenu = { sel: 0 }; return; }
       if (ev.type === 'dir') {
@@ -186,6 +202,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
 
     get fx() { return fxm; }, // 테스트·디버그용
     get menuOpen() { return !!townMenu; },
+    get settingsOpen() { return !!settings; },
 
     playerWorld() {
       if (!walk) return { x: player.x * TILE, y: player.y * TILE };
@@ -216,6 +233,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
       drawText(ctx, hint, 8, 4, '#383838', '#d8d8d0', 'small');
 
       if (townMenu) { const r = menuRect(); ui.drawMenu(ctx, MENU, townMenu.sel, r.x, r.y); }
+      if (settings) { const r = ui.drawMenu(ctx, settingRows(), settings.sel, W - 170, 22); drawText(ctx, '좌우: 바꾸기 · 취소: 닫기', r.x + 6, r.y + r.h + 2, '#f8f8f8', '#303030', 'small'); }
       if (msg) {
         const who = msg.who ? { species: msg.who.species, side: 'ally', emotion: 'Normal' } : null;
         ui.drawMessage(ctx, msg.lines, who, Math.floor(time * 3) % 2 === 0);

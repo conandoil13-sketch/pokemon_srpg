@@ -68,3 +68,18 @@ test('empty tab confirm does nothing; cancel in pick goes back to the list', () 
   b.handle({ type: 'dir', dx: -1, dy: 0 }); b.handle({ type: 'confirm' }); assert.equal(b.mode, 'pick');
   b.handle({ type: 'cancel' }); assert.equal(b.mode, 'list');
 });
+
+test('town settings: toggle music and step volume by 10%', () => {
+  let muted = false, volume = 0.5;
+  const snd = { get muted() { return muted; }, setMuted(v) { muted = v; }, get volume() { return volume; }, setVolume(v) { volume = Math.min(1, Math.max(0, v)); } };
+  const town = createTown({ onSortie() {}, onBag() {}, sound: snd });
+  town.handle({ type: 'menu' });
+  town.handle({ type: 'dir', dx: 0, dy: 1 }); town.handle({ type: 'confirm' }); // 설정
+  assert.equal(town.settingsOpen, true);
+  town.handle({ type: 'confirm' }); assert.equal(muted, true); // 음악 끄기
+  town.handle({ type: 'dir', dx: 0, dy: 1 });
+  town.handle({ type: 'dir', dx: 1, dy: 0 }); assert.equal(Math.round(volume * 10), 6);
+  town.handle({ type: 'dir', dx: -1, dy: 0 }); town.handle({ type: 'dir', dx: -1, dy: 0 }); assert.equal(Math.round(volume * 10), 4);
+  town.handle({ type: 'cancel' });
+  assert.equal(town.settingsOpen, false); assert.equal(town.menuOpen, false);
+});

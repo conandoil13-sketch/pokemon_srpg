@@ -10,15 +10,21 @@ export const SOUNDS = {
 };
 const BGM_VOLUME = 0.45, JINGLE_VOLUME = 0.6;
 
-// AudioCtor: 테스트용 주입 (없으면 아무 소리도 내지 않음)
-export function createSound(AudioCtor = typeof Audio !== 'undefined' ? Audio : undefined) {
+const SETTINGS_KEY = 'pokemon-tactics-sound'; // 설정: { muted, volume } (저장 데이터와 따로)
+const browserStorage = () => { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch { return null; } };
+
+// AudioCtor: 테스트용 주입 (없으면 아무 소리도 내지 않음). storage: 설정 저장소 (localStorage 모양)
+export function createSound(AudioCtor = typeof Audio !== 'undefined' ? Audio : undefined, storage = browserStorage()) {
   const cache = new Map();
-  let unlocked = false, muted = false, current = null, jingleOn = null;
+  let unlocked = false, muted = false, current = null, jingleOn = null, volume = 1;
+  try { const s = JSON.parse(storage?.getItem(SETTINGS_KEY) ?? 'null'); if (s) { muted = !!s.muted; volume = Math.min(1, Math.max(0, Number(s.volume ?? 1))); } } catch { /* 무시 */ }
+  const persist = () => { try { storage?.setItem(SETTINGS_KEY, JSON.stringify({ muted, volume })); } catch { /* 무시 */ } };
+  const applyVolume = (a) => { a.volume = (a.loop ? BGM_VOLUME : JINGLE_VOLUME) * volume; };
   const get = (name, loop) => {
     if (!AudioCtor) return null;
     if (!cache.has(name)) {
       const a = new AudioCtor(SOUNDS[name]);
-      a.loop = loop; a.volume = loop ? BGM_VOLUME : JINGLE_VOLUME;
+      a.loop = loop; applyVolume(a);
       cache.set(name, a);
     }
     return cache.get(name);
@@ -49,9 +55,12 @@ export function createSound(AudioCtor = typeof Audio !== 'undefined' ? Audio : u
     },
     setMuted(on) {
       muted = on;
+      persist();
       if (on) { for (const a of cache.values()) a.pause(); jingleOn = null; } else resumeBgm();
     },
     get muted() { return muted; },
+    setVolume(v) { volume = Math.round(Math.min(1, Math.max(0, v)) * 10) / 10; for (const a of cache.values()) applyVolume(a); persist(); },
+    get volume() { return volume; },
   };
 }
 
