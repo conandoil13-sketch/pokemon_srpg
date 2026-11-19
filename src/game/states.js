@@ -16,7 +16,7 @@ import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
 import { bakeAutumnGround, drawAutumnMap } from '../render/autumnTiles.js';
 import { leafRoute } from '../core/leafRoute.js';
-import { drawUnitSprite, drawShadow, hasAnim, idleFrameSource, DIR, requestSprites } from '../render/sprites.js';
+import { drawUnitSprite, drawUnknownSprite, drawShadow, hasAnim, idleFrameSource, DIR, requestSprites } from '../render/sprites.js';
 import { actorFor, bodyAt } from '../render/fxActor.js';
 import { fxForAilment, HEAL_FX, MOVE_MARKER, markerAt } from '../data/moveFx.js';
 import { dirFromDelta } from '../render/pmdData.js';
@@ -882,6 +882,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     return { x: u.x * TILE, y: u.y * TILE };
   }
 
+  const fogSeen = new Map(); // 안개: 숨어 있던 유닛 id → 드러난 시각 (null = 아직 숨음)
+  const REVEAL = 0.35;
   function drawUnits(ctx) {
     const hidden = hiddenIds();
     const list = [...st.units];
@@ -901,12 +903,19 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const a = pose?.anim ?? (walking ? 'Walk' : resting && sleepAnim ? 'Sleep' : 'Idle');
       const t = pose ? pose.t : walking ? walk.t : resting && !sleepAnim ? 0 : clock;
       const restFilter = resting && !grey && !sleepAnim ? (u.status === 'freeze' ? 'grayscale(0.6) brightness(1.25)' : 'grayscale(1) brightness(0.85)') : null;
-      if (hidden.has(u.id)) { // 안개 속 적: 어두운 실루엣만
-        ctx.save(); ctx.globalAlpha = 0.55; ctx.filter = 'brightness(0)';
-        drawUnitSprite(ctx, u.species, 'Idle', facing[u.id], clock, cx, cy, true);
+      if (hidden.has(u.id)) { // 안개 속 적: 정체 모를 회색 도트 (종 구분 불가)
+        fogSeen.set(u.id, null);
+        ctx.save(); ctx.globalAlpha = 0.75;
+        drawUnknownSprite(ctx, facing[u.id], clock, cx, cy);
         ctx.restore();
         continue;
       }
+      // 방금 시야에 들어옴: 회색 도트 → 진짜 모습으로 서서히
+      if (fogSeen.has(u.id) && fogSeen.get(u.id) === null) fogSeen.set(u.id, clock);
+      const revealK = fogSeen.has(u.id) ? Math.min(1, (clock - fogSeen.get(u.id)) / REVEAL) : 1;
+      if (revealK >= 1) fogSeen.delete(u.id);
+      if (revealK < 1) { ctx.save(); ctx.globalAlpha = 0.75 * (1 - revealK); drawUnknownSprite(ctx, facing[u.id], clock, cx, cy); ctx.restore(); }
+      if (revealK < 1) { ctx.save(); ctx.globalAlpha = revealK; }
       const burrowUnder = u.burrow && (u.burrow.kind === 'ground' || u.burrow.kind === 'water');
       if (burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 숨기: 흙더미·물웅덩이는 발밑에
       if (u.burrow) { ctx.save(); ctx.globalAlpha = 0.45; } // 숨은 포켓몬은 반투명
@@ -918,6 +927,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (restFilter) ctx.restore();
       if (grey) ctx.restore();
       if (u.burrow) ctx.restore();
+      if (revealK < 1) ctx.restore();
       if (u.burrow && !burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 구름·그림자는 위에
       if (!pose?.hidden) ui.drawStatusDot(ctx, u, cx, cy);
     }
