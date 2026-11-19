@@ -6,8 +6,12 @@ export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1
 
 // 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
 const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
-export function tileCost(tile, who) {
-  if (tile === '#') return 1; // 유연이 지나는 나무는 1
+const typed = (who, t) => typesOfWho(who).includes(t);
+// 비행(중력 아닐 때)·드래곤: 나무·벽·낙엽더미를 비용 3 으로 넘음 (멈출 수 없음)
+const soars = (who) => typeof who === 'object' && ((typed(who, 'flying') && !who.grounded) || typed(who, 'dragon'));
+const climbs = (who, trees) => trees && (ab(who) === 'limber' || typed(who, 'bug')); // 유연·벌레: 나무를 비용 1 로
+export function tileCost(tile, who, trees = false) {
+  if (tile === '#' || tile === '*') return tile === '#' && climbs(who, trees) ? 1 : 3;
   if (tile === '^' && typesOfWho(who).some((t) => t === 'rock' || t === 'ground')) return 1;
   return TILE_COST[tile];
 }
@@ -15,12 +19,15 @@ export function tileCost(tile, who) {
 // who: 유닛(타입은 유닛 기준 — 메타몽 빌드) 또는 종 키
 // trees: 벽(#)이 나무인 맵 (유연은 나무를 지나갈 수 있음 — 멈추지는 못함, reachable 이 뺀다)
 const ab = (who) => (typeof who === 'object' && !who.abilityOff ? who.ability : null);
-export function canEnter(tile, who, trees = false) {
-  if (tile === undefined || tile === '*') return false; // 낙엽더미: 누구도 못 들어감
-  if (tile === '#') return trees && ab(who) === 'limber'; // 유연: 나무 통과
+// pass: 지나가기만 하는 경로 계산 (비행·드래곤 장애물 넘기)
+export function canEnter(tile, who, trees = false, pass = false) {
+  if (tile === undefined) return false;
+  if (pass && (tile === '#' || tile === '*') && soars(who)) return true;
+  if (tile === '*') return false; // 낙엽더미: 누구도 못 들어감
+  if (tile === '#') return climbs(who, trees); // 유연·벌레: 나무 통과
   if (tile === '~') {
     const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;
-    if (t.includes('water')) return true;
+    if (t.includes('water') || t.includes('dragon')) return true; // 드래곤: 물 위 이동
     if (typeof who === 'object' && who.grounded) return false; // 중력: 땅에 붙어 물 위로 못 감
     return t.includes('flying') || ab(who) === 'levitate' || (typeof who === 'object' && who.magnetRise > 0); // 부유·전자부유: 비행처럼 물 위로
   }
@@ -47,10 +54,10 @@ function search(grid, units, unit, budgetOverride = null) {
       const x = cur.x + dx, y = cur.y + dy;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
       const tile = grid[y][x];
-      if (!canEnter(tile, unit, !!grid.trees)) continue;
+      if (!canEnter(tile, unit, !!grid.trees, true)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side && !typesOfWho(unit).includes('ghost')) continue; // 고스트: 상대 칸 통과
-      const c = cur.c + tileCost(tile, unit);
+      const c = cur.c + tileCost(tile, unit, !!grid.trees);
       if (c > budget) continue;
       const k = `${x},${y}`;
       if (best.has(k) && best.get(k) <= c) continue;
@@ -67,7 +74,7 @@ export function reachable(grid, units, unit, budget = null) {
   const { best, occ } = search(grid, units, unit, budget);
   // 같은 편이 서 있는 칸은 통과만 가능, 정지 불가
   for (const [k, side] of occ) if (side === unit.side || typesOfWho(unit).includes('ghost')) best.delete(k); // 고스트도 상대 칸엔 못 섬
-  for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number); if (grid[y][x] === '#') best.delete(k); } // 나무 위엔 못 섬
+  for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number); const t = grid[y][x]; if (t === '*' || (t === '#' && !(grid.trees && typed(unit, 'bug')))) best.delete(k); } // 나무 위엔 벌레만 섬, 낙엽더미 위엔 아무도
   return best;
 }
 
