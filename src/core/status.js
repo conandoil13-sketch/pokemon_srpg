@@ -65,7 +65,7 @@ export const moveBudget = (unit) => {
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
   if (unit.trapped && !runAway) return 1; // 개미지옥·그림자밟기·자력
   const grounded = unit.grounded && (unit.types ?? SPECIES[unit.species].types).includes('flying') ? 1 : 0; // 중력: 비행 +1 없어짐
-  return Math.max(1, base + moveBonus(unit) - grounded + (itemOf(unit)?.move ?? 0)) + (unit.field?.tailwind ? 1 : 0); // 구애스카프 +1 · 검은철구 −1 // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1, 순풍 +1
+  return Math.max(1, base + moveBonus(unit) - grounded + (itemOf(unit)?.move ?? 0)) + (unit.field?.tailwind ? 1 : 0) + (unit.terrainMove ?? 0); // 구애스카프 +1 · 검은철구 −1 // 쓱쓱·엽록소·속보 +1, 슬로스타트 −1, 순풍 +1
 };
 
 export const speedMultiplier = (unit) => (unit.status === 'paralysis' ? 0.5 : 1);

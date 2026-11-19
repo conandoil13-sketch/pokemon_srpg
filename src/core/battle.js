@@ -59,6 +59,12 @@ function uniqueId(units, side, species) {
 }
 
 // opts.hpRatio: { [memberKey]: 0.5 } — 직전 층 기절자 등 시작 HP 비율 (열쇠 = uid, 없으면 종 이름)
+// 물·풀: 물 칸·수풀 칸에서 차례를 시작하면 그 차례 이동력 +1 (타입별 지형 이득)
+export function terrainStart(state, u) {
+  const tile = state.grid[u.y]?.[u.x], t = u.types ?? SPECIES[u.species].types;
+  u.terrainMove = (tile === '~' && t.includes('water')) || (tile === '"' && t.includes('grass')) ? 1 : 0;
+}
+
 export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } = {}) {
   const units = [];
   party.slice(0, mapDef.allySlots.length).forEach((m, i) => {
@@ -89,6 +95,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
   state.baseWeather = state.weather; // 날씨 부르기가 끝나면 돌아갈 날씨 (날씨 특성 반영 후)
   for (const u of units) u.fieldWeather = effectiveWeather(state); // 날씨 특성(쓱쓱 등)이 처음부터 이동력에 반영
   refreshField(state);
+  for (const u of units) terrainStart(state, u);
   return state;
 
 }
@@ -923,6 +930,7 @@ export function endPhase(state, rng = Math.random) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false;
     tickStart(u);
+    terrainStart(state, u);
     bindCheck(state, u, events); // 속박: 묶은 쪽이 멀어졌으면 풀림
     u.spent = 0; u.retreatReady = false; u.retreated = false; // 치고 빠지기
     if (u.flinch) { u.flinch = false; u.sealed = true; events.push({ unitId: u.id, kind: 'sealed' }); } // 풀죽음 → 이번 차례 기술 봉인
