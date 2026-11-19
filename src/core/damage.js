@@ -9,8 +9,15 @@ import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunit
 
 
 const sp = (unit) => SPECIES[unit.species];
+const isType = (u, t) => (u.types ?? SPECIES[u.species].types).includes(t);
 
-export function hitChance(attacker, defender, move, defTile, weather = null) {
+// 타입별 지형 이득용 상황: 공격자가 선 칸, 맞는 쪽 상하좌우의 같은 편 수
+export function terrainCtx(state, a, d) {
+  const guards = state.units.filter((o) => o !== d && o.side === d.side && o.hp > 0 && Math.abs(o.x - d.x) + Math.abs(o.y - d.y) === 1).length;
+  return { atkTile: state.grid[a.y]?.[a.x], guards };
+}
+
+export function hitChance(attacker, defender, move, defTile, weather = null, ctx = {}) {
   if (move.sure) return 100; // 필중 기술
   if (move.fixedDamage === 'ohko') return Math.max(0, Math.min(100, 30 + attacker.level - defender.level)); // 일격필살: 레벨 차 (회피·수풀 무시)
   const acc = weatherAccuracy(weather, move, move.accuracy);
@@ -19,8 +26,10 @@ export function hitChance(attacker, defender, move, defTile, weather = null) {
   if (ab.sure) return 100;
   acc.value = ab.value;
   const speGap = Math.floor((effectiveStat(defender, 'spe') - effectiveStat(attacker, 'spe')) / 10);
-  const evasion = Math.min(30, (defTile === '"' ? 15 : 0) + Math.max(0, speGap));
-  return Math.max(0, Math.min(100, acc.value - evasion + accuracyShift(attacker, defender)));
+  const bush = defTile === '"' ? (isType(defender, 'grass') ? 20 : 15) : 0; // 풀: 수풀 회피 +5
+  const evasion = Math.min(30, bush + Math.max(0, speGap));
+  const rockAim = ctx.atkTile === '^' && isType(attacker, 'fighting') ? 5 : 0; // 격투: 바위 위에서 명중 +5
+  return Math.max(0, Math.min(100, acc.value + rockAim - evasion + accuracyShift(attacker, defender)));
 }
 
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)
@@ -36,7 +45,7 @@ export function varPower(attacker, defender, move) {
   }
 }
 
-function baseDamage(attacker, defender, move, defTile, weather = null) {
+function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {}) {
   if (move.varPower) move = { ...move, power: varPower(attacker, defender, move) };
   if (move.weightPower) move = { ...move, power: weightPower(weightOf(defender)) }; // 안다리걸기·풀묶기: 상대 몸무게
   const physical = move.category === 'physical';
@@ -44,7 +53,7 @@ function baseDamage(attacker, defender, move, defTile, weather = null) {
   const aKey = physical ? 'atk' : 'spa', dKey = physical ? 'def' : 'spd';
   const A = defender.ability === 'unaware' && attacker.ability !== 'mold-breaker' ? attacker.stats[aKey] : effectiveStat(attacker, aKey);
   let D = attacker.ability === 'unaware' ? defender.stats[dKey] : effectiveStat(defender, dKey);
-  if (defTile === '^') D *= 1.2;
+  if (defTile === '^') D *= isType(defender, 'steel') ? 1.35 : 1.2; // 강철: 바위 칸 ×1.35
   const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;
   const stab = stabMult(attacker, move, weather);
   let typeMult = typeEffect(attacker, defender, move, weather);
@@ -52,7 +61,8 @@ function baseDamage(attacker, defender, move, defTile, weather = null) {
   if (blocked) typeMult = 0;
   const burn = physical && attacker.status === 'burn' && !ignoresBurn(attacker) ? 0.5 : 1; // 화상: 물리 데미지 절반 (근성 제외)
   const ab = attackMult(attacker, defender, move, { typeMult, weather }) * defendMult(attacker, defender, move, { typeMult });
-  return { raw: base * stab * typeMult * burn * ab * weatherDamageMult(weather, move, defender), typeMult, blocked };
+  const guard = isType(defender, 'normal') ? 1 - 0.03 * Math.min(4, ctx.guards ?? 0) : 1; // 노말: 옆 아군 1마리당 3% (최대 12%)
+  return { raw: base * stab * typeMult * burn * ab * guard * weatherDamageMult(weather, move, defender), typeMult, blocked };
 }
 
 // spread: 여러 마리를 맞히면 0.75 (본가 4세대)
@@ -81,20 +91,21 @@ export function fixedDamage(attacker, defender, move, weather = null) {
 }
 
 // forceHit: 연속 공격 2타째부터 (명중은 첫 타만)
-export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false }) {
+export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false, atkTile, guards }) {
+  const ctx = { atkTile, guards };
   if (move.fixedDamage) {
     const fd = fixedDamage(attacker, defender, move, weather);
     if (fd === 0 && move.fixedDamage === 'ohko' && defender.boss) return { hit: true, crit: false, typeMult: 0, damage: 0, ohkoBoss: true }; // 보스 전용 문구
     if (fd === 0) return { hit: true, crit: false, typeMult: 0, damage: 0 };
-    const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather);
+    const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather, ctx);
     const dmg = move.fixedDamage === 'psywave' ? Math.max(1, Math.floor(fd * (0.5 + rng()))) : fd;
     return { hit, crit: false, typeMult: 1, damage: hit ? dmg : 0 };
   }
-  const { raw: base, typeMult, blocked } = baseDamage(attacker, defender, move, defTile, weather);
+  const { raw: base, typeMult, blocked } = baseDamage(attacker, defender, move, defTile, weather, ctx);
   const raw = base * spread;
   // 면역은 명중 판정 없이 "효과가 없다" (빗나감 메시지가 나오지 않도록). 특성 무효면 absorbed 로 알림
   if (typeMult === 0) return { hit: true, crit: false, typeMult, damage: 0, ...(blocked ? { absorbed: blocked } : {}) };
-  const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather);
+  const hit = forceHit || rng() * 100 < hitChance(attacker, defender, move, defTile, weather, ctx);
   const crit = hit && rng() < critRate(attacker, defender, move);
   const roll = 0.85 + rng() * 0.15;
   if (!hit) return { hit, crit: false, typeMult, damage: 0 };
@@ -102,10 +113,10 @@ export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1,
   return { hit, crit, typeMult, damage };
 }
 
-export function expectedDamage(attacker, defender, move, defTile, spread = 1, weather = null) {
-  const acc = hitChance(attacker, defender, move, defTile, weather) / 100;
+export function expectedDamage(attacker, defender, move, defTile, spread = 1, weather = null, ctx = {}) {
+  const acc = hitChance(attacker, defender, move, defTile, weather, ctx) / 100;
   if (move.fixedDamage) return fixedDamage(attacker, defender, move, weather) * acc;
-  const { raw } = baseDamage(attacker, defender, move, defTile, weather);
+  const { raw } = baseDamage(attacker, defender, move, defTile, weather, ctx);
   return raw * spread * 0.925 * acc * avgHits(move) * fieldDamageMult(attacker, defender, move); // 연속 공격은 평균 타수
 }
 

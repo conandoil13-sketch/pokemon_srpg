@@ -8,7 +8,7 @@ import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
-import { calcDamage, hitChance, confusionDamage, rollHits } from './damage.js';
+import { calcDamage, hitChance, confusionDamage, rollHits, terrainCtx } from './damage.js';
 import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
@@ -547,7 +547,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (t !== a && t.guard === 'protect') { protectedIds.push(t.id); continue; } // 방어: 다른 유닛의 기술을 막음
       const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
       if (ab) { absorb(t, ab); continue; }
-      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W))) { missed.push(t.id); continue; }
+      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W, terrainCtx(state, a, t)))) { missed.push(t.id); continue; }
       if (move.id === 'captivate' && !(t.gender && a.gender && t.gender !== a.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
       if (move.effect === 'push') { effects.push(pushAway(state, a, t, out2)); continue; } // 울부짖기·날려버리기
       if (SUPPORT.has(move.effect)) { effects.push(supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out2)); continue; } // 회복·상태 조작
@@ -616,7 +616,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       const hpBefore = d.hp;
       const r = presentHeal ? { hit: true, crit: false, typeMult: 1, damage: 0, presentHeal: true } // 프레젠트 회복
         : move.dreamOnly && d.status !== 'sleep' ? { hit: true, crit: false, typeMult: 0, damage: 0, failed: true } // 꿈먹기: 잠든 상대만
-        : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 });
+        : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0, ...terrainCtx(state, a, d) });
       if (r.absorbed) absorb(d, r.absorbed);
       if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
       if (r.damage > 0) d.ncTouched = true; // 자연회복: 맞음

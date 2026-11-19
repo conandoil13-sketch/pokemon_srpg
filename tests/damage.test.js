@@ -38,7 +38,7 @@ test('immune: earthquake vs honchkrow', () => {
 });
 
 test('tall grass lowers hit chance by 15', () => {
-  const a = u('infernape'), d = u('torterra', 'enemy');
+  const a = u('infernape'), d = u('rhyperior', 'enemy'); // 풀 타입은 20 (2026-11-20 타입별 지형 이득)
   assert.equal(hitChance(a, d, MOVES.flamethrower, '.') - hitChance(a, d, MOVES.flamethrower, '"'), 15);
 });
 

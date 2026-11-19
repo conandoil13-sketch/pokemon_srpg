@@ -11,7 +11,7 @@ import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/p
 import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus } from '../core/shapes.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
-import { calcDamage, hitChance } from '../core/damage.js';
+import { calcDamage, hitChance, terrainCtx } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
 import { bakeAutumnGround, drawAutumnMap } from '../render/autumnTiles.js';
@@ -36,13 +36,13 @@ const MARGIN = 2; // 카메라: 커서를 화면 가장자리에서 최소 이 �
 const seqRng = (vals) => { let i = 0; return () => vals[i++] ?? 0; };
 
 // 예상 창 숫자: 명중·최소·최대 데미지 (날씨·다수 명중 반영)
-export function forecastFor(a, d, mv, tile, weather = null, spread = 1) {
-  if (mv.dreamOnly && d.status !== 'sleep') return { hit: hitChance(a, d, mv, tile, weather), min: 0, max: 0, typeMult: 0 }; // 꿈먹기: 깨어 있으면 실패
-  const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread, weather });
-  const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread, weather });
+export function forecastFor(a, d, mv, tile, weather = null, spread = 1, ctx = {}) {
+  if (mv.dreamOnly && d.status !== 'sleep') return { hit: hitChance(a, d, mv, tile, weather, ctx), min: 0, max: 0, typeMult: 0 }; // 꿈먹기: 깨어 있으면 실패
+  const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread, weather, ...ctx });
+  const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread, weather, ...ctx });
   // 연속 공격: 최소 타수 × 최소, 최대 타수 × 최대 (스킬링크면 최대 타수)
   const lo = !mv.minHits || mv.maxHits <= 1 ? 1 : a.ability === 'skill-link' ? mv.maxHits : mv.minHits, hi = !mv.maxHits || mv.maxHits <= 1 ? 1 : mv.maxHits;
-  return { hit: hitChance(a, d, mv, tile, weather), min: min.damage * lo, max: max.damage * hi, typeMult: min.typeMult };
+  return { hit: hitChance(a, d, mv, tile, weather, ctx), min: min.damage * lo, max: max.damage * hi, typeMult: min.typeMult };
 }
 
 import { josa } from '../data/text.js';
@@ -936,7 +936,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ui.drawTypeBadge(ctx, mv.type, W - 42, y + 5);
     list.slice(0, 3).forEach((d, i) => {
       const tile = st.grid[d.y][d.x], ry = y + 20 + i * 13;
-      const fc = forecastFor(a, d, mv, tile, effectiveWeather(st), spread);
+      const fc = forecastFor(a, d, mv, tile, effectiveWeather(st), spread, terrainCtx(st, a, d));
       const min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
       const mine = d.side === a.side;
       drawText(ctx, `${spec(d).name}${mine ? ' (아군)' : ''}`, 10, ry, mine ? '#d03020' : '#383838', null, 'small');
@@ -950,7 +950,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function drawForecast(ctx, a, d, moveId) {
     const mv = MOVES[moveId];
     const tile = st.grid[d.y][d.x];
-    const fc = forecastFor(a, d, mv, tile, effectiveWeather(st));
+    const fc = forecastFor(a, d, mv, tile, effectiveWeather(st), 1, terrainCtx(st, a, d));
     const hit = fc.hit, min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
     const y = (d.y * TILE - cam.y) > H / 2 ? 2 : H - 54;
     ui.drawWindow(ctx, 2, y, W - 4, 52);
@@ -979,7 +979,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawText(ctx, mv.name, 10, y + 20);
     drawText(ctx, effectSummary(mv), 92, y + 20, '#5848a0');
     const foes = (one ? [one] : list).filter((u) => u.side !== a.side);
-    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x], effectiveWeather(st))}%`, 10, y + 35);
+    if (one && foes.length) drawText(ctx, `명중 ${hitChance(a, one, { ...mv, accuracy: mv.accuracy ?? 100 }, st.grid[one.y][one.x], effectiveWeather(st), terrainCtx(st, a, one))}%`, 10, y + 35);
     const note = one ? ailmentNote(one, mv, a) : null;
     if (note) drawText(ctx, note, W - 12 - textWidth(note), y + 35, '#808080');
     else if (!one) drawText(ctx, list.length ? `대상 ${list.length}마리` : '범위 안에 대상이 없다', 10, y + 35, list.length ? '#383838' : '#a0a0a0');
