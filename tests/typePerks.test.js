@@ -87,3 +87,40 @@ test('ghost passes through foes but cannot stop on them', () => {
   const n = u('pikachu', 'ally', 0, 0);
   assert.ok(!reachable(grid, [n, foe], n).has('2,0'));
 });
+
+// ── 3차분: 벌레 나무, 비행·드래곤 장애물 통과, 드래곤 물 위 ──
+const treeMap = (rows) => Object.assign([...rows], { trees: true });
+
+test('bug passes and stops on trees (tree maps only)', () => {
+  const b = u('kricketune', 'ally', 0, 0);
+  const r = reachable(treeMap(['.#.']), [b], b);
+  assert.equal(r.get('1,0'), 1);
+  assert.ok(r.has('2,0'));
+  assert.ok(!reachable(['.#.'], [b], b).has('1,0')); // 동굴 벽은 안 됨
+});
+
+test('flying passes obstacles at cost 3 but cannot stop on them', () => {
+  const f = u('staravia', 'ally', 0, 0);
+  const r = reachable(['.#..', '....'], [f], f);
+  assert.ok(!r.has('1,0'));
+  assert.equal(reachable(['.#.*.'], [f], f).get('2,0'), 4);
+  f.grounded = true;
+  assert.equal(reachable(['.#.'], [f], f).has('2,0'), false); // 중력: 통과 못 함
+});
+
+test('dragon passes obstacles and walks on water', () => {
+  const d = u('gible', 'ally', 0, 0);
+  const r = reachable(['.#.', '~..'], [d], d);
+  assert.equal(r.get('0,1'), 1);
+  assert.ok(!r.has('1,0'));
+  const far = u('gabite', 'ally', 0, 0);
+  assert.ok(reachable(['.#.'], [far], far).has('2,0'));
+});
+
+test('standing on a tree: defense x1.1 and evasion +8', () => {
+  const a = u('bidoof'), d = u('kricketune', 'enemy');
+  a.stats.spe = 999;
+  const mv = { ...MOVES.tackle, accuracy: 100 };
+  assert.equal(hitChance(a, d, mv, '#'), 92);
+  assert.ok(dmg(a, d, '#') < dmg(a, d, '.'));
+});

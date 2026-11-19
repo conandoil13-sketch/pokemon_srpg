@@ -26,7 +26,7 @@ export function hitChance(attacker, defender, move, defTile, weather = null, ctx
   if (ab.sure) return 100;
   acc.value = ab.value;
   const speGap = Math.floor((effectiveStat(defender, 'spe') - effectiveStat(attacker, 'spe')) / 10);
-  const bush = defTile === '"' ? (isType(defender, 'grass') ? 20 : 15) : 0; // 풀: 수풀 회피 +5
+  const bush = defTile === '"' ? (isType(defender, 'grass') ? 20 : 15) : defTile === '#' ? 8 : 0; // 풀: 수풀 회피 +5 · 나무 위(벌레) +8
   const evasion = Math.min(30, bush + Math.max(0, speGap));
   const rockAim = ctx.atkTile === '^' && isType(attacker, 'fighting') ? 5 : 0; // 격투: 바위 위에서 명중 +5
   return Math.max(0, Math.min(100, acc.value + rockAim - evasion + accuracyShift(attacker, defender)));
@@ -54,6 +54,7 @@ function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {})
   const A = defender.ability === 'unaware' && attacker.ability !== 'mold-breaker' ? attacker.stats[aKey] : effectiveStat(attacker, aKey);
   let D = attacker.ability === 'unaware' ? defender.stats[dKey] : effectiveStat(defender, dKey);
   if (defTile === '^') D *= isType(defender, 'steel') ? 1.35 : 1.2; // 강철: 바위 칸 ×1.35
+  else if (defTile === '#') D *= 1.1; // 나무 위(벌레)
   const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;
   const stab = stabMult(attacker, move, weather);
   let typeMult = typeEffect(attacker, defender, move, weather);

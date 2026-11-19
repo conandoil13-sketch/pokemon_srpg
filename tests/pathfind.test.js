@@ -76,7 +76,7 @@ import { pathTo } from '../src/core/pathfind.js';
 
 test('pathTo walks around walls, through allies, step by step', () => {
   const grid = ['.#...', '.#...', '.....'];
-  const u = unit('murkrow', 'ally', 0, 0); // 이동력 6 (비행 +1)
+  const u = unit('pikachu', 'ally', 0, 0); // 이동력 6 (비행은 2026-11-20부터 벽을 넘으므로 땅 포켓몬)
   const friend = unit('torterra', 'ally', 1, 2);
   const path = pathTo(grid, [u, friend], u, 2, 0);
   assert.deepEqual(path[0], { x: 0, y: 0 });
