@@ -4,6 +4,8 @@ import { DUNGEONS } from '../data/dungeons.js';
 
 // 적 한 마리의 위협도 = 레벨 × 종족값 합 / 100
 export const threat = (level, species) => (level * SPECIES[species].bst) / 100;
+// 권장 레벨 (최소 컷): 그 층 적의 기본 레벨
+export const recommendedLevel = (dungeon, floor) => dungeon.baseLevel[Math.min(floor, dungeon.floors) - 1];
 export const bossLevel = (dungeon) => dungeon.baseLevel[dungeon.floors - 1] + dungeon.boss.levelBonus;
 
 // 레벨 상한: 해금 사슬에서 아직 돌파하지 않은 첫 던전의 상한, 다 돌파했으면 마지막 던전 상한 (던전이 늘면 이어진다)

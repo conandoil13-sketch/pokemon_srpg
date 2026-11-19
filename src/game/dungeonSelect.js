@@ -1,4 +1,5 @@
 // 던전 선택: (진행 중 탐험 이어하기) + 던전 목록. 잠긴 던전은 해금 조건 표시
+import { recommendedLevel } from '../core/difficulty.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -80,6 +81,7 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
       if (it.kind === 'resume') drawText(ctx, `B${run.floor}F 부터 이어서`, dx + 8, LIST_Y + 40, '#c04040', null, 'small');
       else if (it.locked) drawText(ctx, `${dungeonById(d.unlock).name} 돌파 시 해금`, dx + 8, LIST_Y + 40, '#a8a8a8', null, 'small');
       else if (run) drawText(ctx, '진행 중인 탐험을 포기하고 시작', dx + 8, LIST_Y + 40, '#a07020', null, 'small');
+      if (!it.locked) drawText(ctx, it.kind === 'resume' ? `권장 Lv${recommendedLevel(d, run.floor)}` : `권장 Lv${d.baseLevel[0]}~${d.baseLevel.at(-1)}`, dx + 8, LIST_Y + 56, '#3868a8', null, 'small');
       drawText(ctx, it.locked ? '잠겨 있다' : 'Z: 출발!', dx + 8, LIST_Y + 78, it.locked ? '#a8a8a8' : '#e04040');
 
       if (confirm) {
