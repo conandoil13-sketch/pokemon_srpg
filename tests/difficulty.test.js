@@ -159,3 +159,11 @@ test('review: capped event comes after level events and only below the max level
   const free = newMember('pidgey', 99);
   assert.ok(!applyExp([free], { pidgey: 1e9 }).some((e) => e.capped));
 });
+
+import { recommendedLevel } from '../src/core/difficulty.js';
+import { DUNGEONS as ALL_DUNGEONS } from '../src/data/dungeons.js';
+test('recommended level per floor = that floor\'s base enemy level', () => {
+  for (const d of ALL_DUNGEONS) for (let f = 1; f <= d.floors; f++) assert.equal(recommendedLevel(d, f), d.baseLevel[f - 1]);
+  const d = ALL_DUNGEONS[0];
+  assert.equal(recommendedLevel(d, 99), d.baseLevel.at(-1)); // 범위 밖이면 마지막 층
+});

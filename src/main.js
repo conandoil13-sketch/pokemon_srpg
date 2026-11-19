@@ -23,7 +23,7 @@ import { dungeonById } from './data/dungeons.js';
 import { josa } from './data/text.js';
 import { pickupLoot } from './core/abilities.js';
 import { rollCapsules } from './core/dittoBuild.js';
-import { levelCapFor } from './core/difficulty.js';
+import { levelCapFor, recommendedLevel } from './core/difficulty.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
 import { createEvolutionChoice } from './game/evolutionChoice.js';
@@ -82,7 +82,7 @@ function startFloor() {
   save(); // 층 시작 시점 저장 (같은 시드 → 같은 맵으로 재개)
   scene = createGame({
     rng, map, party: deployed(game), hpRatio: floorStartHp(run), theme: d.theme, // 메타몽 + 출전 4
-    floorLabel: `${d.name} B${run.floor}F`,
+    floorLabel: `${d.name} B${run.floor}F · 권장 Lv${recommendedLevel(d, run.floor)}`,
     onExit: (result, log) => afterBattle(result, log),
   });
 }
@@ -116,7 +116,7 @@ function afterResults(result, log) {
   game.run = run;
   save();
   scene = createFloorMenu({
-    lines: [`B${prevFloor}F 돌파!  (코인 ${run.loot.coins}${run.loot.capsules?.length ? ` · 캡슐 ${run.loot.capsules.length}` : ''})`, '어떻게 할까?'],
+    lines: [`B${prevFloor}F 돌파!  (코인 ${run.loot.coins}${run.loot.capsules?.length ? ` · 캡슐 ${run.loot.capsules.length}` : ''})`, `다음 B${run.floor}F 권장 Lv${recommendedLevel(dungeonById(run.dungeonId), run.floor)} · 어떻게 할까?`],
     options: ['다음 층으로', '마을로 돌아가기'],
     onPick: (i) => (i === 0 ? startFloor() : endRun('retreat', prevFloor)), // 다음 층엔 아직 안 들어감
   });

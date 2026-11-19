@@ -187,7 +187,7 @@ export function drawBanner(ctx, text, sub, color, t) {
   ctx.fillRect(x, y + 3, W, 2);
   ctx.fillRect(x, y + h - 5, W, 2);
   bigText(ctx, text, x + W / 2, y + 7, '#f8f8f8', '#303040');
-  if (sub) drawText(ctx, sub, x + Math.floor((W - textWidth(sub)) / 2), y + 33, '#f8f8f8', null);
+  if (sub) { const f = textWidth(sub) > W - 8 ? 'small' : undefined; drawText(ctx, sub, x + Math.floor((W - textWidth(sub, f)) / 2), y + (f ? 35 : 33), '#f8f8f8', null, f); } // 길면 작은 글씨
 }
 
 // 월드 좌표 (호출 측에서 카메라 translate)
