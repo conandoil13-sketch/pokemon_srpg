@@ -49,7 +49,7 @@ function search(grid, units, unit, budgetOverride = null) {
       const tile = grid[y][x];
       if (!canEnter(tile, unit, !!grid.trees)) continue;
       const side = occ.get(`${x},${y}`);
-      if (side && side !== unit.side) continue;
+      if (side && side !== unit.side && !typesOfWho(unit).includes('ghost')) continue; // 고스트: 상대 칸 통과
       const c = cur.c + tileCost(tile, unit);
       if (c > budget) continue;
       const k = `${x},${y}`;
@@ -66,7 +66,7 @@ function search(grid, units, unit, budgetOverride = null) {
 export function reachable(grid, units, unit, budget = null) {
   const { best, occ } = search(grid, units, unit, budget);
   // 같은 편이 서 있는 칸은 통과만 가능, 정지 불가
-  for (const [k, side] of occ) if (side === unit.side) best.delete(k);
+  for (const [k, side] of occ) if (side === unit.side || typesOfWho(unit).includes('ghost')) best.delete(k); // 고스트도 상대 칸엔 못 섬
   for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number); if (grid[y][x] === '#') best.delete(k); } // 나무 위엔 못 섬
   return best;
 }

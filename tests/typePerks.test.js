@@ -55,3 +55,35 @@ test('terrainCtx reads attacker tile and defender neighbours', () => {
   const state = { grid: ['^...', '....'], units: [a, d, m1, m2, foe] };
   assert.deepEqual(terrainCtx(state, a, d), { atkTile: '^', guards: 2 });
 });
+
+// ── 2차분: 물·풀 출발 이동력 +1, 고스트 상대 칸 통과 ──
+import { moveBudget } from '../src/core/status.js';
+import { terrainStart } from '../src/core/battle.js';
+
+test('water starting on water / grass starting on bush: +1 move', () => {
+  const grid = ['~"..'];
+  const w = u('buizel', 'ally', 0, 0), g = u('turtwig', 'ally', 1, 0);
+  const before = [moveBudget(w), moveBudget(g)];
+  terrainStart({ grid }, w); terrainStart({ grid }, g);
+  assert.deepEqual([moveBudget(w), moveBudget(g)], [before[0] + 1, before[1] + 1]);
+  w.x = 2; terrainStart({ grid }, w);
+  assert.equal(moveBudget(w), before[0]);
+});
+
+test('non-matching types get no start bonus', () => {
+  const grid = ['"~..'];
+  const w = u('buizel', 'ally', 0, 0), p = u('psyduck', 'ally', 0, 0); // 물인데 수풀
+  const b = moveBudget(w);
+  terrainStart({ grid }, w);
+  assert.equal(moveBudget(w), b);
+});
+
+test('ghost passes through foes but cannot stop on them', () => {
+  const grid = ['.....'];
+  const gh = u('gastly', 'ally', 0, 0), foe = u('bidoof', 'enemy', 1, 0);
+  const r = reachable(grid, [gh, foe], gh);
+  assert.ok(r.has('2,0'));
+  assert.ok(!r.has('1,0'));
+  const n = u('pikachu', 'ally', 0, 0);
+  assert.ok(!reachable(grid, [n, foe], n).has('2,0'));
+});
