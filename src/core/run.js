@@ -1,4 +1,7 @@
 // 탐험(런) 상태 (순수). Run = { dungeonId, floor, seed, faintedLast, loot: { evoStone, candy: [얻은 층…] } }
+import { lineRoot } from './gacha.js';
+import { deployed } from './roster.js';
+import { addShards } from './shards.js';
 import { refreshShop } from './shop.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
 import { hashSeed } from './floorgen.js';
@@ -56,11 +59,21 @@ export function settleLoot(game, run) {
 
 // outcome: 'cleared' | 'retreat' | 'wiped'. 보물 지급은 호출 측(settleLoot)
 export function finishRun(game, run, outcome) {
+  const shards = {};
   game.best[run.dungeonId] = Math.max(game.best[run.dungeonId] ?? 0, run.floor);
   if (outcome === 'cleared') {
-    if (!game.cleared.includes(run.dungeonId)) game.cleared.push(run.dungeonId);
+    if (!game.cleared.includes(run.dungeonId)) {
+      game.cleared.push(run.dungeonId);
+      for (const member of deployed(game)) {
+        if (member.species === 'ditto') continue;
+        const root = lineRoot(member.species);
+        shards[root] = (shards[root] ?? 0) + 1;
+      }
+      for (const [root, count] of Object.entries(shards)) addShards(game, root, count);
+    }
     for (const d of DUNGEONS) if (d.unlock === run.dungeonId && !game.unlocked.includes(d.id)) game.unlocked.push(d.id);
   }
   game.run = null;
   refreshShop(game); // 상점 진열은 탐험이 끝날 때마다 바뀜
+  return shards;
 }

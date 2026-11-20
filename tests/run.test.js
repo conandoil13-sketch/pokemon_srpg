@@ -87,3 +87,14 @@ test('candy exp is keyed per member (uid), so two of a species both get it', asy
   const s = settleLoot(g, r);
   assert.deepEqual(Object.keys(s.exp).map(Number).sort((x, y) => x - y), [1, 2, 3, 4, 5, 6]);
 });
+
+test('first clear pays each deployed companion once, combining evolved relatives', () => {
+  const g = game();
+  g.party = ['ditto', 'shinx', 'luxio', 'piplup'].map((species, uid) => ({ species, uid: uid + 1 }));
+  g.sortie = [2, 3];
+  const run = { ...startRun('sinnoh-field', 1), floor: 5, faintedLast: [3] };
+  for (const outcome of ['retreat', 'wiped']) assert.deepEqual(finishRun(g, run, outcome), {});
+  assert.deepEqual(finishRun(g, run, 'cleared'), { shinx: 2 });
+  assert.deepEqual(finishRun(g, run, 'cleared'), {});
+  assert.deepEqual(g.shards, { shinx: 2 });
+});

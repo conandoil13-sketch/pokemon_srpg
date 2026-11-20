@@ -46,5 +46,8 @@ export const TOWN = {
   shopSpot: { x: 23, y: 4, facing: 'up' },
 };
 
+const recruitSign = TOWN.objects.find((o) => o.id === 'gacha');
+export const GIFT_TREE = { kind: 'tree', x: recruitSign.x, y: recruitSign.y + 2 };
+
 // 이스터에그: 4번째 동료 자리(기본 편성이면 꼬링크) 왼쪽 칸에서 아래 물을 보고 말을 걸면 10연속 뽑기 바우처 (저장 파일당 한 번)
 export const WATER_GIFT_SPOT = { x: TOWN.npcSpots[3].x - 1, y: TOWN.npcSpots[3].y, facing: 'down' };

@@ -1,5 +1,5 @@
 // 로비 마을 장면: 리더 포켓몬을 걸어서 움직이고, 출격 게시판에서 전투로 나간다
-import { TOWN, WATER_GIFT_SPOT } from '../data/town.js';
+import { TOWN, WATER_GIFT_SPOT, GIFT_TREE } from '../data/town.js';
 import { SPECIES } from '../data/species.js';
 import { drawMap, TILE } from '../render/tiles.js';
 import { drawUnitSprite, drawShadow, DIR } from '../render/sprites.js';
@@ -15,7 +15,7 @@ const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 const TO_DIR = { up: DIR.Up, down: DIR.Down, left: DIR.Left, right: DIR.Right };
 const nameOf = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down');
 
-export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = null, onTurtwigGift = null, onWaterGift = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [], sound: snd = sound }) {
+export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = null, onTurtwigGift = null, onWaterGift = null, onShakeTree = null, spawn = TOWN.start, message = null, leader = TOWN.leader, companions = [], sound: snd = sound }) {
   let turtwigTalks = 0; // 이스터에그: 모부기에게 5번 말 걸기
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null }); // 톡·클릭 목적지 표시
   const map = TOWN;
@@ -36,7 +36,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
   let msg = !message ? null : Array.isArray(message[0]) ? pageMsg(message) : { lines: [].concat(message), who: null, then: null };
   let clock = 0;
 
-  const objectAt = (x, y) => objects.find((o) => o.x === x && o.y === y);
+  const objectAt = (x, y) => onShakeTree && x === GIFT_TREE.x && y === GIFT_TREE.y ? GIFT_TREE : objects.find((o) => o.x === x && o.y === y);
   const walkable = (x, y) => x >= 0 && y >= 0 && x < width && y < height && !'#^~'.includes(map.tiles[y][x]) && !objectAt(x, y);
 
   function tryStep(dx, dy) {
@@ -53,6 +53,11 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
     if (!o && onWaterGift && player.x === WATER_GIFT_SPOT.x && player.y === WATER_GIFT_SPOT.y && player.facing === WATER_GIFT_SPOT.facing) { // 물속의 선물
       msg = onWaterGift() ? { lines: ['…물속에서 무언가 반짝인다!', '10연속 뽑기 바우처를 손에 넣었다!'], who: null, then: null }
         : { lines: ['물결이 잔잔하게 일렁인다…'], who: null, then: null };
+      return;
+    }
+    if (o?.kind === 'tree') {
+      held = null;
+      msg = { lines: ['나무를 흔들어 볼까?'], choice: 0 };
       return;
     }
     if (!o) return;
@@ -137,6 +142,20 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
     if (afterRoute) { const f = afterRoute; afterRoute = null; f(); }
   }
 
+  const choices = [{ label: '예', enabled: true }, { label: '아니오', enabled: true }];
+  const choiceX = W - 124, choiceY = 24;
+  function treeInput(ev) {
+    if (ev.type === 'cancel') { msg = null; return; }
+    if (ev.type === 'dir' && ev.dy && !ev.repeat) msg.choice = 1 - msg.choice;
+    if (ev.type === 'click') {
+      const row = ui.menuIndexAt(choices, choiceX, choiceY, ev.py);
+      if (ev.px < choiceX || ev.px >= choiceX + 120 || !choices[row]) return;
+      msg.choice = row;
+    } else if (ev.type !== 'confirm') return;
+    if (msg.choice === 1) { msg = null; return; }
+    msg = { lines: onShakeTree() ? ['나뭇잎 사이에서 무언가 떨어졌다!', '꼬링크 계열 결정 3개를 얻었다!'] : ['나뭇잎이 바스락거렸다.'] };
+  }
+
   function closeMessage() {
     const then = msg.then;
     msg = null;
@@ -152,6 +171,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
     get message() { return msg; },
 
     handle(ev) {
+      if (msg?.choice !== undefined) { treeInput(ev); return; }
       if (msg) {
         if (ev.type === 'confirm' || ev.type === 'click' || ev.type === 'cancel') closeMessage();
         return;
@@ -237,6 +257,7 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
       if (msg) {
         const who = msg.who ? { species: msg.who.species, side: 'ally', emotion: 'Normal' } : null;
         ui.drawMessage(ctx, msg.lines, who, Math.floor(time * 3) % 2 === 0);
+        if (msg.choice !== undefined) ui.drawMenu(ctx, choices, msg.choice, choiceX, choiceY);
       }
     },
   };

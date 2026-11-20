@@ -51,7 +51,7 @@ test('duplicate line (evolved member) → shard, party unchanged', () => {
   for (let s = 1; s < 5000; s++) { g = fresh(); r = pull(g, createRng(s)); if (r.species === 'chimchar') break; }
   assert.equal(r.species, 'chimchar');
   assert.equal(r.duplicate, true);
-  assert.equal(g.shards.chimchar, 1);
+  assert.equal(g.shards.chimchar, 2);
   assert.equal(g.party.length, 5);
   assert.equal(g.coins, 0);
 });
@@ -131,7 +131,10 @@ test('claimBalls: ten-pull charges 900 once, applies all, repeats in one pull be
   assert.equal(g.coins, 100);
   assert.equal(r.results[9].duplicate, true);
   const shards = Object.values(g.shards).reduce((a, b) => a + b, 0);
-  assert.equal(g.party.length - party + shards, 10);
+  const duplicates = r.results.filter((result) => result.duplicate);
+  assert.equal(g.party.length - party + duplicates.length, 10);
+  assert.equal(r.results[9].shardCount, 2);
+  assert.equal(shards, duplicates.reduce((sum, result) => sum + ({ common: 1, rare: 2, epic: 3 }[result.rarity]), 0));
   assert.deepEqual(claimBalls(game({ coins: 899 }), balls, createRng(2)), { ok: false, reason: 'coins' });
 });
 
@@ -164,4 +167,12 @@ test('a ten-pull voucher pays for the 10-pull instead of coins', () => {
   g.coins = TEN;
   assert.equal(claimTen(g, rollB(createRng(5), 10), createRng(6)).voucher, undefined);
   assert.equal(g.coins, 0);
+});
+
+test('epic duplicate awards three shared shards', () => {
+  const species = gachaPool().epic[0];
+  const g = game({ party: [newMember(species, 10)] });
+  const result = claimBall(g, { species, rarity: 'epic' }, createRng(1));
+  assert.equal(result.shardCount, 3);
+  assert.equal(g.shards[species], 3);
 });

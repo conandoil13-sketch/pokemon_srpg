@@ -4,7 +4,8 @@ import { createTown } from '../src/game/town.js';
 import { createDungeonSelect } from '../src/game/dungeonSelect.js';
 import { createFloorMenu } from '../src/game/floorMenu.js';
 import { CHOICE_LOCK } from '../src/game/learnFlow.js';
-import { newGame } from '../src/core/save.js';
+import { shakeGiftTree } from '../src/core/shards.js';
+import { newGame, loadGame, saveGame } from '../src/core/save.js';
 import { startRun } from '../src/core/run.js';
 import { createGame } from '../src/game/states.js';
 import { TOWN } from '../src/data/town.js';
@@ -582,8 +583,8 @@ test('summary: gender switch needs the other gender unlocked, then saves', async
 
 test('gacha duplicate lines mention IVs and a new gender', async () => {
   const { duplicateLines } = await import('../src/game/gacha.js');
-  const lines = duplicateLines({ species: 'eevee', duplicate: true, ivUp: ['atk', 'spe'], newGender: 'female' });
-  assert.match(lines.join(' '), /결정/);
+  const lines = duplicateLines({ species: 'eevee', duplicate: true, shardCount: 2, ivUp: ['atk', 'spe'], newGender: 'female' });
+  assert.match(lines.join(' '), /결정 \+2/);
   assert.match(lines.join(' '), /공격·스피드 개체값이 올랐다/);
   assert.match(lines.join(' '), /♀/);
 });
@@ -667,4 +668,35 @@ test('dungeon select with a run in progress scrolls the resume row too', () => {
   const sel = createDungeonSelect({ game: g, onStart() {}, onResume() {}, onBack() {} });
   for (let i = 0; i < 10; i++) sel.handle({ type: 'dir', dx: 0, dy: 1 });
   assert.ok(sel.visibleTop >= 4); // 11줄 중 마지막이 보이게
+});
+
+test('recruitment tree counts only confirmed shakes, persists progress and pays once', () => {
+  let game = newGame();
+  const sign = TOWN.objects.find((o) => o.action === 'gacha');
+  assert.equal(TOWN.tiles[sign.y + 2][sign.x], '#');
+  const storage = { setItem(_, v) { this.raw = v; }, getItem() { return this.raw; } };
+  const enter = () => createTown({
+    spawn: { x: sign.x, y: sign.y + 1, facing: 'down' },
+    onShakeTree() {
+      const paid = shakeGiftTree(game);
+      saveGame(storage, game);
+      return paid;
+    },
+  });
+  let town = enter();
+  const confirm = () => town.handle({ type: 'confirm' });
+  confirm();
+  town.handle({ type: 'dir', dx: 0, dy: 1 });
+  confirm();
+  assert.equal(game.eggs.treeShakes, undefined);
+  for (let i = 1; i <= 6; i++) {
+    confirm();
+    assert.deepEqual(town.message.lines, ['나무를 흔들어 볼까?']);
+    confirm();
+    assert.equal(town.message.lines.join(' ').includes('결정 3개'), i === 5);
+    game = loadGame(storage);
+    assert.equal(game.eggs.treeShakes, Math.min(5, i));
+    assert.equal(game.shards.shinx ?? 0, i < 5 ? 0 : 3);
+    town = enter();
+  }
 });

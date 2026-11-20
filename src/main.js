@@ -30,7 +30,8 @@ import { createEvolutionChoice } from './game/evolutionChoice.js';
 import { createBox } from './game/box.js';
 import { createRng } from './core/rng.js';
 import { newGame, loadGame, saveGame } from './core/save.js';
-import { validateData } from './data/species.js';
+import { shakeGiftTree, TREE_SHAKES } from './core/shards.js';
+import { SPECIES, validateData } from './data/species.js';
 import { TOWN } from './data/town.js';
 
 validateData();
@@ -131,7 +132,7 @@ function endRun(outcome, reached = game.run.floor) {
   const before = [...game.unlocked];
   const reward = outcome === 'wiped' ? { exp: {} } : settleLoot(game, run);
   const capThisRun = levelCapFor(game); // 사탕 경험치는 이번 탐험의 상한으로 (돌파로 열린 상한은 다음부터)
-  finishRun(game, run, outcome);
+  const clearShards = finishRun(game, run, outcome);
   save();
   const opened = game.unlocked.filter((id) => !before.includes(id)).map((id) => dungeonById(id).name);
   const lines = outcome === 'cleared'
@@ -139,8 +140,12 @@ function endRun(outcome, reached = game.run.floor) {
     : outcome === 'retreat' ? ['마을로 돌아왔다.', loot]
     : ['눈앞이 캄캄해졌다...', '모은 보물을 잃고 마을로 돌아왔다.'];
   const heldGot = Object.entries(reward.held ?? {}).map(([id, n]) => `${HELD_ITEMS[id]?.name ?? id}${n > 1 ? ` ×${n}` : ''}`); // 얻은 지니는 도구
-  const pages0 = heldGot.length ? [lines, ['도구를 가방에 넣었다:', heldGot.join(', ')]] : lines;
-  const pages = reward.dropped ? [...(heldGot.length ? pages0 : [pages0]), ['가방이 가득 차서', `오래된 캡슐 ${reward.dropped}개를 버렸다.`]] : pages0; // 조용히 버리지 않는다
+  const pages = [lines];
+  for (const [root, count] of Object.entries(clearShards)) {
+    pages.push(['최초 돌파 보상!', `${SPECIES[root].name} 계열 결정 +${count}`]);
+  }
+  if (heldGot.length) pages.push(['도구를 가방에 넣었다:', heldGot.join(', ')]);
+  if (reward.dropped) pages.push(['가방이 가득 차서', `오래된 캡슐 ${reward.dropped}개를 버렸다.`]);
   const toTown = () => { sound.bgm('route1'); go.town(pages, TOWN.returnSpot); sound.jingle('healed'); }; // 마을로: 회복 효과음
   if (!Object.keys(reward.exp).length) { toTown(); return; }
   // 경험 사탕: 탐험 보상 결산
@@ -153,6 +158,13 @@ function endRun(outcome, reached = game.run.floor) {
 }
 
 // 이스터에그: 모부기에게 5번 말 걸면 200코인 (저장 하나당 한 번)
+function onShakeTree() {
+  if (game.eggs?.treeShakes === TREE_SHAKES) return false;
+  const rewarded = shakeGiftTree(game);
+  save();
+  return rewarded;
+}
+
 function onWaterGift() { // 물속의 선물: 10연속 뽑기 바우처 (한 번)
   if (game.eggs?.water) return false;
   game.items.tenVoucher = (game.items.tenVoucher ?? 0) + 1;
@@ -189,7 +201,7 @@ const go = {
     // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
     const outM = deployed(game).slice(1), out = outM.map((m) => m.species);
     const rest = game.party.filter((m) => m.species !== 'ditto' && !outM.includes(m)).map((m) => m.species);
-    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onBag: go.bag, onShop: go.shop, onTurtwigGift, onWaterGift, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
+    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onBag: go.bag, onShop: go.shop, onTurtwigGift, onWaterGift, onShakeTree, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
     scene = createDungeonSelect({

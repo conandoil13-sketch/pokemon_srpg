@@ -6,6 +6,9 @@ import { mergeIvs, rollIvs, rollGender, genderFits } from './individual.js';
 import { deployed } from './roster.js';
 import { giveUid, syncLine } from './members.js';
 
+import { addShards } from './shards.js';
+
+const DUPLICATE_SHARDS = { common: 1, rare: 2, epic: 3 };
 export const GACHA_COST = 100, GACHA_TEN_COST = 900; // 10연속은 10% 할인
 export const RARITY = [{ id: 'common', weight: 70 }, { id: 'rare', weight: 25 }, { id: 'epic', weight: 5 }];
 const RARE_MIN = 450, EPIC_MIN = 535;
@@ -85,13 +88,13 @@ function applyBall(game, ball, rng) {
   const { species, rarity } = ball;
   const have = game.party.find((m) => lineRoot(m.species) === species);
   if (have) { // 중복: 결정 + 개체값 능력치별 큰 값 + 새 성별 해금 (PokeRogue 식) — 같은 계열 모두 같이
-    game.shards ??= {};
-    game.shards[species] = (game.shards[species] ?? 0) + 1;
+    const shardCount = DUPLICATE_SHARDS[rarity];
+    addShards(game, species, shardCount);
     const merged = mergeIvs(have.ivs ?? {}, rollIvs(rng));
     const g = rollGender(species, rng);
     const newGender = g && !(have.genders ?? []).includes(g) && genderFits(species, g) ? g : null; // 계열 뿌리 기준 (지금 모습이 못 써도 기록)
     syncLine(game, species, { ivs: merged.ivs, genders: newGender ? [...(have.genders ?? []), newGender] : have.genders ?? [] });
-    return { ok: true, species, rarity, duplicate: true, ivUp: merged.up, newGender };
+    return { ok: true, species, rarity, duplicate: true, shardCount, ivUp: merged.up, newGender };
   }
   const member = giveUid(game, newMember(species, joinLevel(game), rng)); // 특성 슬롯도 무작위
   game.party.push(member);
