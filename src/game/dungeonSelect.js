@@ -10,11 +10,18 @@ const ROW = 18, LIST_X = 8, LIST_Y = 30, LIST_W = 120;
 const VISIBLE = 7; // 한 번에 보이는 줄 (넘치면 커서를 따라 스크롤)
 const YES_NO = [{ label: '예', enabled: true }, { label: '아니요', enabled: true }];
 
+// 잠긴 던전 설명 (줄 배열): ["시티 돌파 시 해금"] / 분기: ["하수도 또는 깊은 동굴", "돌파 시 해금"]
+export function unlockHint(d) {
+  const ids = Array.isArray(d.unlock) ? d.unlock : [d.unlock];
+  const names = ids.map((id) => dungeonById(id)?.name ?? '???').join(' 또는 ');
+  return ids.length > 1 ? [names, '돌파 시 해금'] : [`${names} 돌파 시 해금`];
+}
+
 export function createDungeonSelect({ game, onStart, onResume, onBack }) {
   const run = game.run;
   const items = [
     ...(run ? [{ kind: 'resume', label: `이어하기 B${run.floor}F` }] : []),
-    ...DUNGEONS.map((d) => ({ kind: 'dungeon', d, label: d.name, locked: !game.unlocked.includes(d.id) })),
+    ...DUNGEONS.map((d) => ({ kind: 'dungeon', d, label: d.branch ? `${d.stage}-${d.branch} ${d.name}` : d.name, locked: !game.unlocked.includes(d.id) })), // 분기: 6-1 하수도
   ];
   let idx = 0, top = 0, confirm = null, t = 0; // confirm = { id, cursor }, top = 맨 위에 보이는 줄
   const follow = () => { if (idx < top) top = idx; if (idx >= top + VISIBLE) top = idx - VISIBLE + 1; };
@@ -64,7 +71,7 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
         if (i < top || i >= top + VISIBLE) return;
         const y = LIST_Y + 5 + (i - top) * ROW;
         const dim = it.locked;
-        drawText(ctx, it.locked ? '잠김' : it.label, LIST_X + 14, y, dim ? '#a8a8a8' : it.kind === 'resume' ? '#c04040' : '#383838', dim ? null : '#d8d8d0');
+        drawText(ctx, it.locked ? (it.d?.branch ? `${it.d.stage}-${it.d.branch} 잠김` : '잠김') : it.label, LIST_X + 14, y, dim ? '#a8a8a8' : it.kind === 'resume' ? '#c04040' : '#383838', dim ? null : '#d8d8d0');
         if (it.kind === 'dungeon' && game.cleared.includes(it.d.id)) drawText(ctx, '★', LIST_X + LIST_W - 18, y, '#e0a000', '#d8d8d0');
         if (i === idx && Math.floor(time * 3) % 3 !== 2) {
           ctx.fillStyle = '#e04040';
@@ -79,7 +86,7 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
       drawText(ctx, it.locked ? '???' : d.name, dx + 8, LIST_Y + 6);
       drawText(ctx, `전 ${d.floors}층 · 최고 B${game.best[d.id] ?? 0}F`, dx + 8, LIST_Y + 24, '#585858', null, 'small');
       if (it.kind === 'resume') drawText(ctx, `B${run.floor}F 부터 이어서`, dx + 8, LIST_Y + 40, '#c04040', null, 'small');
-      else if (it.locked) drawText(ctx, `${dungeonById(d.unlock).name} 돌파 시 해금`, dx + 8, LIST_Y + 40, '#a8a8a8', null, 'small');
+      else if (it.locked) unlockHint(d).forEach((line, k) => drawText(ctx, line, dx + 8, LIST_Y + 40 + k * 14, '#a8a8a8', null, 'small'));
       else if (run) drawText(ctx, '진행 중인 탐험을 포기하고 시작', dx + 8, LIST_Y + 40, '#a07020', null, 'small');
       if (!it.locked) drawText(ctx, it.kind === 'resume' ? `권장 Lv${recommendedLevel(d, run.floor)}` : `권장 Lv${d.baseLevel[0]}~${d.baseLevel.at(-1)}`, dx + 8, LIST_Y + 56, '#3868a8', null, 'small');
       drawText(ctx, it.locked ? '잠겨 있다' : 'Z: 출발!', dx + 8, LIST_Y + 78, it.locked ? '#a8a8a8' : '#e04040');

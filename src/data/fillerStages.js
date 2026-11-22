@@ -41,12 +41,30 @@ export function fillerStage(n) {
   };
 }
 
-// 신오 뒤에 붙는 8개 자리: 임시 단계 또는 대체된 진짜 맵. 해금은 앞 자리 돌파 뒤
+// 분기 해금 (스펙 docs/superpowers/specs/2026-11-22-branch-stages-design.md): 앞 단계 맵 id 들 → 이번 단계 k 개 맵 각각의 해금 목록(하나라도 돌파하면 열림)
+// 1 → 여러 개: 다 열림 · 여러 개 → 1: 아무거나 · 같은 수: 순서대로 짝 · 적은 수 → 많은 수: 첫 맵은 공통(아무거나), 나머지는 순서대로 짝 · 많은 수 → 적은 수: 짝, 남는 앞 맵은 마지막에
+export function branchUnlocks(prev, k) {
+  if (prev.length === 1 || k === 1) return Array.from({ length: k }, () => [...prev]);
+  if (prev.length === k) return prev.map((id) => [id]);
+  if (prev.length < k) return Array.from({ length: k }, (_, i) => (i === 0 || i > prev.length ? [...prev] : [prev[i - 1]]));
+  return Array.from({ length: k }, (_, i) => (i === k - 1 ? prev.slice(i) : [prev[i]]));
+}
+
+// d 가 cleared(돌파한 던전 id 들)로 열렸나. unlock: null(처음부터) · 'id' · ['id', …](하나라도)
+export function unlockedBy(d, cleared) {
+  if (!d.unlock) return false;
+  return Array.isArray(d.unlock) ? d.unlock.some((id) => cleared.includes(id)) : cleared.includes(d.unlock);
+}
+
+// 신오 뒤에 붙는 8개 자리(6~10단계 포함 3~10단계): 임시 단계 또는 진짜 맵(배열이면 분기). 진짜 맵이 하나라도 있으면 그 자리 임시 단계는 빠짐
 export function stageSlots(replaced = REPLACED) {
-  let prev = SINNOH_DUNGEONS[SINNOH_DUNGEONS.length - 1].id;
-  return Array.from({ length: FILLER_COUNT }, (_, i) => {
-    const d = { ...(replaced[i + 1] ?? fillerStage(i + 1)), unlock: prev };
-    prev = d.id;
-    return d;
-  });
+  let prev = [SINNOH_DUNGEONS[SINNOH_DUNGEONS.length - 1].id];
+  const out = [];
+  for (let i = 0; i < FILLER_COUNT; i++) {
+    const n = i + 1, r = replaced[n], group = r ? (Array.isArray(r) ? r : [r]) : [fillerStage(n)];
+    const unlocks = branchUnlocks(prev, group.length);
+    group.forEach((d, j) => out.push({ ...d, stage: n + 2, ...(group.length > 1 ? { branch: j + 1 } : {}), unlock: unlocks[j].length === 1 ? unlocks[j][0] : unlocks[j] }));
+    prev = group.map((d) => d.id);
+  }
+  return out;
 }

@@ -11,6 +11,7 @@ import { expForLevel, MAX_LEVEL } from './stats.js';
 import { startingMoves } from './learn.js';
 import { newParty, newMember } from './progress.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
+import { unlockedBy } from '../data/fillerStages.js';
 import { memberKey, unifyLines } from './members.js';
 import { lineRoot } from './gacha.js';
 
@@ -124,7 +125,7 @@ export function ensureDitto(party) {
 
 // 깬 던전의 다음 단계를 연다 (던전이 새로 붙었을 때 예전 저장도 이어지게)
 export function unlockFromCleared(game) {
-  for (const d of DUNGEONS) if (d.unlock && game.cleared.includes(d.unlock) && !game.unlocked.includes(d.id)) game.unlocked.push(d.id);
+  for (const d of DUNGEONS) if (unlockedBy(d, game.cleared) && !game.unlocked.includes(d.id)) game.unlocked.push(d.id);
 }
 
 // 자리가 진짜 맵으로 바뀐 던전 id (예전 저장의 해금·돌파·최고 층·진행 중 탐험을 옮긴다)
