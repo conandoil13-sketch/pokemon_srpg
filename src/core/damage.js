@@ -29,7 +29,8 @@ export function hitChance(attacker, defender, move, defTile, weather = null, ctx
   const bush = defTile === '"' ? (isType(defender, 'grass') ? 20 : 15) : defTile === '#' ? 8 : 0; // 풀: 수풀 회피 +5 · 나무 위(벌레) +8
   const evasion = Math.min(30, bush + Math.max(0, speGap));
   const rockAim = ctx.atkTile === '^' && isType(attacker, 'fighting') ? 5 : 0; // 격투: 바위 위에서 명중 +5
-  return Math.max(0, Math.min(100, acc.value + rockAim - evasion + accuracyShift(attacker, defender)));
+  const height = ctx.atkTile === 'B' && defTile !== 'B' ? 10 : ctx.atkTile !== 'B' && defTile === 'B' ? -10 : 0; // 시티: 옥상 → 지상 +10, 지상 → 옥상 −10
+  return Math.max(0, Math.min(100, acc.value + rockAim + height - evasion + accuracyShift(attacker, defender)));
 }
 
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)

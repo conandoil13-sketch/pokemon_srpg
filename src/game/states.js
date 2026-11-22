@@ -854,7 +854,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
-        const cost = path.slice(1).reduce((c, p) => c + (st.grid[p.y][p.x] === '#' ? 1 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용
+        const cost = path.slice(1).reduce((c, p, i) => c + (st.grid[p.y][p.x] === '#' ? 1 : st.grid[p.y][p.x] === 'B' && st.grid[path[i].y][path[i].x] !== 'B' ? 2 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용 (옥상 오르기 2)
         moveUnit(st, unit.id, end.x, end.y, cost, path);
         const get = (id) => everyone.get(id);
         const quiet = unit.side !== 'ally' && darkIds().has(unit.id); // 숨은 채 도착한 악 타입: 알림 없음
