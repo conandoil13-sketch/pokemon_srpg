@@ -177,3 +177,14 @@ test('battles without tide data never change the grid', () => {
   for (let i = 0; i < 5; i++) round(s);
   assert.deepEqual([...s.grid], ['....', '~~~~']); assert.equal(tidePreview(s), null);
 });
+
+// ── Task 5: 해변 도트 ──
+import { createFrame, clearFrame, createFx } from '../src/vendor/pixelfx/core/index.js';
+import * as beachTiles from '../src/fx-custom/beach/tiles.js';
+test('every beach tile piece draws pixels', () => {
+  for (const piece of ['sand', 'shallow', 'deep', 'palm', 'rock', 'reef', 'grass', 'pile', 'stairs']) for (const variant of [0, 1, 2]) {
+    const [w, h] = beachTiles.meta.size, f = createFrame(w, h); clearFrame(f);
+    createFx(beachTiles, { piece, variant, seed: 3, x: beachTiles.meta.origin[0], y: beachTiles.meta.origin[1] }).draw(f, 'front');
+    assert.ok(f.color.some((c) => c !== 0), `${piece}/${variant}`);
+  }
+});
