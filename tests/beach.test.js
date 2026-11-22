@@ -124,3 +124,56 @@ test('beach sand piles hide only shore species', () => {
 test('non-beach floors have no tide data', () => {
   assert.equal(generateFloor(dungeonById('autumn-forest'), 2, 99).tide, undefined);
 });
+
+// ── Task 4: 물때 (전투) ──
+import { tideFor, tideTile, applyTide, tidePreview } from '../src/core/tide.js';
+import { createBattle, endPhase } from '../src/core/battle.js';
+import { newMember } from '../src/core/progress.js';
+import { createRng } from '../src/core/rng.js';
+
+const tideBattle = () => {
+  const map = { tiles: ['......', '......', ',,,,,,', '~~~~~~'], allySlots: [{ x: 0, y: 0 }], enemies: [{ species: 'bidoof', x: 5, y: 0, level: 5 }],
+    tide: { a: [0, 1, 2, 3, 4, 5].map((x) => ({ x, y: 2 })), b: [0, 1, 2, 3, 4, 5].map((x) => ({ x, y: 3 })) } };
+  return createBattle(map, [newMember('pikachu', 30, createRng(1))]);
+};
+const round = (s) => { endPhase(s, () => 0.9); endPhase(s, () => 0.9); };
+
+test('tide order: 0 for rounds 1-3, +1 for 4-6, 0 for 7-9, -1 for 10-12, then again', () => {
+  assert.deepEqual([1, 3, 4, 6, 7, 9, 10, 12, 13].map(tideFor), [0, 0, 1, 1, 0, 0, -1, -1, 0]);
+  assert.deepEqual([-1, 0, 1].map((l) => tideTile('a', l)), ['.', ',', '~']);
+  assert.deepEqual([-1, 0, 1].map((l) => tideTile('b', l)), [',', '~', '~']);
+});
+
+test('applyTide rewrites only A and B cells and keeps grid flags', () => {
+  const s = tideBattle();
+  s.grid.trees = true;
+  applyTide(s, 1);
+  assert.equal(s.grid[2], '~~~~~~'); assert.equal(s.tide, 1); assert.equal(s.grid.trees, true);
+  applyTide(s, -1);
+  assert.equal(s.grid[2], '......'); assert.equal(s.grid[3], ',,,,,,'); assert.equal(s.grid[0], '......');
+});
+
+test('rounds advance the tide and warn one round early', () => {
+  const s = tideBattle();
+  round(s); round(s); // turn 3
+  assert.equal(s.turn, 3);
+  const pv = tidePreview(s);
+  assert.equal(pv.next, 1); assert.equal(pv.cells.length, 6);
+  round(s); // turn 4 → 밀물
+  assert.equal(s.tide, 1); assert.equal(s.grid[2], '~~~~~~');
+  assert.equal(tidePreview(s), null);
+});
+
+test('a walker caught by the rising tide can still step out', () => {
+  const s = tideBattle();
+  const p = s.units.find((u) => u.side === 'ally');
+  p.x = 2; p.y = 2;
+  applyTide(s, 1);
+  assert.ok(reachable(s.grid, s.units, p).has('2,1'));
+});
+
+test('battles without tide data never change the grid', () => {
+  const s = createBattle({ tiles: ['....', '~~~~'], allySlots: [{ x: 0, y: 0 }], enemies: [{ species: 'bidoof', x: 3, y: 0, level: 5 }] }, [newMember('pikachu', 30, createRng(1))]);
+  for (let i = 0; i < 5; i++) round(s);
+  assert.deepEqual([...s.grid], ['....', '~~~~']); assert.equal(tidePreview(s), null);
+});

@@ -15,6 +15,7 @@ import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, C
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
+import { tideFor, applyTide } from './tide.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE, FIELD_RADIUS } from './field.js';
 import { pathTo, canEnter, reachable } from './pathfind.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal, BIND_MOVES, BIND_TURNS, bindCheck } from './volatile.js';
@@ -82,6 +83,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     units,
     phase: 'player',
     turn: 1,
+    tide: 0, tideCells: mapDef.tide ?? null, // 해변 물때 (core/tide.js)
     result: null,
     log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] }, // defeated: 캡슐 굴림용 쓰러뜨린 적 // 획득 경험치(동료 열쇠별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
     stairs: mapDef.stairs ?? null,
@@ -925,7 +927,7 @@ export function endPhase(state, rng = Math.random) {
     if (keys.length) state.log.expired.push({ unitId: u.id, keys });
   }
   state.phase = state.phase === 'player' ? 'enemy' : 'player';
-  if (state.phase === 'player') state.turn++;
+  if (state.phase === 'player') { state.turn++; if (state.tideCells && tideFor(state.turn) !== state.tide) applyTide(state, tideFor(state.turn)); } // 해변: 3라운드마다 물때
   const side = state.phase === 'player' ? 'ally' : 'enemy';
   for (const u of state.units) {
     if (u.side !== side) continue;
