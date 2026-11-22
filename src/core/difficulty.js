@@ -9,10 +9,11 @@ export const recommendedLevel = (dungeon, floor) => dungeon.baseLevel[Math.min(f
 export const bossLevel = (dungeon) => dungeon.baseLevel[dungeon.floors - 1] + dungeon.boss.levelBonus;
 
 // 레벨 상한: 해금 사슬에서 아직 돌파하지 않은 첫 던전의 상한, 다 돌파했으면 마지막 던전 상한 (던전이 늘면 이어진다)
-export function levelCapFor(game) {
+export function levelCapFor(game, list = DUNGEONS) {
   const cleared = game.cleared ?? [];
-  const next = DUNGEONS.find((d) => !cleared.includes(d.id));
-  return (next ?? DUNGEONS[DUNGEONS.length - 1]).levelCap;
+  const done = new Set(list.filter((d) => cleared.includes(d.id)).map((d) => d.stage ?? d.id)); // 분기는 하나만 깨도 그 단계 돌파
+  const next = list.find((d) => !done.has(d.stage ?? d.id));
+  return (next ?? list[list.length - 1]).levelCap;
 }
 
 // ---- 층 적 굴림 (층 시드에서 별도 난수 — 지형·상자·날씨 불변) ----

@@ -4,6 +4,7 @@ import { deployed } from './roster.js';
 import { addShards } from './shards.js';
 import { refreshShop } from './shop.js';
 import { DUNGEONS, dungeonById } from '../data/dungeons.js';
+import { unlockedBy } from '../data/fillerStages.js';
 import { hashSeed } from './floorgen.js';
 import { emptyPowders, addCapsules } from './dittoBuild.js';
 
@@ -71,7 +72,7 @@ export function finishRun(game, run, outcome) {
       }
       for (const [root, count] of Object.entries(shards)) addShards(game, root, count);
     }
-    for (const d of DUNGEONS) if (d.unlock === run.dungeonId && !game.unlocked.includes(d.id)) game.unlocked.push(d.id);
+    for (const d of DUNGEONS) if (unlockedBy(d, game.cleared) && !game.unlocked.includes(d.id)) game.unlocked.push(d.id); // 분기: 짝 맵만
   }
   game.run = null;
   refreshShop(game); // 상점 진열은 탐험이 끝날 때마다 바뀜

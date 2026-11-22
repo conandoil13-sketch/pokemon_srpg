@@ -11,6 +11,7 @@ import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage, rollHits, terrainCtx } from './damage.js';
 import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
+import { poolDamage } from './pool.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
@@ -20,6 +21,8 @@ import { chainKind, chainSpread } from './chain.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE, FIELD_RADIUS } from './field.js';
 import { pathTo, canEnter, reachable } from './pathfind.js';
 import { useWarp } from './warp.js';
+import { markExplored } from './vision.js';
+import { alertHunt } from './hunt.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal, BIND_MOVES, BIND_TURNS, bindCheck } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -94,9 +97,11 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     warps: (mapDef.warps ?? []).map((w) => ({ ...w, to: { ...w.to } })), // 시티 워프 타일 (core/warp.js)
     bossFloor: units.some((u) => u.boss),
     weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
+    ...(mapDef.dark ? { dark: true, explored: new Set() } : {}), // 깊은 동굴: 어둠 + 탐험 기억 (core/vision.js)
     ...newField(), // 오라 · 장판 · 압정 · 날씨 부르기 (층마다 새로)
   };
   floorStartAbilities(state);
+  markExplored(state);
   state.baseWeather = state.weather; // 날씨 부르기가 끝나면 돌아갈 날씨 (날씨 특성 반영 후)
   for (const u of units) u.fieldWeather = effectiveWeather(state); // 날씨 특성(쓱쓱 등)이 처음부터 이동력에 반영
   refreshField(state);
@@ -157,6 +162,7 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
   if (!stayed) u.walked = true; // 줌렌즈
   u.x = x; u.y = y; u.moved = true;
   state.log.warp = opts.warp && !stayed ? useWarp(state, u) : null; // 시티: 걸어서 워프 위에서 멈추면 짝 타일로 (아군만)
+  markExplored(state); // 깊은 동굴: 새로 본 칸 기억
   refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
   state.log.arriveAbilityEvents = [];
   // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
@@ -637,7 +643,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
         : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0, ...terrainCtx(state, a, d) });
       if (r.absorbed) absorb(d, r.absorbed);
       if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
-      if (r.damage > 0) { d.ncTouched = true; d.revealed = true; } // 자연회복: 맞음 · 악 숨기: 맞으면 드러남
+      if (r.damage > 0) { d.ncTouched = true; d.revealed = true; alertHunt(state, d, a); } // 자연회복: 맞음 · 악 숨기: 맞으면 드러남 · 깊은 동굴: 어둠 속에서 맞으면 쫓아옴
       if (r.damage > 0 && d.bide && d !== a) d.bide.stored += Math.min(r.damage, d.hp); // 참기: 받은 피해 모음
       d.hp = Math.max(0, d.hp - r.damage);
       const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김
@@ -719,7 +725,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       const v = c.unit;
       if (!state.units.includes(v)) continue;
       const damage = Math.min(v.hp, c.damage);
-      v.hp -= damage; v.ncTouched = true; v.revealed = true;
+      v.hp -= damage; v.ncTouched = true; v.revealed = true; alertHunt(state, v, a);
       if (v.hp === 0) { knockOut(state, v, a, { deferExp: true }); knocked.push(v); }
       chain.push({ unitId: v.id, damage, fainted: v.hp === 0, from: c.from, kind: ck });
     }
@@ -902,6 +908,14 @@ export function endPhase(state, rng = Math.random) {
       const hpBefore = u.hp;
       u.hp = Math.max(0, u.hp - w.damage);
       events.push({ unitId: u.id, kind: w.kind, damage: w.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
+      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
+    }
+    // 하수도 독 웅덩이 (날씨 피해 다음)
+    const pool = poolDamage(u, state.grid[u.y]?.[u.x]);
+    if (pool) {
+      const hpBefore = u.hp;
+      u.hp = Math.max(0, u.hp - pool.damage);
+      events.push({ unitId: u.id, kind: pool.kind, damage: pool.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
     // 지니는 도구: 먹다남은음식·검은진흙·끈적끈적바늘·화염구슬·독독구슬

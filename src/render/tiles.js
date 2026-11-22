@@ -22,6 +22,13 @@ const THEMES = {
     wall: { kind: 'cave', outline: '#1c1712', dark: '#40362e', mid: '#5c5044', light: '#7c6e5e', hl: '#9c8c78' },
     rock: { outline: '#1e1a16', dark: '#3e3832', mid: '#5a524a', light: '#7a7066', hl: '#9a9084' }, // 바닥보다 어둡게
   },
+  'deep-cave': { // 깊은 동굴: 차가운 청회색 돌, 보라 수정 덤불 (어둠 덮개 아래에서 빛나 보이게)
+    ground: { base: '#7c7a86', dark: '#64626e', light: '#96949e', deep: '#4e4c58', flowers: [], pebble: ['#a8a6b2', '#3e3c48'] },
+    water: { deep: '#18305e', mid: '#22468a', light: '#3a66b0', foam: '#a8c8f0', sand: '#5c5a66', sandD: '#46444e' },
+    cover: { outline: '#2a1850', dark: '#4a2c90', mid: '#7650c8', light: '#a888f0', tip: '#e0d0ff' },
+    wall: { kind: 'cave', outline: '#121018', dark: '#2e2c38', mid: '#46444f', light: '#62606c', hl: '#82808c' },
+    rock: { outline: '#141218', dark: '#34323c', mid: '#4e4c56', light: '#6c6a74', hl: '#8c8a94' },
+  },
 };
 
 const caches = {};

@@ -21,7 +21,8 @@ test('every dungeon follows the dungeon guide (fields, budgets, early species, c
       assert.ok(SPECIES[k].types.some((t) => d.types.includes(t)), `${d.id}: ${k} type`);
     }
     assert.equal(d.levelCap, bossLevel(d), d.id);
-    assert.equal(d.unlock, i === 0 ? null : DUNGEONS[i - 1].id, d.id);
+    const prev = DUNGEONS.filter((p) => p.stage === d.stage - 1).map((p) => p.id); // 분기: 앞 단계 맵 중에서
+    if (i === 0) assert.equal(d.unlock, null); else assert.ok([d.unlock].flat().every((id) => prev.includes(id)), d.id);
     assert.equal(d.level, undefined, `${d.id}: old level() removed`);
     assert.equal(d.count, undefined, `${d.id}: old count() removed`);
   });

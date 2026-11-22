@@ -1,14 +1,14 @@
 // ???시티 지형 그림 (픽셀 단위로 직접 찍음). 바닥 한 장(아스팔트·보도블록·연석·잔디 공원·건물·계단·그림자)은 맵마다 굽고,
 // 위로 솟는 나무·쓰레기통과 깜빡이는 워프 판은 매 프레임. 스펙 docs/superpowers/specs/2026-11-22-city-design.md
 const TILE = 24;
-const hashXY = (x, y) => ((x * 73856093) ^ (y * 19349663) ^ 83492791) >>> 0;
-const h2 = (x, y, s = 0) => { let h = (x * 374761393 + y * 668265263 + s * 2147483647) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0; return (h ^ (h >>> 16)) >>> 0; };
+export const hashXY = (x, y) => ((x * 73856093) ^ (y * 19349663) ^ 83492791) >>> 0;
+export const h2 = (x, y, s = 0) => { let h = (x * 374761393 + y * 668265263 + s * 2147483647) >>> 0; h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0; return (h ^ (h >>> 16)) >>> 0; };
 const OUT = '#26242e';
 
 // ---- 픽셀 버퍼 ----
 const rgbCache = new Map();
 const rgb = (hex) => { if (!rgbCache.has(hex)) rgbCache.set(hex, [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))); return rgbCache.get(hex); };
-function buffer(w, h) {
+export function buffer(w, h) {
   const d = new Uint8ClampedArray(w * h * 4);
   return {
     w, h, d,
@@ -20,7 +20,7 @@ function buffer(w, h) {
   };
 }
 // 모양 바깥 1px 외곽선 (스프라이트용)
-function outline(b, hex = OUT) {
+export function outline(b, hex = OUT) {
   const add = [];
   for (let y = 0; y < b.h; y++) for (let x = 0; x < b.w; x++) if (!b.has(x, y) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => b.has(x + dx, y + dy))) add.push([x, y]);
   for (const [x, y] of add) b.set(x, y, hex);

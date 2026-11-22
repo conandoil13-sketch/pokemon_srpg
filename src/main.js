@@ -11,6 +11,7 @@ import { createGame } from './game/states.js';
 import { createTitle } from './game/title.js';
 import { createTown } from './game/town.js';
 import { createDungeonSelect } from './game/dungeonSelect.js';
+import { scaleTestParty } from './core/testParty.js';
 import { createFloorMenu } from './game/floorMenu.js';
 import { createBag } from './game/bag.js';
 import { createShop } from './game/shop.js';
@@ -239,7 +240,14 @@ go.title();
 sound.bgm('route1'); // 기본 배경음악 (첫 터치·키 입력 때부터 들림)
 for (const t of ['pointerdown', 'keydown']) addEventListener(t, () => sound.unlock(), { once: true, capture: true });
 
-window.__app = { get scene() { return scene; }, get game() { return game; }, go, save }; // 디버그용
+// 테스트 파티: 진짜 저장은 claude-save-backup 에 한 번만 백업하고, 파티를 던전 레벨로 맞춘 뒤 던전 선택으로
+const testParty = (id) => {
+  if (storage.getItem('claude-save-backup') === null && storage.getItem('pokemon-tactics-save') !== null) storage.setItem('claude-save-backup', storage.getItem('pokemon-tactics-save'));
+  const level = scaleTestParty(game, id);
+  save(); go.select();
+  return level;
+};
+window.__app = { get scene() { return scene; }, get game() { return game; }, go, save, testParty }; // 디버그용
 bindInput(canvas, getScale, (ev) => scene.handle(ev));
 mountPad(document.getElementById('pad'), (ev) => scene.handle(ev)); // 터치 기기가 아니면 CSS 로 숨김
 
