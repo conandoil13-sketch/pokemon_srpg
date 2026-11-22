@@ -1,7 +1,7 @@
 // 깊은 동굴 적의 탐색·추적 (순수). 적이 아군을 하나도 못 볼 때의 이동 계획을 정한다 — 보이면 null (기존 AI 가 맡음).
 // u.hunt = { mode: 'patrol' | 'chase' | 'track' | 'lost', goal?, last?, targetId?, turns? }
 // 스펙 docs/superpowers/specs/2026-11-22-deep-cave-design.md
-import { reachable, canEnter } from './pathfind.js';
+import { reachable, canEnter, tileCost } from './pathfind.js';
 import { moveBudget } from './status.js';
 import { canSee } from './vision.js';
 
@@ -11,22 +11,31 @@ export const SEARCH_TURNS = 2;
 const key = (x, y) => `${x},${y}`;
 const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 
-// 목표 칸에서 거꾸로 걷는 거리 (유닛은 무시, 지형만)
-function distFrom(state, u, goal) {
-  const d = new Map([[key(goal.x, goal.y), 0]]), q = [goal];
-  while (q.length) {
-    const c = q.shift();
+// 목표 칸에서 거꾸로 잰 이동 비용 (유닛은 무시, 지형만). 한 턴 이동력보다 비싼 칸은 못 지나감 — 돌아가는 길을 찾게
+function distFrom(state, u, goal, budget) {
+  const trees = !!state.grid.trees, d = new Map([[key(goal.x, goal.y), 0]]), open = [[0, goal.x, goal.y]];
+  while (open.length) {
+    let bi = 0;
+    for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+    const [c, cx, cy] = open.splice(bi, 1)[0];
+    if (c > d.get(key(cx, cy))) continue;
+    const isGoal = cx === goal.x && cy === goal.y;
+    const step = tileCost(state.grid[cy][cx], u, trees); // 옆 칸에서 (cx,cy) 로 들어가는 비용
+    if (!isGoal && !(step <= budget)) continue; // 한 턴에 못 들어가는 칸은 길이 아님
+    const enter = isGoal ? Math.min(step, budget) || 1 : step;
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const x = c.x + dx, y = c.y + dy, k = key(x, y);
-      if (d.has(k) || !canEnter(state.grid[y]?.[x], u)) continue;
-      d.set(k, d.get(key(c.x, c.y)) + 1); q.push({ x, y });
+      const x = cx + dx, y = cy + dy, k = key(x, y);
+      if (!canEnter(state.grid[y]?.[x], u, trees)) continue;
+      const nc = c + enter;
+      if (nc < (d.get(k) ?? Infinity)) { d.set(k, nc); open.push([nc, x, y]); }
     }
   }
   return d;
 }
 
 function toward(state, u, goal, budget = null) {
-  const reach = reachable(state.grid, state.units, u, budget), d = distFrom(state, u, goal);
+  const b = budget ?? moveBudget(u);
+  const reach = reachable(state.grid, state.units, u, budget), d = distFrom(state, u, goal, b);
   const score = (p) => d.get(key(p.x, p.y)) ?? 1000 + manhattan(p, goal);
   let best = { x: u.x, y: u.y }, bs = score(best);
   for (const k of reach.keys()) {

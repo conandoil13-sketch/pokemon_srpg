@@ -45,6 +45,16 @@ test('darkness hides enemies out of sight until they are revealed; other maps un
   assert.ok(near);
 });
 
+test('attack forecast lists only the enemies the player can see', async () => {
+  const { unitsHit } = await import('../src/core/shapes.js');
+  const { seenOnly } = await import('../src/core/stealth.js');
+  const { s, at } = setup([['geodude', 1, 3]], [['geodude', 3, 3], ['geodude', 4, 3]]);
+  const a = at(1, 3), mv = { id: 'test-line', shape: { type: 'line', length: 4 }, category: 'special', power: 50, type: 'normal' };
+  const hit = unitsHit(s, a, mv, { dir: 'right' });
+  const shown = seenOnly(s, 'ally', hit).map((u) => [u.x, u.y]);
+  assert.deepEqual(shown, [[3, 3]]); // (4,3) 은 어둠 속
+});
+
 test('explored memory: cells once seen stay remembered after moving away', () => {
   const { s, at } = setup([['geodude', 1, 3]]);
   assert.ok(s.explored.has('2,3'));
@@ -77,6 +87,16 @@ test('patrol goals lean left, toward where the party comes in', () => {
   let sum = 0;
   for (let i = 0; i < 200; i++) { e.hunt = undefined; huntPlan(s, e, rng); sum += e.hunt.goal.x; }
   assert.ok(sum / 200 < (WIDE[0].length - 1) / 2 - 1.5, String(sum / 200)); // 무작위면 가운데쯤
+});
+
+test('patrol never freezes behind rough ground it cannot afford: it walks the long way round', () => {
+  const rows = ['............', ...Array.from({ length: 6 }, () => '......^.....')]; // 맨 윗줄만 뚫림
+  const { s, at } = setup([['geodude', 0, 6]], [['bronzor', 7, 3]], { rows }); // 이동 2 → 순찰 1, 바위 아님 (^ 비용 2)
+  const e = at(7, 3);
+  e.hunt = { mode: 'patrol', goal: { x: 1, y: 3 } };
+  assert.deepEqual(huntPlan(s, e, () => 0.1).moveTo, { x: 7, y: 2 });
+  e.hunt = { mode: 'track', goal: { x: 1, y: 3 } };
+  assert.notDeepEqual(huntPlan(s, e, () => 0.1).moveTo, { x: 7, y: 3 }); // 추적(이동 2)은 거친 땅을 건널 수 있음 — 어쨌든 움직임
 });
 
 test('spotting: an ally within 2 starts the chase and leaves the normal AI in charge', () => {

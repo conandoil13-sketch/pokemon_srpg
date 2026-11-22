@@ -9,7 +9,7 @@ import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims } from '../core/shapes.js';
-import { hiddenFrom } from '../core/stealth.js';
+import { hiddenFrom, seenOnly } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { huntPlan } from '../core/hunt.js';
 import { canSee, seenCells } from '../core/vision.js';
@@ -1017,7 +1017,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 공격 예상 창: 맞는 대상 최대 3줄 (명중·데미지·기절), 넘으면 "외 N마리", 아군은 (아군)
   function drawAttackForecast(ctx, a, mv, aim) {
-    const list = unitsHit(st, a, mv, aim);
+    const list = seenOnly(st, a.side, unitsHit(st, a, mv, aim)); // 어둠·수풀에 숨은 적은 예상 창에 안 나옴
     if (list.length === 1 && list[0].side !== a.side && !mv.id.match(/self-destruct|explosion/)) { drawForecast(ctx, a, list[0], mv.id); return; }
     const spread = list.length >= 2 ? 0.75 : 1;
     const rows = Math.min(3, list.length);

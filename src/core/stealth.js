@@ -16,3 +16,6 @@ export const hiddenFrom = (state, side, { dark = true } = {}) => new Set([
   ...state.units.filter((u) => u.side !== side && darkHidden(state, u)).map((u) => u.id),
   ...(dark ? darkUnseen(state, side).map((u) => u.id) : []),
 ]);
+
+// 그 편이 볼 수 있는 유닛만 (공격 예상 창 등 — 어둠·수풀에 숨은 적 이름이 새지 않게)
+export const seenOnly = (state, side, units) => { const h = hiddenFrom(state, side); return units.filter((u) => !h.has(u.id)); };
