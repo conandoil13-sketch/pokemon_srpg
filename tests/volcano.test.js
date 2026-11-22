@@ -7,12 +7,12 @@ const VC = DUNGEONS.find((d) => d.id === 'volcano');
 
 test('volcano is 8-2 next to the stage 8 placeholder; desert opens it', () => {
   const s8 = DUNGEONS.filter((d) => d.stage === 8);
-  assert.deepEqual(s8.map((d) => [d.id, d.branch, d.unlock]), [['trial-6', 1, 'power-plant'], ['volcano', 2, 'desert']]);
+  assert.deepEqual(s8.map((d) => [d.id, d.branch, d.unlock]), [['ice-cave', 1, 'power-plant'], ['volcano', 2, 'desert']]);
   assert.equal(VC.name, '화산동굴'); assert.equal(VC.theme, 'volcano');
   assert.deepEqual(VC.baseLevel, s8[0].baseLevel);
   assert.ok(VC.volcano);
   assert.deepEqual(VC.weather, [{ id: 'sun', chance: 0.3 }]);
-  assert.deepEqual(DUNGEONS.find((d) => d.stage === 9).unlock, ['trial-6', 'volcano']);
+  assert.deepEqual(DUNGEONS.find((d) => d.stage === 9).unlock, ['ice-cave', 'volcano']);
 });
 
 test('volcano: slugma line always in the pool within the stage cap', () => {
