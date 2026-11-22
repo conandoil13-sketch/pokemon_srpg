@@ -60,20 +60,23 @@ export function layTraps(state, user, effect, aim) {
     const x = aim.x + dx, y = aim.y + dy, tile = state.grid[y]?.[x];
     if (tile === undefined || tile === '#') continue;
     if (state.spikes.some((t) => t.x === x && t.y === y && t.kind === effect)) continue;
-    state.spikes.push({ x, y, kind: effect, side: user.side, revealed: false });
+    state.spikes.push({ x, y, kind: effect, side: user.side, by: user.id, revealed: false });
     tiles.push({ x, y });
   }
   return { ok: tiles.length > 0, tiles }; // 깔 칸이 없으면 실패
 }
 
 // 상대 편이 (x, y) 칸에 들어옴: 압정 1/8 피해, 독압정 독 (독 타입은 치움). 비행·부유 면역. 아군이 밟은 적 함정은 드러남
-export function stepOn(state, unit, x, y) {
+// hitBy: 이번 이동에서 이미 압정 피해를 준 시전자 (한 이동에서 시전자당 1회 — 긴급패치)
+const casterOf = (t) => t.by ?? t.side;
+export function stepOn(state, unit, x, y, hitBy = new Set()) {
   const out = [];
   for (const t of (state.spikes ?? []).filter((s) => s.x === x && s.y === y && s.side !== unit.side)) {
     if (unit.side === 'ally') t.revealed = true;
     if (airborne(unit)) continue;
     if (t.kind === 'spikes') {
-      if (magicGuard(unit)) continue;
+      if (magicGuard(unit) || hitBy.has(casterOf(t))) continue;
+      hitBy.add(casterOf(t));
       const hpBefore = unit.hp, damage = Math.min(unit.hp, Math.max(1, Math.floor(unit.maxHp / 8)));
       unit.hp -= damage;
       out.push({ unitId: unit.id, kind: 'spikes', damage, hpBefore, maxHp: unit.maxHp, x, y });
@@ -90,10 +93,12 @@ export function stepOn(state, unit, x, y) {
 // 걷는 경로에서 압정에 쓰러질 칸까지만 남긴다 (화면의 걷기가 그 칸에서 멈추도록). 판정은 stepOn 과 같은 규칙
 export function lethalTrapCut(state, unit, path) {
   let hp = unit.hp;
+  const hitBy = new Set();
   for (let i = 1; i < path.length; i++) {
     for (const t of state.spikes ?? []) {
       if (t.x !== path[i].x || t.y !== path[i].y || t.side === unit.side || t.kind !== 'spikes') continue;
-      if (airborne(unit) || magicGuard(unit)) continue;
+      if (airborne(unit) || magicGuard(unit) || hitBy.has(casterOf(t))) continue;
+      hitBy.add(casterOf(t));
       hp -= Math.max(1, Math.floor(unit.maxHp / 8));
     }
     if (hp <= 0) return path.slice(0, i + 1);
