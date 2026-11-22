@@ -54,3 +54,7 @@ export function sandShift(state, u) {
   refreshField(state);
   return { kind: p.kind, from, to: { ...p.to } };
 }
+
+// 이번 턴에 모래 판정을 받은 유닛 표시 (행동 끝·턴 종료 한 번씩) — 잠듦·얼음처럼 페이즈 시작부터 acted 인 유닛도 판정 대상
+export const markSettled = (state, u) => { u.sandTurn = state.turn; };
+export const unsettled = (state, side) => state.units.filter((u) => u.side === side && u.hp > 0 && u.sandTurn !== state.turn);

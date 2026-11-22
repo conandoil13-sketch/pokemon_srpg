@@ -25,7 +25,7 @@ import { bakeSewerGround, drawSewerMap } from '../render/sewerTiles.js';
 import { bakePowerGround, drawPowerMap, drawPulseWarn } from '../render/powerTiles.js';
 import { bakeDesertGround, drawDesertMap } from '../render/desertTiles.js';
 import { pulsePreview, firesAt } from '../core/generator.js';
-import { sandShift } from '../core/sand.js';
+import { sandShift, markSettled, unsettled } from '../core/sand.js';
 import { drawDarkness } from '../render/darkness.js';
 import { tideFor, tidePreview } from '../core/tide.js';
 const SAND_BURST = ['#7a5a2a', '#c8a868', '#dcc084', '#f6e4b4', '#ffffff']; // 모래더미가 터질 때
@@ -406,6 +406,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const bonusLine = (u) => `${josa(unitLabel(u), '이/가')} 한 번 더 움직인다`;
   function enemyPhase() {
     sel = null;
+    const idle = st.flows ? unsettled(st, 'ally')[0] : null; // 사막: 행동 안 한·잠든 아군도 차례가 끝나면 모래 판정 (손톱 굴림보다 먼저 — 한 번만 굴리게)
+    if (idle) { settleSand(idle, enemyPhase); return; }
     const bonus = speedBonusUnit(st, 'ally');
     const claw = bonus ? null : quickClawUnit(st, 'ally', rng); // 스피드 보너스 다음에 손톱
     const extra = bonus ?? claw;
@@ -415,8 +417,6 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       showBanner(bonus ? '스피드 보너스!' : `${unitLabel(extra)}의 선제공격손톱!`, bonusLine(extra), '#40c8a0', () => { cursor = { x: extra.x, y: extra.y }; mode = 'idle'; });
       return;
     }
-    const idle = st.flows ? allyUnits().find((u) => !u.acted && u.sandTurn !== st.turn) : null; // 사막: 행동 안 한 아군도 차례가 끝나면 모래에 밀림
-    if (idle) { idle.sandTurn = st.turn; settleSand(idle, enemyPhase); return; }
     endPhase(st, rng);
     const lines = phaseLines();
     if (st.result) { noticeChain(lines, () => { mode = 'result'; }); return; } // 결과가 났으면 다음 턴 배너 없이
@@ -490,6 +490,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 사막: 행동을 마친 유닛을 흐르는 모래·모래지옥이 밀거나 끌어당김 (core/sand.js). 짧게 미끄러진 뒤 알림
   function settleSand(u, then) {
     if (!st.flows || st.result || !u || !st.units.includes(u)) { then(); return; }
+    markSettled(st, u);
     const ev = sandShift(st, u);
     if (!ev) { then(); return; }
     slide = { unit: u, from: ev.from, to: ev.to, t: 0, kind: ev.kind, then, prevMode: mode };
@@ -681,7 +682,6 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (sel && !st.result && canRetreat(st, sel) > 0) { openRetreat(); return; } // 선제기: 치고 빠지기
     const done = sel;
     sel = null;
-    if (done) done.sandTurn = st.turn;
     settleSand(done, () => { // 사막: 행동을 마친 자리에서 밀림·끌림
       if (st.result) { mode = 'result'; return; }
       if (allyUnits().every((u) => u.acted)) enemyPhase();

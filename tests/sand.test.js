@@ -5,7 +5,7 @@ import { newMember } from '../src/core/progress.js';
 import { createRng } from '../src/core/rng.js';
 import { reachable, tileCost } from '../src/core/pathfind.js';
 import { hitChance } from '../src/core/damage.js';
-import { sandShift, sandLanding, onSand } from '../src/core/sand.js';
+import { sandShift, sandLanding, onSand, unsettled, markSettled } from '../src/core/sand.js';
 import { MOVES } from '../src/data/moves.js';
 import { moveBudget } from '../src/core/status.js';
 import { planEnemyAction } from '../src/core/ai.js';
@@ -120,4 +120,14 @@ test('AI: an enemy does not end its move on a pit ring when a plain cell does th
   const plan = planEnemyAction(s, foe);
   const t = s.grid[plan.moveTo.y][plan.moveTo.x];
   assert.ok(t !== 'o' && t !== '@', JSON.stringify(plan.moveTo));
+});
+
+test('unsettled: every ally not yet sand-checked this turn — including sleeping/frozen ones that start the phase acted', () => {
+  const { s, at } = setup([['bidoof', 6, 2], ['bidoof', 0, 0]]);
+  const sleeper = at(6, 2), done = at(0, 0);
+  sleeper.acted = true; // 잠듦: 페이즈 시작부터 acted
+  markSettled(s, done);
+  assert.deepEqual(unsettled(s, 'ally').map((u) => u.id), [sleeper.id]);
+  markSettled(s, sleeper);
+  assert.deepEqual(unsettled(s, 'ally'), []);
 });
