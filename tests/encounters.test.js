@@ -13,7 +13,7 @@ test('every dungeon floor has a non-empty, valid pool', () => {
         for (const k of pool) {
           const s = SPECIES[k];
           assert.ok(!s.legendary && k !== 'ditto', `${d.id}: ${k}`);
-          assert.ok(s.types.some((t) => d.types.includes(t)), `${d.id}: ${k} type`);
+          assert.ok(s.types.some((t) => d.types.includes(t)) || d.signature?.includes(k), `${d.id}: ${k} type`); // 고유종(signature)은 테마 타입 밖이어도 됨
         }
       }
     }

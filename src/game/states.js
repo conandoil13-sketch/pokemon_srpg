@@ -7,7 +7,7 @@ import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
 import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js';
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
-import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
+import { reachable, tilesInRange, manhattan, pathTo, TILE_COST, tileCost } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims } from '../core/shapes.js';
 import { hiddenFrom, seenOnly } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
@@ -23,7 +23,9 @@ import { bakeBeachGround, drawBeachMap } from '../render/beachTiles.js';
 import { bakeCityGround, drawCityMap } from '../render/cityTiles.js';
 import { bakeSewerGround, drawSewerMap } from '../render/sewerTiles.js';
 import { bakePowerGround, drawPowerMap, drawPulseWarn } from '../render/powerTiles.js';
+import { bakeDesertGround, drawDesertMap } from '../render/desertTiles.js';
 import { pulsePreview, firesAt } from '../core/generator.js';
+import { sandShift, markSettled, unsettled } from '../core/sand.js';
 import { drawDarkness } from '../render/darkness.js';
 import { tideFor, tidePreview } from '../core/tide.js';
 const SAND_BURST = ['#7a5a2a', '#c8a868', '#dcc084', '#f6e4b4', '#ffffff']; // 모래더미가 터질 때
@@ -40,6 +42,7 @@ import { createFxManager } from '../render/fx.js';
 import { drawWeather } from '../render/weatherFx.js';
 
 const STEP = 0.11; // 타일당 이동 시간(초)
+const SLIDE = 0.3; // 사막: 모래에 밀려 미끄러지는 시간(초)
 const BANNER = 1.4;
 const RESULT_LOCK = 0.8; // 결과 화면 입력 잠금(초)
 const BLUE = 'rgba(64,128,248,0.45)', RED = 'rgba(248,64,64,0.38)';
@@ -234,6 +237,7 @@ export function dangerWarning(enemy, units, weather = null) {
 export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
   let aims = null, aIdx = 0, enemyUnseen = new Set(); // 공격기 조준 후보와 현재 선택
+  let slide = null; // 사막: 모래에 밀림·끌림 연출 { unit, from, to, t, kind, then, prevMode }
   let move, targets, tIdx, walk, anim, animThen, animAbility = null, animResult = null, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0, everyone;
   let notice = null; // { lines, then } 대사 후 다음 단계
@@ -243,10 +247,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
+  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
   function reset() {
     st = createBattle(map, party, { hpRatio });
-    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
+    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant', 'desert'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
@@ -257,12 +261,13 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
     if (theme === 'sewer' && typeof document !== 'undefined') { try { sewerGround = bakeSewerGround(map.tiles); } catch { sewerGround = null; } } // 하수도: 벽·바닥·물길 (물결·거품·타이어·봉투는 매 프레임)
+    if (theme === 'desert' && typeof document !== 'undefined') { try { desertGround = bakeDesertGround(map.tiles); } catch { desertGround = null; } } // 사막: 모래·사구·모래지옥·절벽·계단 (모래결·소용돌이·바위는 매 프레임)
     if (theme === 'power-plant' && typeof document !== 'undefined') { try { powerGround = bakePowerGround(map.tiles); } catch { powerGround = null; } } // 발전소: 철판·기계 벽 (발전기·가벽·고철더미·예고는 매 프레임)
     if (theme === 'beach' && typeof document !== 'undefined') { try { beachGround = bakeBeachGround(map.tiles); } catch { beachGround = null; } } // 해변: 모래 바닥 (물은 매 프레임)
     mode = 'banner';
     const first = st.units.find((u) => u.side === 'ally');
     cursor = first ? { x: first.x, y: first.y } : { x: 2, y: 5 };
-    sel = walk = anim = banner = pause = focus = notice = null;
+    sel = walk = anim = banner = pause = focus = notice = slide = null;
     for (const u of st.units) facing[u.id] = u.side === 'ally' ? DIR.Right : DIR.Left;
     const t = camTarget(cursor);
     cam.x = t.x; cam.y = t.y;
@@ -401,6 +406,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const bonusLine = (u) => `${josa(unitLabel(u), '이/가')} 한 번 더 움직인다`;
   function enemyPhase() {
     sel = null;
+    const idle = st.flows ? unsettled(st, 'ally')[0] : null; // 사막: 행동 안 한·잠든 아군도 차례가 끝나면 모래 판정 (손톱 굴림보다 먼저 — 한 번만 굴리게)
+    if (idle) { settleSand(idle, enemyPhase); return; }
     const bonus = speedBonusUnit(st, 'ally');
     const claw = bonus ? null : quickClawUnit(st, 'ally', rng); // 스피드 보너스 다음에 손톱
     const extra = bonus ?? claw;
@@ -445,7 +452,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       return;
     }
     const u = st.units.find((o) => o.id === id);
-    if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
+    if (!u) { nextEnemy(); return; } // 기절
+    if (u.acted) { settleSand(u, nextEnemy); return; } // 잠듦·얼음으로 쉬는 중 (사막: 모래는 그래도 민다)
     // 깊은 동굴: 아무도 못 보면 순찰·추적·수색 (core/hunt.js), 보이면 그 적이 보는 아군만 노림
     const blind = st.dark ? new Set(allyUnits().filter((a) => !canSee(u, a)).map((a) => a.id)) : new Set();
     const plan = (u.ambush && ambushPlan(st, u)) || (st.dark && huntPlan(st, u, rng)) || planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy', { dark: false }), ...blind]) }); // 안개 + 수풀에 숨은 악 타입 아군
@@ -462,7 +470,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
           pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, () => enemyRetreat(u), plan.attack.aim) };
         } else {
           u.acted = true;
-          pause = { t: 0.2, fn: nextEnemy };
+          pause = { t: 0.2, fn: () => settleSand(u, nextEnemy) };
         }
       });
     } };
@@ -470,12 +478,24 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 적 치고 빠지기: 아군에게서 가장 먼 칸으로
   function enemyRetreat(u) {
+    const done = () => settleSand(u, nextEnemy); // 사막: 행동이 끝난 자리에서 모래 판정
     const left = canRetreat(st, u);
-    if (!left) { nextEnemy(); return; }
+    if (!left) { done(); return; }
     const t = retreatSpot(st, u, left);
     u.retreatReady = false; u.retreated = true;
-    if (!t || (t.x === u.x && t.y === u.y)) { nextEnemy(); return; }
-    pause = { t: 0.15, fn: () => startWalk(u, pathTo(st.grid, st.units, u, t.x, t.y), nextEnemy) };
+    if (!t || (t.x === u.x && t.y === u.y)) { done(); return; }
+    pause = { t: 0.15, fn: () => startWalk(u, pathTo(st.grid, st.units, u, t.x, t.y), done) };
+  }
+
+  // 사막: 행동을 마친 유닛을 흐르는 모래·모래지옥이 밀거나 끌어당김 (core/sand.js). 짧게 미끄러진 뒤 알림
+  function settleSand(u, then) {
+    if (!st.flows || st.result || !u || !st.units.includes(u)) { then(); return; }
+    markSettled(st, u);
+    const ev = sandShift(st, u);
+    if (!ev) { then(); return; }
+    slide = { unit: u, from: ev.from, to: ev.to, t: 0, kind: ev.kind, then, prevMode: mode };
+    if (u.side === 'ally' || !darkIds().has(u.id)) { focus = u; cursor = { ...ev.to }; }
+    mode = 'sliding';
   }
 
   // 압정에 쓰러져 행동이 끝남: 아군은 다음 선택, 적은 다음 적
@@ -498,7 +518,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       focus = u; cursor = { x: u.x, y: u.y };
       startWalk(u, route.path, () => {
         const target = unitsHit(st, u, mv, route.aim).find((d) => d.side !== u.side) ?? null;
-        attackWith(u, target, mv, () => { u.moved = true; u.acted = true; u.charging = null; next(); }, route.aim); // 막혀도 모은 힘은 씀
+        attackWith(u, target, mv, () => { u.moved = true; u.acted = true; u.charging = null; settleSand(u, next); }, route.aim); // 막혀도 모은 힘은 씀
       }, () => next());
     };
     next();
@@ -516,7 +536,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (u.sealed) plan.attack = null;
       focus = u; cursor = { x: u.x, y: u.y };
       startWalk(u, pathTo(st.grid, st.units, u, plan.moveTo.x, plan.moveTo.y), () => {
-        const done = () => { u.moved = true; u.acted = true; next(); };
+        const done = () => { u.moved = true; u.acted = true; settleSand(u, next); };
         if (!plan.attack) { done(); return; }
         const target = st.units.find((o) => o.id === plan.attack.targetId);
         doAttack(u, target, plan.attack.moveId, done, plan.attack.aim);
@@ -660,10 +680,13 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function finishAllyAction() {
     if (sel && !st.result && canRetreat(st, sel) > 0) { openRetreat(); return; } // 선제기: 치고 빠지기
+    const done = sel;
     sel = null;
-    if (st.result) { mode = 'result'; return; }
-    if (allyUnits().every((u) => u.acted)) enemyPhase();
-    else mode = 'idle';
+    settleSand(done, () => { // 사막: 행동을 마친 자리에서 밀림·끌림
+      if (st.result) { mode = 'result'; return; }
+      if (allyUnits().every((u) => u.acted)) enemyPhase();
+      else mode = 'idle';
+    });
   }
 
   // 치고 빠지기: 남은 이동력으로 다시 이동 (취소하면 제자리에서 끝)
@@ -859,6 +882,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (mode === 'banner') {
       banner.t += dt / BANNER;
       if (banner.t >= 1) { const next = banner.next; banner = null; next(); }
+    } else if (mode === 'sliding') {
+      slide.t += dt;
+      if (slide.t >= SLIDE) {
+        const { unit, kind, then, prevMode } = slide;
+        slide = null; mode = prevMode;
+        const quiet = unit.side !== 'ally' && darkIds().has(unit.id);
+        const line = kind === 'pit' ? `${josa(unitLabel(unit), '이/가')} 모래지옥에 빨려 들어갔다!` : `${josa(unitLabel(unit), '이/가')} 모래에 밀려났다!`;
+        noticeChain(quiet ? [] : [{ lines: [wrapMessage(line)].flat(), at: { x: unit.x, y: unit.y }, hp: null }], then);
+      }
     } else if (mode === 'walking') {
       walk.t += dt;
       const i = Math.min(Math.floor(walk.t / STEP), walk.path.length - 2);
@@ -872,7 +904,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
-        const cost = path.slice(1).reduce((c, p, i) => c + (st.grid[p.y][p.x] === '#' ? 1 : st.grid[p.y][p.x] === 'B' && st.grid[path[i].y][path[i].x] !== 'B' ? 2 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용 (옥상 오르기 2)
+        const cost = path.slice(1).reduce((c, p, i) => c + (st.grid[p.y][p.x] === '#' ? 1 : st.grid[p.y][p.x] === 'B' && st.grid[path[i].y][path[i].x] !== 'B' ? 2 : st.grid[p.y][p.x] === ':' ? tileCost(':', unit) : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용 (옥상 오르기 2)
         moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: canWarp && unit.side === 'ally' });
         const warp = st.log.warp; // 시티 워프: 짝 타일로 날아감 (취소 불가)
         if (warp) {
@@ -944,7 +976,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function updateCamera(dt) {
     let t;
     if (walk && !(walk.unit.side !== 'ally' && darkIds().has(walk.unit.id))) { const p = unitWorld(walk.unit); t = camTarget({ x: p.x / TILE, y: p.y / TILE }); } // 숨은 악 타입의 걸음은 따라가지 않음
-    else if (focus && (mode === 'anim' || mode === 'enemy')) t = camTarget(focus);
+    else if (focus && (mode === 'anim' || mode === 'enemy' || mode === 'sliding')) t = camTarget(focus);
     else if (mode === 'notice' && notice?.at) t = camTarget(notice.at); // 상태 데미지 등: 그 유닛 쪽으로
     else t = camTarget(cursor);
     const k = Math.min(1, dt * 10);
@@ -957,6 +989,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // ---------- 그리기 ----------
   // 유닛의 월드 좌표 (타일 왼쪽 위)
   function unitWorld(u) {
+    if (slide && slide.unit === u) { // 모래에 미끄러짐: 빠르게 출발해 천천히 멈춤
+      const k = 1 - (1 - Math.min(1, slide.t / SLIDE)) ** 3;
+      return { x: Math.round((slide.from.x + (slide.to.x - slide.from.x) * k) * TILE), y: Math.round((slide.from.y + (slide.to.y - slide.from.y) * k) * TILE) };
+    }
     if (walk && walk.unit === u) {
       const f = walk.t / STEP;
       const i = Math.min(Math.floor(f), walk.path.length - 1);
@@ -1129,6 +1165,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     else if (beachGround) drawBeachMap(ctx, st.grid, beachGround, cx, cy, W, H);
     else if (cityGround) drawCityMap(ctx, st.grid, cityGround, cx, cy, W, H, st.warps, time);
     else if (sewerGround) drawSewerMap(ctx, st.grid, sewerGround, cx, cy, W, H, time);
+    else if (desertGround) drawDesertMap(ctx, st.grid, desertGround, cx, cy, W, H, time, st.flows);
     else if (powerGround) drawPowerMap(ctx, st.grid, powerGround, cx, cy, W, H, time, st.generators, (g) => firesAt(g, st.turn) && st.result == null, pulseFx && { gens: pulseFx.gens, age: clock - pulseFx.at });
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     const tideWarn = tidePreview(st); // 물때 예고: 바뀔 칸에 물결 깜빡임

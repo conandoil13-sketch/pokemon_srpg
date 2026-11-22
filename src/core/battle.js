@@ -14,7 +14,7 @@ import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { poolDamage } from './pool.js';
 import { firesAt, genRange, shockDamage } from './generator.js';
 import { wakeAmbush, AMBUSH_MOVE } from './ambush.js';
-import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
+import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps, airborne } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
@@ -98,6 +98,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     generators: (mapDef.generators ?? []).map((g) => ({ ...g })), // 발전소 발전기 (칸 문자 'G')
+    flows: mapDef.flows ? { ...mapDef.flows } : null, // 사막 흐르는 모래 방향 ("x,y" → up/down/left/right)
     piles: (mapDef.piles ?? []).map((p) => ({ ...p })), // 열리지 않은 낙엽더미 (칸 문자 '*')
     warps: (mapDef.warps ?? []).map((w) => ({ ...w, to: { ...w.to } })), // 시티 워프 타일 (core/warp.js)
     bossFloor: units.some((u) => u.boss),
@@ -163,6 +164,7 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
       }
     }
   }
+  if (!stayed && state.grid[u.y][u.x] === '@' && !airborne(u) && !u.burrow) { cost = moveBudget(u); u.pitEscaped = true; } // 사막: 모래지옥 가운데 탈출 = 이동력 전부, 이번 턴엔 다시 안 끌림
   u.spent = (u.spent ?? 0) + cost;
   if (!stayed) u.walked = true; // 줌렌즈
   u.x = x; u.y = y; u.moved = true;
@@ -995,7 +997,7 @@ export function endPhase(state, rng = Math.random) {
   const side = state.phase === 'player' ? 'ally' : 'enemy';
   for (const u of state.units) {
     if (u.side !== side) continue;
-    u.moved = false; u.acted = false;
+    u.moved = false; u.acted = false; u.pitEscaped = false;
     tickStart(u);
     terrainStart(state, u);
     bindCheck(state, u, events); // 속박: 묶은 쪽이 멀어졌으면 풀림

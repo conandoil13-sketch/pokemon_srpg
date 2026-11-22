@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소)
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity, ':': 2, '=': 1, o: 1, '@': 1 }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소) · ':' 깊은 모래 '=' 흐르는 모래 'o'/'@' 모래지옥(사막)
 
 // 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
 const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
@@ -13,8 +13,15 @@ const climbs = (who, trees) => trees && (ab(who) === 'limber' || typed(who, 'bug
 export function tileCost(tile, who, trees = false) {
   if (tile === '#' || tile === '*') return tile === '#' && climbs(who, trees) ? 1 : 3;
   if (tile === '^' && typesOfWho(who).some((t) => t === 'rock' || t === 'ground')) return 1;
+  if (tile === ':' && floats(who)) return 1; // 깊은 모래: 떠 있으면 평지
   return TILE_COST[tile];
 }
+
+// 떠 있음 (abilities.airborne 과 같은 기준 — 순환 import 를 피해 여기 둠)
+export const floats = (who) => {
+  if (typeof who === 'object' && who.grounded) return false;
+  return typesOfWho(who).includes('flying') || ab(who) === 'levitate' || (typeof who === 'object' && who.magnetRise > 0);
+};
 
 // who: 유닛(타입은 유닛 기준 — 메타몽 빌드) 또는 종 키
 // trees: 벽(#)이 나무인 맵 (유연은 나무를 지나갈 수 있음 — 멈추지는 못함, reachable 이 뺀다)
@@ -47,6 +54,7 @@ function search(grid, units, unit, budgetOverride = null) {
   const best = new Map([[`${unit.x},${unit.y}`, 0]]);
   const parent = new Map();
   const open = [{ x: unit.x, y: unit.y, c: 0 }];
+  const pit = grid[unit.y]?.[unit.x] === '@' && typeof unit === 'object' && !floats(unit) && !unit.burrow; // 모래지옥 가운데: 나가는 첫걸음이 이동력 전부
   while (open.length) {
     open.sort((a, b) => a.c - b.c);
     const cur = open.shift();
@@ -58,7 +66,7 @@ function search(grid, units, unit, budgetOverride = null) {
       if (!roofWalk && !canEnter(tile, unit, !!grid.trees, true)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side && !typesOfWho(unit).includes('ghost')) continue; // 고스트: 상대 칸 통과
-      const c = cur.c + (tile === 'B' && !roofWalk ? 2 : tileCost(tile, unit, !!grid.trees)); // 비행·드래곤 옥상 오르기 2
+      const c = pit && cur.c === 0 && cur.x === unit.x && cur.y === unit.y ? budget : cur.c + (tile === 'B' && !roofWalk ? 2 : tileCost(tile, unit, !!grid.trees)); // 비행·드래곤 옥상 오르기 2
       if (c > budget) continue;
       const k = `${x},${y}`;
       if (best.has(k) && best.get(k) <= c) continue;
