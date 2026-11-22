@@ -65,13 +65,16 @@ export function generateFloor(dungeon, floor, seed) {
   // 1~2. 바닥 + 지형 덩어리 (무작위 걸음). 넓은 맵은 덩어리 수를 면적비로 늘림
   const [W, H] = dungeon.size ?? DEFAULT_SIZE, area = (W * H) / (DEFAULT_SIZE[0] * DEFAULT_SIZE[1]);
   const g = Array.from({ length: H }, () => new Array(W).fill('.'));
+  // 1a. 해변: 가장자리 바다 띠 (별도 난수 — 다른 던전은 결과·난수 소비 그대로)
+  const sea = dungeon.sea ? seaBand(W, H, createRng(hashSeed(seed, 4000))) : null;
+  if (sea) for (const [k, grade] of sea.grade) { const [x, y] = k.split(',').map(Number); g[y][x] = grade === 'a' ? ',' : '~'; }
   for (const tile of ['~', '#', '^', '"']) {
     const c = dungeon.clusters[tile];
     const n0 = Array.isArray(c) ? int(c[0], c[1]) : c, n = area === 1 ? n0 : Math.round(n0 * area);
     for (let i = 0; i < n; i++) {
       let x = int(SAFE_COLS, W - 1), y = int(0, H - 1);
       for (let s = int(4, 12); s > 0; s--) {
-        g[y][x] = tile;
+        if (!sea?.banned(x, y)) g[y][x] = tile; // 해변: 바다 띠와 그 옆 한 줄엔 덩어리 없음
         const [dx, dy] = pick(DIRS);
         x = Math.min(W - 1, Math.max(SAFE_COLS, x + dx));
         y = Math.min(H - 1, Math.max(0, y + dy));
@@ -122,6 +125,9 @@ export function generateFloor(dungeon, floor, seed) {
     g[stairs.y][stairs.x] = '>';
   }
 
+  // 5a. 해변 섬: 60% — 모래 2칸 + 둘레 깊은 물 10칸, 섬 위 상자 1개 확정 (기존 상자와 별개). 12칸은 used 로 막음
+  const islandChest = sea ? placeIsland(g, used, anchor, sea, seed) : null;
+
   // 6. 적 (오른쪽 절반)
   const right = [...dist.keys()].map((k) => { const [x, y] = k.split(',').map(Number); return { x, y }; })
     .filter((p) => p.x >= 8 && '."^'.includes(g[p.y][p.x]) && !used.has(key(p.x, p.y)))
@@ -165,10 +171,67 @@ export function generateFloor(dungeon, floor, seed) {
     enemies.push({ species: encounterPool(dungeon, floor, { boss: true })[0], level: dungeon.baseLevel[floor - 1] + dungeon.boss.levelBonus, x: p.x, y: p.y, boss: true });
   }
 
+  if (islandChest) chests.push(islandChest);
+
   // 9. 낙엽더미 (던전에 piles 가 있을 때만, 별도 난수 — 다른 던전은 결과·난수 소비 그대로)
   const piles = dungeon.piles ? placePiles(dungeon, floor, seed, g, used, allySlots, anchor) : [];
 
-  return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed) };
+  return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed),
+    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') } } : {}) };
+}
+
+// 바다 띠: 위 또는 아래 가장자리, 열마다 깊이 D 또는 D+1 (D = H/4 반올림), 출발 3열 제외.
+// 물때 등급: 해안 첫 줄 a(얕은 물) · 둘째 줄 b(깊은 물, 썰물엔 얕은 물) · 그 너머 c(늘 깊은 물)
+function seaBand(W, H, rng) {
+  const top = rng() < 0.5, D = Math.round(H / 4);
+  const edge = (y) => (top ? y : H - 1 - y); // 가장자리에서 몇 줄째
+  const depth = [];
+  let d = D + (rng() < 0.5 ? 1 : 0);
+  for (let x = 0; x < W; x++) {
+    if (x < SAFE_COLS) { depth.push(0); continue; }
+    if (rng() < 0.4) d = d === D ? D + 1 : D; // 해안선 흔들림
+    depth.push(d);
+  }
+  const grade = new Map();
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) {
+    const r = edge(y);
+    if (r >= depth[x]) continue;
+    const fromCoast = depth[x] - 1 - r;
+    grade.set(key(x, y), fromCoast === 0 ? 'a' : fromCoast === 1 ? 'b' : 'c');
+  }
+  return {
+    grade,
+    banned: (x, y) => edge(y) <= D + 1 && x >= SAFE_COLS, // 띠(최대 깊이)와 그 옆 한 줄
+    list: (gr) => [...grade].filter(([, v]) => v === gr).map(([k]) => { const [x, y] = k.split(',').map(Number); return { x, y }; }),
+  };
+}
+
+// 섬: 4×3 직사각형 (가운데 2칸 모래, 둘레 깊은 물). 모두 빈 바닥이고, 놓아도 나머지 땅이 안 끊길 때만
+function placeIsland(g, used, anchor, sea, seed) {
+  const W = g[0].length, H = g.length, rng = createRng(hashSeed(seed, 4050));
+  if (rng() >= 0.6) return null;
+  const spots = [];
+  for (let y0 = 0; y0 + 2 < H; y0++) for (let x0 = 6; x0 + 3 < W; x0++) {
+    let ok = true;
+    for (let y = y0; y < y0 + 3 && ok; y++) for (let x = x0; x < x0 + 4 && ok; x++) ok = !sea.grade.has(key(x, y)) && '."^'.includes(g[y][x]) && !used.has(key(x, y));
+    if (ok) spots.push({ x0, y0 });
+  }
+  const before = reachableFrom(g.map((r) => r.join('')), anchor).size;
+  for (let i = spots.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [spots[i], spots[j]] = [spots[j], spots[i]]; }
+  for (const { x0, y0 } of spots) {
+    const saved = g.map((r) => r.slice());
+    for (let y = y0; y < y0 + 3; y++) for (let x = x0; x < x0 + 4; x++) g[y][x] = y === y0 + 1 && (x === x0 + 1 || x === x0 + 2) ? '.' : '~';
+    if (reachableFrom(g.map((r) => r.join('')), anchor).size === before - 12) {
+      const cx = x0 + 1 + (rng() < 0.5 ? 0 : 1), cy = y0 + 1;
+      for (let y = y0; y < y0 + 3; y++) for (let x = x0; x < x0 + 4; x++) used.add(key(x, y));
+      const roll = createRng(hashSeed(seed, 4100))(); // 기존 상자 확률표
+      const chest = { x: cx, y: cy, item: roll < 0.15 ? 'evoStone' : roll < 0.25 ? `powder-${STATS[Math.floor(createRng(hashSeed(seed, 4150))() * STATS.length)]}` : roll < 0.7 ? 'candy' : 'coins', island: true };
+      const h = rollChestHeld(hashSeed(seed, 4200)); if (h) chest.held = h;
+      return chest;
+    }
+    for (let y = 0; y < H; y++) g[y] = saved[y];
+  }
+  return null;
 }
 
 // 낙엽더미: 바닥 칸(출발 3열 밖, 출발 칸과 안 붙음)에 '*'. 놓아도 나머지 칸이 모두 이어질 때만. 포켓몬 60% · 상자 40%
@@ -180,7 +243,7 @@ function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
   const cells = [];
   for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) if (g[y][x] === '.' && !used.has(key(x, y)) && !nearAlly(x, y)) cells.push({ x, y });
   for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
-  const pool = encounterPool(dungeon, floor), out = [];
+  const pool = dungeon.pileSpecies ?? encounterPool(dungeon, floor), out = []; // 해변: 바닷가 종만
   let size = reachableFrom(g.map((r) => r.join('')), anchor).size;
   for (const p of cells) {
     if (out.length >= want) break;

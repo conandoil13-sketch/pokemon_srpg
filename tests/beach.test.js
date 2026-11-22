@@ -61,3 +61,66 @@ test('beach minor types (electric/ice/ground only) are rare', () => {
   for (let s = 1; s <= 200; s++) for (const e of rollEnemies(d, 5, s)) (minorOnly(e.species) ? minor++ : main++);
   assert.ok(minor * 3 < main, `${minor} vs ${main}`);
 });
+
+// ── Task 3: 바다 띠 · 물때 등급 · 섬 ──
+import { generateFloor, reachableFrom } from '../src/core/floorgen.js';
+const withTide = (tiles, tide, level) => {
+  const g = tiles.map((r) => r.split(''));
+  const A = { '-1': '.', 0: ',', 1: '~' }, B = { '-1': ',', 0: '~', 1: '~' };
+  for (const p of tide.a) g[p.y][p.x] = A[level];
+  for (const p of tide.b) g[p.y][p.x] = B[level];
+  return g.map((r) => r.join(''));
+};
+const beachFloors = () => {
+  const d = dungeonById('beach'), out = [];
+  for (const f of [1, 4, 7]) for (let s = 1; s <= 20; s++) out.push({ f, s, m: generateFloor(d, f, s * 7919) });
+  return out;
+};
+
+test('beach floors: sea is 18-32% of the map, never in the start columns', () => {
+  for (const { f, s, m } of beachFloors()) {
+    const cells = m.tiles.join('');
+    const sea = [...cells].filter((c) => c === ',' || c === '~').length / cells.length;
+    assert.ok(sea >= 0.18 && sea <= 0.32, `f${f} s${s} ${sea}`);
+    for (const row of m.tiles) assert.ok(!/[,~]/.test(row.slice(0, 3)));
+  }
+});
+
+test('beach tide grades: A cells are shallow, B cells deep at tide 0', () => {
+  for (const { m } of beachFloors()) {
+    assert.ok(m.tide.a.length > 0 && m.tide.b.length > 0);
+    for (const p of m.tide.a) assert.equal(m.tiles[p.y][p.x], ',');
+    for (const p of m.tide.b) assert.equal(m.tiles[p.y][p.x], '~');
+  }
+});
+
+test('beach: walkers reach the stairs or boss at high tide', () => {
+  for (const { f, s, m } of beachFloors()) {
+    const reach = reachableFrom(withTide(m.tiles, m.tide, 1), m.allySlots[0]);
+    const goal = m.stairs ?? m.enemies.find((e) => e.boss);
+    assert.ok([[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => reach.has(`${goal.x + dx},${goal.y + dy}`)), `f${f} s${s}`);
+  }
+});
+
+test('beach island: one guaranteed chest, unreachable on foot even at low tide', () => {
+  let islands = 0;
+  for (const { f, s, m } of beachFloors()) {
+    const isl = m.chests.filter((c) => c.island);
+    assert.ok(isl.length <= 1);
+    assert.ok(m.chests.filter((c) => !c.island).length <= 2);
+    if (!isl.length) continue;
+    islands++;
+    const reach = reachableFrom(withTide(m.tiles, m.tide, -1), m.allySlots[0]);
+    assert.ok(!reach.has(`${isl[0].x},${isl[0].y}`), `f${f} s${s}`);
+  }
+  assert.ok(islands >= 0.45 * 60 && islands <= 0.75 * 60, `${islands}/60`);
+});
+
+test('beach sand piles hide only shore species', () => {
+  const d = dungeonById('beach');
+  for (const { m } of beachFloors()) for (const p of m.piles) if (p.kind === 'mon') assert.ok(d.pileSpecies.includes(p.species), p.species);
+});
+
+test('non-beach floors have no tide data', () => {
+  assert.equal(generateFloor(dungeonById('autumn-forest'), 2, 99).tide, undefined);
+});
