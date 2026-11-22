@@ -62,7 +62,7 @@ function uniqueId(units, side, species) {
 // 물·풀: 물 칸·수풀 칸에서 차례를 시작하면 그 차례 이동력 +1 (타입별 지형 이득)
 export function terrainStart(state, u) {
   const tile = state.grid[u.y]?.[u.x], t = u.types ?? SPECIES[u.species].types;
-  u.terrainMove = (tile === '~' && t.includes('water')) || (tile === '"' && t.includes('grass')) ? 1 : 0;
+  u.terrainMove = ((tile === '~' || tile === ',') && t.includes('water')) || (tile === '"' && t.includes('grass')) ? 1 : 0;
 }
 
 export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } = {}) {

@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, '#': Infinity, '>': 1, '*': Infinity }; // '*' = 열리지 않은 낙엽더미
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity }; // '*' = 열리지 않은 낙엽더미
 
 // 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
 const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
