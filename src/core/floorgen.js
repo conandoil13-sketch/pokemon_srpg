@@ -7,6 +7,7 @@ import { encounterPool } from './encounters.js';
 import { rollChestHeld } from '../data/heldItems.js';
 import { SPECIES } from '../data/species.js';
 import { STEAM_RANGE } from './vent.js';
+import { reachable } from './pathfind.js';
 
 import { DEFAULT_SIZE } from '../data/mapSize.js'; // 후반 던전은 넓음 (data/mapSize.js)
 const WALK = '."^>'; // 땅 타입이 지나갈 수 있는 칸
@@ -198,6 +199,8 @@ export function generateFloor(dungeon, floor, seed) {
   const flows = dungeon.desert ? desertLayout(g, used, createRng(hashSeed(seed, 7200))) : null;
   // 12. 화산동굴: 현무암·분출구·용암 위 마그마그 (별도 난수, 맨 끝)
   const vents = dungeon.volcano ? volcanoExtras(g, used, enemies, createRng(hashSeed(seed, 7400))) : null;
+  // 13. 얼음동굴: 빙판·고드름·빙판 위 바위 (별도 난수, 맨 끝). 미끄럼 규칙으로 계단·상자·더미에 멈춰 닿을 때까지 다시
+  if (dungeon.ice) iceLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests], piles, createRng(hashSeed(seed, 7500)));
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed), ...(dungeon.dark ? { dark: true } : {}),
     ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}), ...(flows ? { flows } : {}), ...(vents ? { vents } : {}) };
@@ -568,4 +571,40 @@ function sewerLayout(g, rng) {
   const dry = [];
   for (let y = 0; y < H; y++) for (let x = SAFE_COLS + 1; x < W; x++) if (g[y][x] === '.' && DIRS.some(([dx, dy]) => g[y + dy]?.[x + dx] === '#')) dry.push({ x, y });
   for (let n = int(4, 7); n > 0 && dry.length; n--) { const p = dry.splice(int(0, dry.length - 1), 1)[0]; set(p.x, p.y, '"'); }
+}
+
+// 얼음동굴: 출발 3열 밖 빈 바닥의 35~45% 를 덩어리진 빙판으로, 고드름 3~6, 빙판 위 바위(멈춤 지점) 2~4.
+// 얼음 타입이 아닌 지상 포켓몬이 미끄럼 규칙만으로 출발 칸에서 targets(계단·상자)·더미 옆·다른 출발 칸에 멈춰 설 수 있어야 함 — 안 되면 다시 (최대 20번), 끝내 안 되면 빙판 없음
+function iceLayout(g, used, allySlots, targets, piles, rng) {
+  const W = g[0].length, H = g.length, int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+  const free = [];
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) if (g[y][x] === '.' && !used.has(key(x, y))) free.push({ x, y });
+  const open = free.length + targets.length; // 계단·상자 칸도 바닥
+  const start = allySlots[0], walker = { id: 'walker', species: 'bidoof', side: 'ally', x: start.x, y: start.y, hp: 1 };
+  const ok = () => {
+    const r = reachable(g.map((row) => row.join('')), [], walker, Infinity), at = (x, y) => r.has(key(x, y));
+    return targets.every((p) => at(p.x, p.y)) && allySlots.every((p) => at(p.x, p.y)) && piles.every((p) => DIRS.some(([dx, dy]) => at(p.x + dx, p.y + dy)));
+  };
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const want = Math.round(open * (0.35 + rng() * 0.1)), painted = [];
+    const isFree = (x, y) => x >= SAFE_COLS && y >= 0 && x < W && y < H && g[y][x] === '.' && !used.has(key(x, y));
+    for (let guard = 0; painted.length < want && guard < 400; guard++) { // 무작위 걸음 덩어리
+      const s = free[Math.floor(rng() * free.length)];
+      let x = s.x, y = s.y;
+      for (let n = int(6, 14); n > 0 && painted.length < want; n--) {
+        if (isFree(x, y)) { g[y][x] = '_'; painted.push({ x, y }); }
+        const [dx, dy] = DIRS[Math.floor(rng() * 4)];
+        x = Math.min(W - 1, Math.max(SAFE_COLS, x + dx)); y = Math.min(H - 1, Math.max(0, y + dy));
+      }
+    }
+    const spots = (want2, ch, cond) => { // 빙판 칸 몇 개를 ch 로
+      const c = painted.filter((p) => g[p.y][p.x] === '_' && cond(p));
+      for (let i = 0; i < want2 && c.length; i++) { const j = Math.floor(rng() * c.length); const p = c.splice(j, 1)[0]; g[p.y][p.x] = ch; }
+    };
+    const edge = (p) => DIRS.some(([dx, dy]) => (g[p.y + dy]?.[p.x + dx] ?? '#') !== '_'); // 덩어리 가장자리
+    spots(int(3, 6), 'Y', (p) => edge(p) && !DIRS.some(([dx, dy]) => g[p.y + dy]?.[p.x + dx] === 'Y'));
+    spots(int(2, 4), '^', (p) => !edge(p));
+    if (ok()) return;
+    for (const p of painted) g[p.y][p.x] = '.'; // 되돌리고 다시
+  }
 }

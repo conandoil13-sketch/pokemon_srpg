@@ -39,3 +39,28 @@ test('ice cave: saves on the old 8-1 placeholder move to the ice cave', () => {
   const g = loadGame(store);
   assert.ok(g.unlocked.includes('ice-cave') && g.cleared.includes('ice-cave')); assert.equal(g.best['ice-cave'], 5);
 });
+
+import { reachable } from '../src/core/pathfind.js';
+test('ice floors: 35-45% of the open floor is ice, 3-6 icicles, start columns clear, everything reachable by sliding, deterministic', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const f = 1 + (seed % IC.floors), m = generateFloor(IC, f, seed), T = m.tiles, W = T[0].length, H = T.length;
+    let ice = 0, open = 0, ici = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const c = T[y][x];
+      if (x < 3) assert.ok(!'_Y'.includes(c), `seed ${seed}: start columns`);
+      if (c === '_') ice++; if (c === 'Y') ici++;
+      if (x >= 3 && '._'.includes(c)) open++;
+    }
+    assert.ok(ice / open >= 0.3 && ice / open <= 0.5, `seed ${seed}: ice ${ice}/${open}`);
+    assert.ok(ici >= 3 && ici <= 6, `seed ${seed}: icicles ${ici}`);
+    const s = m.allySlots[0], walker = { id: 'w', species: 'bidoof', side: 'ally', x: s.x, y: s.y, hp: 1 };
+    const r = reachable(T, [], walker, Infinity);
+    const at = (p) => r.has(`${p.x},${p.y}`);
+    if (m.stairs) assert.ok(at(m.stairs), `seed ${seed}: stairs`);
+    for (const c of m.chests) assert.ok(at(c), `seed ${seed}: chest`);
+    for (const p of m.piles) assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => at({ x: p.x + dx, y: p.y + dy })), `seed ${seed}: pile`);
+    for (const a of m.allySlots) assert.ok(at(a), `seed ${seed}: ally slot`);
+  }
+  assert.deepEqual(generateFloor(IC, 3, 9).tiles, generateFloor(IC, 3, 9).tiles);
+  assert.ok(!generateFloor(DUNGEONS[0], 1, 1).tiles.some((r) => /[_Y]/.test(r)));
+});
