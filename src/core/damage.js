@@ -5,7 +5,7 @@ import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
 import { weatherDamageMult, weatherAccuracy } from './weather.js';
 import { fieldDamageMult } from './field.js';
-import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult, moveTypeOf } from './abilities.js';
+import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult, moveTypeOf, airborne } from './abilities.js';
 
 
 const sp = (unit) => SPECIES[unit.species];
@@ -27,7 +27,7 @@ export function hitChance(attacker, defender, move, defTile, weather = null, ctx
   if (ab.sure) return 100;
   acc.value = ab.value;
   const speGap = Math.floor((effectiveStat(defender, 'spe') - effectiveStat(attacker, 'spe')) / 10);
-  const bush = defTile === '"' ? (isType(defender, 'grass') ? 20 : 15) : defTile === '#' ? 8 : 0; // 풀: 수풀 회피 +5 · 나무 위(벌레) +8
+  const bush = defTile === '"' ? (isType(defender, 'grass') ? 20 : 15) : defTile === '#' ? 8 : defTile === ':' && !airborne(defender) && !defender.burrow ? 15 : 0; // 풀: 수풀 회피 +5 · 나무 위(벌레) +8 · 사막 깊은 모래 +15 (지상)
   const evasion = Math.min(30, bush + Math.max(0, speGap));
   const rockAim = ctx.atkTile === '^' && isType(attacker, 'fighting') ? 5 : 0; // 격투: 바위 위에서 명중 +5
   const height = ctx.atkTile === 'B' && defTile !== 'B' ? 10 : ctx.atkTile !== 'B' && defTile === 'B' ? -10 : 0; // 시티: 옥상 → 지상 +10, 지상 → 옥상 −10
