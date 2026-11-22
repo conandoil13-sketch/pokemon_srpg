@@ -1,6 +1,7 @@
 // 적 AI (순수 함수, spec §5)
 import { SPECIES } from '../data/species.js';
 import { effectiveWeather } from './weather.js';
+import { poolDamage } from './pool.js';
 import { MOVES } from '../data/moves.js';
 import { reachable, tilesInRange, manhattan, canEnter, TILE_COST } from './pathfind.js';
 import { expectedDamage, hitChance, terrainCtx } from './damage.js';
@@ -132,7 +133,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
   for (const k of reach.keys()) {
     const p = parse(k);
     const ghost = { ...unit, x: p.x, y: p.y };
-    const risk = THREAT_WEIGHT * threatAt(threats, ghost, p.x, p.y, state.grid[p.y][p.x]);
+    const risk = THREAT_WEIGHT * threatAt(threats, ghost, p.x, p.y, state.grid[p.y][p.x]) + (poolDamage(ghost, state.grid[p.y][p.x])?.damage ?? 0); // 독 웅덩이: 페이즈 끝 피해만큼 손해
     for (const mid of unit.sealed ? [] : unit.moves.filter((m) => !moveBlock(unit, m))) { // 풀죽음 봉인: 기술 없이 이동만, 도발·앙코르 … 로 못 쓰는 기술 제외
       const move = MOVES[mid];
       if (move.heal) { // 회복기: HP 절반 이하이고 남은 횟수가 있을 때만, 안전한 칸에서

@@ -656,7 +656,7 @@ test('dungeon select scrolls to reach the last stage and clicks map to the scrol
   let started = null;
   const sel = createDungeonSelect({ game: g, onStart: (id) => { started = id; }, onResume() {}, onBack() {} });
   assert.equal(sel.visibleTop, 0);
-  for (let i = 0; i < 9; i++) sel.handle({ type: 'dir', dx: 0, dy: 1 });
+  for (let i = 0; i < ALL_D.length - 1; i++) sel.handle({ type: 'dir', dx: 0, dy: 1 });
   assert.ok(sel.visibleTop > 0);
   sel.handle({ type: 'confirm' }); assert.equal(started, 'trial-8');
   const top = sel.visibleTop;

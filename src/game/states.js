@@ -92,7 +92,7 @@ export function ailmentNote(target, mv, attacker = null) {
 const STATUS_LINE = {
   poison: '독의 데미지를 입었다!', toxic: '독의 데미지를 입었다!', burn: '화상 데미지를 입었다!', fainted: '쓰러졌다!',
   asleep: '쿨쿨 잠들어 있다', woke: '눈을 떴다!', frozen: '얼어 버려서 움직일 수 없다!',
-  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!',
+  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!', poisonPool: '독 웅덩이에 몸이 상했다!',
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)

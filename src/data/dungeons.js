@@ -5,7 +5,9 @@ import { stageSlots } from './fillerStages.js';
 import { AUTUMN_FOREST } from './autumnForest.js';
 import { BEACH } from './beach.js';
 import { CITY } from './city.js';
+import { SEWER } from './sewer.js';
+import { fillerStage } from './fillerStages.js';
 
-export const DUNGEONS = [...SINNOH_DUNGEONS.map((d, i) => ({ ...d, stage: i + 1 })), ...stageSlots({ 1: AUTUMN_FOREST, 2: BEACH, 3: CITY })]; // 진짜 맵이 생긴 자리
+export const DUNGEONS = [...SINNOH_DUNGEONS.map((d, i) => ({ ...d, stage: i + 1 })), ...stageSlots({ 1: AUTUMN_FOREST, 2: BEACH, 3: CITY, 4: [SEWER, fillerStage(4)] })]; // 진짜 맵이 생긴 자리
 
 export const dungeonById = (id) => DUNGEONS.find((d) => d.id === id);

@@ -83,6 +83,8 @@ export function generateFloor(dungeon, floor, seed) {
     }
   }
   const tiles = () => g.map((r) => r.join(''));
+  // 2a. 하수도: 벽 + 직선 통로 (별도 난수 — 다른 던전은 결과·난수 소비 그대로). 연결성 단계가 마른 길을 보장
+  if (dungeon.sewer) sewerLayout(g, createRng(hashSeed(seed, 6000)));
 
   // 3. 연결성 보장: 도달 못 한 칸 → 가장 가까운 도달 칸까지 막힌 칸을 뚫는다
   const anchor = { x: 1, y: Math.floor(H / 2) };
@@ -362,4 +364,68 @@ function cityExtras(g, used, enemies, chests, allySlots, seed) {
     warps.push({ x: a.x, y: a.y, color, to: { x: b.x, y: b.y } }, { x: b.x, y: b.y, color, to: { x: a.x, y: a.y } });
   }
   return warps;
+}
+
+// 하수도: 벽으로 채우고 가로 본관(폭 2, 한 줄은 물길 `,`) + 세로 연결관(폭 1~2)을 판다.
+// 연결관 일부의 본관 사이 구간은 독 웅덩이 `%` 지름길 (마른 우회로는 다른 연결관으로 늘 남음).
+// 교차점 방(타이어 `^`·이끼 `"`·작은 웅덩이), 막다른 가지, 벽 옆 이끼. 스펙 docs/superpowers/specs/2026-11-22-sewer-design.md
+function sewerLayout(g, rng) {
+  const H = g.length, W = g[0].length;
+  const int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+  const set = (x, y, c) => { if (x >= SAFE_COLS && x < W && y >= 0 && y < H) g[y][x] = c; };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) g[y][x] = x < SAFE_COLS ? '.' : '#';
+
+  // 본관: 위 칸 y0, y0+1 (사이에 벽 최소 1줄)
+  const nMain = H >= 13 ? 3 : 2, mains = [];
+  for (let i = 0; i < nMain; i++) {
+    const base = Math.round(((i + 1) * H) / (nMain + 1)) - 1;
+    let y0 = Math.min(H - 3, Math.max(1, base + int(-1, 0)));
+    if (mains.length) y0 = Math.max(y0, mains[mains.length - 1] + 3);
+    if (y0 > H - 3) break;
+    mains.push(y0);
+  }
+  for (const y0 of mains) {
+    const xEnd = W - 1 - int(0, 2);
+    for (let x = SAFE_COLS; x <= xEnd; x++) { set(x, y0, '.'); set(x, y0 + 1, '.'); }
+    const wy = rng() < 0.5 ? y0 : y0 + 1, wx0 = SAFE_COLS + int(1, 3), wx1 = xEnd - int(1, 3);
+    for (let x = wx0; x <= wx1; x++) set(x, wy, ','); // 물길
+  }
+
+  // 연결관: 첫 본관 위 칸 ~ 마지막 본관 아래 칸
+  const yTop = mains[0], yBot = mains[mains.length - 1] + 1;
+  const cols = [];
+  for (let tries = 0, want = int(3, 5); cols.length < want && tries < 40; tries++) {
+    const cx = int(SAFE_COLS + 2, W - 3);
+    if (cols.every((c) => Math.abs(c.x - cx) >= 3)) cols.push({ x: cx, w: rng() < 0.35 ? 2 : 1 });
+  }
+  cols.sort((a, b) => a.x - b.x);
+  for (const c of cols) for (let y = yTop; y <= yBot; y++) for (let k = 0; k < c.w; k++) set(c.x + k, y, '.'); // 교차점의 물길은 마른 격자로
+
+  // 독 지름길: 연결관 하나의 본관 사이 구간 전체 (연결관 수 − 1 개까지, 최대 2)
+  const poisonN = Math.min(2, cols.length - 1);
+  const picks = cols.slice().sort(() => rng() - 0.5).slice(0, poisonN);
+  for (const c of picks) {
+    const i = int(0, mains.length - 2), ya = mains[i] + 2, yb = mains[i + 1] - 1;
+    for (let y = ya; y <= yb; y++) for (let k = 0; k < c.w; k++) set(c.x + k, y, '%');
+  }
+
+  // 막다른 가지
+  for (let n = int(1, 2); n > 0; n--) {
+    const y0 = mains[int(0, mains.length - 1)], x = int(SAFE_COLS + 1, W - 2), up = rng() < 0.5;
+    for (let d = 1, len = int(2, 3); d <= len; d++) { const y = up ? y0 - d : y0 + 1 + d; if (y >= 1 && y <= H - 2 && g[y][x] === '#') set(x, y, '.'); }
+  }
+
+  // 교차점 방: 3×4 넓힘 + 타이어 더미 하나 + 이끼 + 가끔 작은 독 웅덩이
+  for (let n = int(1, 2); n > 0 && cols.length; n--) {
+    const c = cols[int(0, cols.length - 1)], y0 = mains[int(0, mains.length - 1)];
+    for (let y = y0 - 1; y <= y0 + 2; y++) for (let x = c.x - 1; x <= c.x + c.w; x++) if (y >= 1 && y <= H - 2 && g[y][x] === '#') set(x, y, '.');
+    const corner = [[c.x - 1, y0 - 1], [c.x + c.w, y0 - 1], [c.x - 1, y0 + 2], [c.x + c.w, y0 + 2]].filter(([x, y]) => g[y]?.[x] === '.');
+    if (corner.length) { const [x, y] = corner.splice(int(0, corner.length - 1), 1)[0]; set(x, y, '^'); }
+    if (corner.length) { const [x, y] = corner.splice(int(0, corner.length - 1), 1)[0]; set(x, y, rng() < 0.5 ? '%' : '"'); }
+  }
+
+  // 벽 옆 이끼 4~7칸
+  const dry = [];
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS + 1; x < W; x++) if (g[y][x] === '.' && DIRS.some(([dx, dy]) => g[y + dy]?.[x + dx] === '#')) dry.push({ x, y });
+  for (let n = int(4, 7); n > 0 && dry.length; n--) { const p = dry.splice(int(0, dry.length - 1), 1)[0]; set(p.x, p.y, '"'); }
 }

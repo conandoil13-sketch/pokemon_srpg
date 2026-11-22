@@ -11,6 +11,7 @@ import { BALANCE } from '../data/balance.js';
 import { calcDamage, hitChance, confusionDamage, rollHits, terrainCtx } from './damage.js';
 import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
+import { poolDamage } from './pool.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
@@ -902,6 +903,14 @@ export function endPhase(state, rng = Math.random) {
       const hpBefore = u.hp;
       u.hp = Math.max(0, u.hp - w.damage);
       events.push({ unitId: u.id, kind: w.kind, damage: w.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
+      if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
+    }
+    // 하수도 독 웅덩이 (날씨 피해 다음)
+    const pool = poolDamage(u, state.grid[u.y]?.[u.x]);
+    if (pool) {
+      const hpBefore = u.hp;
+      u.hp = Math.max(0, u.hp - pool.damage);
+      events.push({ unitId: u.id, kind: pool.kind, damage: pool.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
     // 지니는 도구: 먹다남은음식·검은진흙·끈적끈적바늘·화염구슬·독독구슬
