@@ -5,7 +5,7 @@ import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
 import { weatherDamageMult, weatherAccuracy } from './weather.js';
 import { fieldDamageMult } from './field.js';
-import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult } from './abilities.js';
+import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult, moveTypeOf } from './abilities.js';
 
 
 const sp = (unit) => SPECIES[unit.species];
@@ -65,7 +65,7 @@ function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {})
   const burn = physical && attacker.status === 'burn' && !ignoresBurn(attacker) ? 0.5 : 1; // 화상: 물리 데미지 절반 (근성 제외)
   const ab = attackMult(attacker, defender, move, { typeMult, weather }) * defendMult(attacker, defender, move, { typeMult });
   const guard = isType(defender, 'normal') ? 1 - 0.03 * Math.min(4, ctx.guards ?? 0) : 1; // 노말: 옆 아군 1마리당 3% (최대 12%)
-  const gen = ctx.charged && move.type === 'electric' && isType(attacker, 'electric') ? CHARGE_MULT : 1; // 발전소: 발전기에 붙은 전기 타입의 전기 기술
+  const gen = ctx.charged && moveTypeOf(attacker, move) === 'electric' && isType(attacker, 'electric') ? CHARGE_MULT : 1; // 발전소: 발전기에 붙은 전기 타입의 전기 기술
   return { raw: base * stab * typeMult * burn * ab * guard * gen * weatherDamageMult(weather, move, defender), typeMult, blocked };
 }
 

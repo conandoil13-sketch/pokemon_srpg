@@ -24,7 +24,7 @@ export function canEnter(tile, who, trees = false, pass = false) {
   if (tile === undefined) return false;
   if (pass && (tile === '#' || tile === '*') && soars(who)) return true;
   if (tile === 'B') return soars(who); // 건물: 지상에선 벽, 비행·드래곤만 옥상으로 (옥상 안 이동은 search 가 따로)
-  if (tile === '*') return false; // 낙엽더미: 누구도 못 들어감
+  if (tile === '*' || tile === 'G') return false; // 낙엽더미·발전기: 누구도 못 들어감 (순간이동·밀치기 포함)
   if (tile === '#') return climbs(who, trees); // 유연·벌레: 나무 통과
   if (tile === '~') {
     const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;

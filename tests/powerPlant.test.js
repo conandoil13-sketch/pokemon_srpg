@@ -199,3 +199,36 @@ test('power floors place 2 ambush voltorbs (3 on the last two floors), 12 levels
     assert.equal(new Set(spots).size, spots.length);
   }
 });
+
+// ---- 리뷰 수정 ----
+import { canEnter } from '../src/core/pathfind.js';
+import { checkResult, speedBonusUnit } from '../src/core/battle.js';
+
+test('nothing can enter a generator cell, not even by teleport or push', () => {
+  assert.equal(canEnter('G', 'pidgey'), false);
+  assert.equal(canEnter('G', 'gastly', false, true), false);
+});
+
+test('hidden ambushers do not hold back the all-enemies-down win; awake ones do', () => {
+  const { s, at } = ambushSetup([['bidoof', 0, 2]], [[10, 2]], [['bidoof', 6, 5]]);
+  at(6, 5).hp = 0; s.units = s.units.filter((u) => u.hp > 0);
+  assert.equal(checkResult(s), 'win');
+  s.result = null; at(10, 2).ambush = 'awake';
+  assert.equal(checkResult(s), null);
+});
+
+test('a hidden ambusher never takes the enemy speed bonus', () => {
+  const { s, at } = ambushSetup([['snorlax', 0, 2]], [[10, 2]], [['electrode', 10, 5]]);
+  const v = at(10, 2), e = at(10, 5);
+  v.stats = { ...v.stats, spe: 999 }; e.stats = { ...e.stats, spe: 500 };
+  assert.equal(speedBonusUnit(s, 'enemy')?.id, e.id);
+});
+
+test('charged boost follows the move type the attacker really uses (normalize turns it off)', () => {
+  const { s, at } = setup([['pikachu', 2, 1]], [['bidoof', 6, 4]]);
+  const a = at(2, 1), foe = at(6, 4), tb = MOVES.thunderbolt;
+  const on = expectedDamage(a, foe, tb, '.', 1, null, terrainCtx(s, a, foe));
+  a.ability = 'normalize';
+  const norm = expectedDamage(a, foe, tb, '.', 1, null, terrainCtx(s, a, foe)), normOff = expectedDamage(a, foe, tb, '.', 1, null, { ...terrainCtx(s, a, foe), charged: false });
+  assert.ok(on > 0); assert.equal(norm, normOff);
+});

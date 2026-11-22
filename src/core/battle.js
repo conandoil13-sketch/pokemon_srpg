@@ -864,7 +864,7 @@ export const SPEED_BONUS_RATIO = 2;
 export const speedOf = (u) => effectiveStat(u.status === 'paralysis' ? { ...u, status: null } : u, 'spe'); // 랭크·순풍 반영, 마비는 뺌 (마비가 이득을 두 번 보지 않게)
 export function speedBonusUnit(state, side) {
   if (state.bonusGiven) return null;
-  const live = (s) => state.units.filter((u) => u.side === s && u.hp > 0 && !u.bot);
+  const live = (s) => state.units.filter((u) => u.side === s && u.hp > 0 && !u.bot && u.ambush !== 'hidden'); // 숨은 기습 찌리리공은 빼고
   const mine = live(side), foes = live(side === 'ally' ? 'enemy' : 'ally');
   if (!mine.length || !foes.length) return null;
   const slow = (list) => Math.min(...list.map(speedOf));
@@ -1034,7 +1034,7 @@ export function endPhase(state, rng = Math.random) {
 export function checkResult(state) {
   if (state.result === 'stairs') return state.result; // 계단 클리어는 덮어쓰지 않음
   if (state.bossFloor && !state.units.some((u) => u.boss)) { state.result = 'win'; return state.result; }
-  const enemies = state.units.some((u) => u.side === 'enemy');
+  const enemies = state.units.some((u) => u.side === 'enemy' && u.ambush !== 'hidden'); // 발전소: 숨은 기습 찌리리공은 승리 조건 밖
   const allies = state.units.some((u) => u.side === 'ally' && !u.bot); // 갸라도스 봇만 남으면 패배
   state.result = !enemies ? 'win' : !allies ? 'lose' : null;
   return state.result;
