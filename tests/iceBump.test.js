@@ -72,3 +72,23 @@ test('AI: a grounded enemy avoids stopping against an icicle', () => {
   const plan = planEnemyAction(s, foe);
   assert.ok(!(plan.moveTo.x === 1 && plan.moveTo.y === 1), JSON.stringify(plan.moveTo));
 });
+
+test('scene: an ally slides fast, shoves the foe with a short slide and a notice; the move cannot be undone', async () => {
+  const { createGame } = await import('../src/game/states.js');
+  const map = { tiles: ['._____.', '.......', '.......'], allySlots: [{ x: 0, y: 0 }], enemies: [{ species: 'machop', x: 4, y: 0, level: 5 }] };
+  const game = createGame({ rng: createRng(3), map, party: [newMember('bidoof', 40, createRng(1))], theme: 'ice' });
+  const s = game.state, p = s.units[0], e = s.units.find((u) => u.side === 'enemy');
+  for (let i = 0; i < 200; i++) { game.update(0.05); if (game.mode === 'idle') break; game.handle({ type: 'confirm' }); }
+  game.handle({ type: 'confirm' });
+  for (let i = 0; i < 4; i++) game.handle({ type: 'dir', dx: 1, dy: 0 });
+  game.handle({ type: 'confirm' });
+  let t = 0, slid = false;
+  for (; t < 5 && game.mode !== 'notice'; t += 0.01) { game.update(0.01); if (game.mode === 'sliding') slid = true; }
+  assert.ok(t < 0.11 * 2 + 0.05 * 3 + 0.3, `walk took ${t}`); // 첫 걸음 2칸만 보통 속도
+  assert.ok(slid);
+  assert.deepEqual([p.x, e.x], [4, 5]);
+  for (let i = 0; i < 50 && game.mode === 'notice'; i++) { game.handle({ type: 'confirm' }); game.update(0.5); }
+  assert.equal(game.mode, 'action');
+  game.handle({ type: 'cancel' });
+  assert.deepEqual([p.x, p.y], [4, 0]);
+});
