@@ -473,6 +473,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   if (itemOf(a)?.choice && !a.choiceLock) a.choiceLock = moveId; // 구애: 그 층 첫 기술로 고정
   if (itemOf(a)?.metronome) { a.metroStreak = a.metroMove === moveId ? (a.metroStreak ?? 0) + 1 : 0; a.metroMove = moveId; } // 메트로놈: 연속 사용 (막힌 기술은 위에서 돌아가 안 셈)
   a.moved = true;
+  if (move.kind === 'enemy' || move.kind === 'enemies') a.revealed = true; // 악 수풀 숨기: 상대를 노린 기술(변화기 포함)을 쓰면 드러남
   const stageChanges = [], statusChanges = [], thawed = [];
   const kind = move.category === 'status' ? 'status' : 'attack';
   const abilityEvents = (state.log.abilityEvents = []); // 이번 기술에서 발동한 특성 (연출용)

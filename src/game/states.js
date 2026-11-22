@@ -290,6 +290,17 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 악 수풀 숨기: 아군 누구에게서도 3칸 밖 수풀의 악 타입 적 — 맵에서 아예 안 보임 (안개의 회색 도트와 달리)
   const darkIds = () => hiddenFrom(st, 'ally');
   const sameAim = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const seenUnits = () => { const d = darkIds(); return st.units.filter((u) => !d.has(u.id)); };
+  // 아군 이동 경로: 보이는 유닛 기준. 숨은 적 칸에 닿으면 그 앞에서 멈추고 적이 드러남 (걷기 끝에 알림)
+  let bumped = null;
+  function allyPath(u, x, y) {
+    const d = darkIds(), path = pathTo(st.grid, seenUnits(), u, x, y);
+    const i = path.findIndex((p, k) => k > 0 && st.units.some((o) => d.has(o.id) && o.x === p.x && o.y === p.y));
+    if (i < 0) return path;
+    bumped = st.units.find((o) => d.has(o.id) && o.x === path[i].x && o.y === path[i].y);
+    bumped.revealed = true;
+    return path.slice(0, i);
+  }
   const seenAt = (x, y) => { const u = unitAt(st, x, y); return u && !darkIds().has(u.id) ? u : null; };
 
   // 공격기: 보이는 적이 하나 이상 맞는 조준 + 숨은 적이 있으면 비어 보이는 수풀 칸을 덮는 조준 (기억으로 겨냥)
@@ -321,7 +332,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 페이즈 전환 알림: { lines, at?, hp? } — 스펙 순서(끝 데미지 → 랭크 만료 → 시작)
   // 층 시작 특성 대사 — 안개 속 적의 것은 정체가 드러나므로 뺀다
   const floorNotices = () => abilityNotices((st.floorAbilityEvents ?? []).filter((e) => !hiddenIds().has(e.unitId) && !darkIds().has(e.unitId)), (id) => everyone.get(id));
-  const phaseLines = () => { const get = (id) => everyone.get(id); return [...abilityNotices(st.log.phaseAbilityEvents, get), ...phaseNotices(st.log.statusEvents ?? [], st.log.expired ?? [], get)]; };
+  const phaseLines = () => { const get = (id) => everyone.get(id), d = darkIds(), seen = (e) => !d.has(e.unitId); return [...abilityNotices((st.log.phaseAbilityEvents ?? []).filter(seen), get), ...phaseNotices((st.log.statusEvents ?? []).filter(seen), (st.log.expired ?? []).filter(seen), get)]; }; // 숨은 악 타입 일은 알리지 않음
 
   // list: 대사 줄 또는 { lines, at, hp } 알림
   function noticeChain(list, then) {
@@ -407,7 +418,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (extra) { // 적 스피드 보너스
         if (bonus) st.bonusGiven = true; else st.quickGiven = true;
         extra.moved = extra.acted = false; enemyQueue.push(extra.id);
-        showBanner(bonus ? '스피드 보너스!' : `${unitLabel(extra)}의 선제공격손톱!`, bonusLine(extra), '#f08040', () => { mode = 'enemy'; nextEnemy(); });
+        const lurk = darkIds().has(extra.id); // 숨은 악 타입이면 누군지 밝히지 않음
+        showBanner(bonus ? '스피드 보너스!' : lurk ? '선제공격손톱!' : `${unitLabel(extra)}의 선제공격손톱!`, lurk ? null : bonusLine(extra), '#f08040', () => { mode = 'enemy'; nextEnemy(); });
         return;
       }
       endPhase(st, rng);
@@ -482,7 +494,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const u = queue.shift();
       if (!u) { then(); return; }
       if (!st.units.includes(u) || u.acted) { next(); return; }
-      const plan = planEnemyAction(st, u);
+      const plan = planEnemyAction(st, u, { unseen: darkIds() }); // 숨은 악 타입 적은 봇도 모름
       if (u.sealed) plan.attack = null;
       focus = u; cursor = { x: u.x, y: u.y };
       startWalk(u, pathTo(st.grid, st.units, u, plan.moveTo.x, plan.moveTo.y), () => {
@@ -560,7 +572,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     sel = u;
     moveLocked = false;
     origin = { x: u.x, y: u.y, facing: facing[u.id] };
-    reach = reachable(st.grid, st.units, u);
+    reach = reachable(st.grid, seenUnits(), u); // 숨은 적은 모르는 셈 (부딪히면 멈춤)
     atkTiles = attackTilesFrom(u, reach);
     mode = 'selected';
   }
@@ -638,7 +650,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   // 치고 빠지기: 남은 이동력으로 다시 이동 (취소하면 제자리에서 끝)
   function openRetreat() {
-    reach = reachable(st.grid, st.units, sel, canRetreat(st, sel));
+    reach = reachable(st.grid, seenUnits(), sel, canRetreat(st, sel));
     cursor = { x: sel.x, y: sel.y };
     mode = 'retreat';
   }
@@ -705,7 +717,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const pick = ev.type === 'confirm' || ev.type === 'click';
         if (pick && reach.has(`${cursor.x},${cursor.y}`)) {
           const unit = sel;
-          startWalk(unit, pathTo(st.grid, st.units, unit, cursor.x, cursor.y), () => {
+          startWalk(unit, allyPath(unit, cursor.x, cursor.y), () => {
             unit.retreatReady = false; unit.retreated = true;
             const a = arrive(st, unit.id); // 낙엽더미·상자·계단은 보통 이동과 같게
             withPiles(a, unit, () => {
@@ -731,7 +743,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         }
         if (ev.type === 'cancel') { sel = null; mode = 'idle'; return; }
         if (pick && reach.has(`${cursor.x},${cursor.y}`)) {
-          startWalk(sel, pathTo(st.grid, st.units, sel, cursor.x, cursor.y), afterAllyMove);
+          startWalk(sel, allyPath(sel, cursor.x, cursor.y), afterAllyMove);
         }
         return;
       }
@@ -845,11 +857,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const cost = path.slice(1).reduce((c, p) => c + (st.grid[p.y][p.x] === '#' ? 1 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용
         moveUnit(st, unit.id, end.x, end.y, cost, path);
         const get = (id) => everyone.get(id);
-        const arriveLines = st.units.includes(unit) ? abilityNotices(st.log.arriveAbilityEvents, get) : [];
-        const trapLines = trapNotices(st.log.trapEvents, get);
+        const quiet = unit.side !== 'ally' && darkIds().has(unit.id); // 숨은 채 도착한 악 타입: 알림 없음
+        const arriveLines = st.units.includes(unit) && !quiet ? abilityNotices(st.log.arriveAbilityEvents, get) : [];
+        const trapLines = quiet ? [] : trapNotices(st.log.trapEvents, get);
         if ((arriveLines.length || trapLines.length) && unit.side === 'ally') moveLocked = true; // 위협·압정이 걸린 이동은 취소할 수 없다
         const dead = !st.units.includes(unit);
-        noticeChain([...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
+        const bumpLines = bumped ? [{ lines: [`수풀에 ${josa(unitLabel(bumped), '이/가')} 숨어 있었다!`], at: { x: bumped.x, y: bumped.y }, hp: null }] : [];
+        if (bumped && unit.side === 'ally') moveLocked = true;
+        bumped = null;
+        noticeChain([...bumpLines, ...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
       }
     } else if (mode === 'anim') {
       anim.update(dt);
@@ -876,8 +892,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const u = everyone.get(c.unitId);
       if (!u) continue;
       try { fxm.spawn({ id: 'impacts/hit-spark', opts: { palette: c.kind === 'fire' ? CHAIN_FIRE : CHAIN_SPARK, light: 1.4, seed: u.x * 13 + u.y }, timeScale: 1, layer: 'front' }, { x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE - 4 }); } catch { /* 연출 실패는 무시 */ }
-      const name = unitLabel(u), fire = c.kind === 'fire';
-      out.push({ lines: [fire ? `불꽃이 번져 ${name}에게 옮겨 붙었다!` : `물을 타고 ${name}에게 전기가 흘렀다!`, ...(c.fainted ? [`${josa(name, '은/는')} 쓰러졌다!`] : [])], at: { x: u.x, y: u.y }, hp: null });
+      const fogged = hiddenIds().has(u.id), name = fogged ? '상대 포켓몬' : unitLabel(u), fire = c.kind === 'fire'; // 안개 속이면 정체·위치 숨김
+      out.push({ lines: [fire ? `불꽃이 번져 ${name}에게 옮겨 붙었다!` : `물을 타고 ${name}에게 전기가 흘렀다!`, ...(c.fainted ? [`${josa(name, '은/는')} 쓰러졌다!`] : [])], at: fogged ? null : { x: u.x, y: u.y }, hp: null });
     }
     return out;
   }
@@ -903,7 +919,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function updateCamera(dt) {
     let t;
-    if (walk) { const p = unitWorld(walk.unit); t = camTarget({ x: p.x / TILE, y: p.y / TILE }); }
+    if (walk && !(walk.unit.side !== 'ally' && darkIds().has(walk.unit.id))) { const p = unitWorld(walk.unit); t = camTarget({ x: p.x / TILE, y: p.y / TILE }); } // 숨은 악 타입의 걸음은 따라가지 않음
     else if (focus && (mode === 'anim' || mode === 'enemy')) t = camTarget(focus);
     else if (mode === 'notice' && notice?.at) t = camTarget(notice.at); // 상태 데미지 등: 그 유닛 쪽으로
     else t = camTarget(cursor);
