@@ -77,11 +77,11 @@ const beachFloors = () => {
   return out;
 };
 
-test('beach floors: sea is 18-32% of the map, never in the start columns', () => {
+test('beach floors: the sea band alone is 25-38% of the map, never in the start columns', () => {
   for (const { f, s, m } of beachFloors()) {
-    const cells = m.tiles.join('');
-    const sea = [...cells].filter((c) => c === ',' || c === '~').length / cells.length;
-    assert.ok(sea >= 0.18 && sea <= 0.32, `f${f} s${s} ${sea}`);
+    const cells = m.tiles.join(''), isl = m.island ? m.island.added : 0; // 섬이 땅을 바다로 바꾼 칸은 빼고
+    const sea = ([...cells].filter((c) => c === ',' || c === '~').length - isl) / cells.length;
+    assert.ok(sea >= 0.25 && sea <= 0.38, `f${f} s${s} ${sea}`);
     for (const row of m.tiles) assert.ok(!/[,~]/.test(row.slice(0, 3)));
   }
 });
@@ -112,6 +112,13 @@ test('beach island: one guaranteed chest, unreachable on foot even at low tide',
     islands++;
     const reach = reachableFrom(withTide(m.tiles, m.tide, -1), m.allySlots[0]);
     assert.ok(!reach.has(`${isl[0].x},${isl[0].y}`), `f${f} s${s}`);
+    // 섬 둘레 두 칸은 늘 깊은 물: 섬 모래에서 상하좌우 2칸 안 (섬 밖) 칸은 모두 '~' 이고 물때 목록에 없음
+    const tideSet = new Set([...m.tide.a, ...m.tide.b].map((p) => `${p.x},${p.y}`));
+    for (const sand of m.island.land) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const x = sand.x + dx, y = sand.y + dy;
+      if (Math.abs(dx) + Math.abs(dy) > 2 || m.island.land.some((p) => p.x === x && p.y === y) || !m.tiles[y]?.[x]) continue;
+      assert.equal(m.tiles[y][x], '~', `f${f} s${s} ${x},${y}`); assert.ok(!tideSet.has(`${x},${y}`));
+    }
   }
   assert.ok(islands >= 0.45 * 60 && islands <= 0.75 * 60, `${islands}/60`);
 });
@@ -182,9 +189,16 @@ test('battles without tide data never change the grid', () => {
 import { createFrame, clearFrame, createFx } from '../src/vendor/pixelfx/core/index.js';
 import * as beachTiles from '../src/fx-custom/beach/tiles.js';
 test('every beach tile piece draws pixels', () => {
-  for (const piece of ['sand', 'shallow', 'deep', 'palm', 'rock', 'reef', 'grass', 'pile', 'stairs']) for (const variant of [0, 1, 2]) {
+  for (const piece of ['sand', 'palm', 'rock', 'reef', 'grass', 'pile', 'stairs']) for (const variant of [0, 1, 2]) {
     const [w, h] = beachTiles.meta.size, f = createFrame(w, h); clearFrame(f);
     createFx(beachTiles, { piece, variant, seed: 3, x: beachTiles.meta.origin[0], y: beachTiles.meta.origin[1] }).draw(f, 'front');
     assert.ok(f.color.some((c) => c !== 0), `${piece}/${variant}`);
   }
+});
+
+import { waterDepths } from '../src/render/beachTiles.js';
+test('water depth: shallow 1, deep grows with distance from land', () => {
+  const d = waterDepths(['..,~~~~']);
+  assert.deepEqual(d[0].slice(2), [1, 2, 3, 4, 5]);
+  assert.equal(d[0][0], 0.2);
 });
