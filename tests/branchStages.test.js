@@ -53,7 +53,7 @@ test('level cap moves on once any branch of a stage is cleared', async () => {
 });
 
 test('the real table: stage 6 branches into sewer and deep cave', () => {
-  assert.deepEqual(DUNGEONS.map((d) => d.stage), [1, 2, 3, 4, 5, 6, 6, 7, 7, 8, 9, 10]);
+  assert.deepEqual(DUNGEONS.map((d) => d.stage), [1, 2, 3, 4, 5, 6, 6, 7, 7, 8, 8, 9, 10]);
   assert.deepEqual(DUNGEONS.slice(5, 7).map((d) => [d.id, d.branch, d.unlock]), [['sewer', 1, 'city'], ['deep-cave', 2, 'city']]); // 6-1 하수도 · 6-2 깊은 동굴
   assert.deepEqual(DUNGEONS.slice(7, 9).map((d) => d.unlock), ['sewer', 'deep-cave']); // 2 → 2: 짝끼리 (7-1 발전소 · 7-2 사막)
 });

@@ -11,7 +11,7 @@ test('power plant is 7-1 next to the desert; sewer opens it, deep cave opens 7-2
   assert.ok(pp.power && pp.ambush.species === 'voltorb' && pp.ambush.drop === 12);
   assert.deepEqual(pp.weather, []);
   assert.equal(pp.clusters['~'], 0);
-  assert.deepEqual(DUNGEONS.find((d) => d.stage === 8).unlock, ['power-plant', 'desert']);
+  assert.deepEqual(DUNGEONS.filter((d) => d.stage === 8).map((d) => d.unlock), ['power-plant', 'desert']);
 });
 
 // ---- 발전기 ----

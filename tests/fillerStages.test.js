@@ -9,12 +9,12 @@ import { newGame, saveGame, loadGame } from '../src/core/save.js';
 test('eight filler stages follow the curve and alternate field and cave', () => {
   const t = DUNGEONS.slice(2);
   assert.equal(FILLER_COUNT, 8);
-  assert.equal(t.length, 10); // 4번 자리 분기 2개 (하수도 · 깊은 동굴), 5번 자리 분기 2개 (발전소 · 임시)
-  assert.deepEqual(t.map((d) => d.theme), ['autumn', 'beach', 'city', 'sewer', 'deep-cave', 'power-plant', 'desert', 'cave', 'field', 'cave']); // 1번 = 단풍 숲, 2번 = 해변, 3번 = 시티, 4번 = 하수도 | 깊은 동굴, 5번 = 발전소 | 사막
-  assert.deepEqual(t.map((d) => d.floors), [7, 7, 8, 8, 8, 8, 8, 9, 9, 9]);
-  assert.deepEqual(t.map((d) => d.baseLevel[0]), [23, 30, 37, 44, 44, 51, 51, 58, 65, 72]);
-  assert.deepEqual(t.map((d) => d.levelCap), [31, 38, 45, 52, 52, 59, 59, 66, 73, 80]);
-  assert.equal(t[0].name, '단풍 숲'); assert.equal(t[1].name, '해변'); assert.equal(t[3].name, '하수도'); assert.equal(t[5].name, '발전소'); assert.equal(t[9].name, '시련의 동굴 Ⅳ');
+  assert.equal(t.length, 11); // 4번 자리 분기 2개 (하수도 · 깊은 동굴), 5번 (발전소 · 사막), 6번 (임시 · 화산동굴)
+  assert.deepEqual(t.map((d) => d.theme), ['autumn', 'beach', 'city', 'sewer', 'deep-cave', 'power-plant', 'desert', 'cave', 'volcano', 'field', 'cave']); // … 5번 = 발전소 | 사막, 6번 = 임시 | 화산동굴
+  assert.deepEqual(t.map((d) => d.floors), [7, 7, 8, 8, 8, 8, 8, 9, 9, 9, 9]);
+  assert.deepEqual(t.map((d) => d.baseLevel[0]), [23, 30, 37, 44, 44, 51, 51, 58, 58, 65, 72]);
+  assert.deepEqual(t.map((d) => d.levelCap), [31, 38, 45, 52, 52, 59, 59, 66, 66, 73, 80]);
+  assert.equal(t[0].name, '단풍 숲'); assert.equal(t[1].name, '해변'); assert.equal(t[3].name, '하수도'); assert.equal(t[5].name, '발전소'); assert.equal(t[10].name, '시련의 동굴 Ⅳ'); assert.equal(t[8].name, '화산동굴');
   assert.equal(t[0].unlock, 'sinnoh-cave'); assert.equal(t[1].unlock, 'autumn-forest');
 });
 test('a replaced slot keeps the unlock chain in order', () => {

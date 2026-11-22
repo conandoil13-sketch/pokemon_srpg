@@ -14,7 +14,7 @@ test('desert is 7-2 next to the power plant; deep cave opens it', () => {
   assert.ok(DS.desert);
   assert.deepEqual(DS.weather, [{ id: 'sand', chance: 0.6 }]);
   assert.equal(DS.clusters['~'], 0); assert.equal(DS.clusters['"'], 0);
-  assert.deepEqual(DUNGEONS.find((d) => d.stage === 8).unlock, ['power-plant', 'desert']);
+  assert.deepEqual(DUNGEONS.filter((d) => d.stage === 8).map((d) => d.unlock), ['power-plant', 'desert']);
 });
 
 test('desert: the cacnea line is always in the pool (within the stage cap), mostly ground', () => {
