@@ -16,6 +16,7 @@ import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate,
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { tideFor, applyTide } from './tide.js';
+import { chainKind, chainSpread } from './chain.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE, FIELD_RADIUS } from './field.js';
 import { pathTo, canEnter, reachable } from './pathfind.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal, BIND_MOVES, BIND_TURNS, bindCheck } from './volatile.js';
@@ -131,6 +132,7 @@ const byId = (state, id) => state.units.find((u) => u.id === id);
 export function moveUnit(state, id, x, y, cost = 0, path = null) {
   const u = byId(state, id);
   const stayed = u.x === x && u.y === y;
+  if (!stayed) u.revealed = false; // 악 수풀 숨기: 움직이면 다시 숨을 수 있음
   state.log.trapEvents = [];
   if (!stayed && state.spikes?.length) {
     let route = path;
@@ -574,6 +576,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
     if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); selfFainted = a.id; } // 고스트 저주로 쓰러짐
     return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...out2, ...(selfFainted ? { selfFainted } : {}) };
   }
+  a.revealed = true; // 악 수풀 숨기: 공격기를 쓰면 드러남 (다음 이동까지)
   const ranged = RANGED_CHARGE.has(move.id) && a.charging?.moveId === move.id ? byId(state, a.charging.targetId) : null; // 원거리 준비 기술 발사: 기억한 대상만
   const targets = ranged ? (canTarget(move, ranged) ? [ranged] : []) : unitsHit(state, a, move, typeof aim === 'string' ? { unitId: aim } : aim ?? { self: true });
   // 준비 기술: 처음 쓰면 모으기만 (솔라빔은 쾌청이면 바로). 같은 기술을 모아 둔 상태면 발사
@@ -629,7 +632,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
         : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0, ...terrainCtx(state, a, d) });
       if (r.absorbed) absorb(d, r.absorbed);
       if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
-      if (r.damage > 0) d.ncTouched = true; // 자연회복: 맞음
+      if (r.damage > 0) { d.ncTouched = true; d.revealed = true; } // 자연회복: 맞음 · 악 숨기: 맞으면 드러남
       if (r.damage > 0 && d.bide && d !== a) d.bide.stored += Math.min(r.damage, d.hp); // 참기: 받은 피해 모음
       d.hp = Math.max(0, d.hp - r.damage);
       const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김
@@ -701,6 +704,21 @@ export function applyMove(state, userId, moveId, aim, rng) {
     }
     for (const c of contacts) c();
   }
+  // 전기·불꽃 연쇄: 맞은 상대가 물(전기)·수풀·단풍길(불꽃) 칸이면 옆 칸 상대에게 10% (흡수·반동 합계엔 안 셈)
+  const chain = [];
+  const ck = move.power ? chainKind(moveTypeOf(a, move)) : null;
+  if (ck) {
+    const starts = targets.filter((d) => d.side !== a.side).map((d) => ({ unit: d, damage: hits.filter((h) => h.unitId === d.id && h.typeMult > 0).reduce((t, h) => t + h.damage, 0) }));
+    const blocked = (v) => v.guard === 'protect' || typeEffect(a, v, move, W) === 0 || !!immunity(a, v, move);
+    for (const c of chainSpread(state, a, ck, starts, targets.map((d) => d.id), blocked)) {
+      const v = c.unit;
+      if (!state.units.includes(v)) continue;
+      const damage = Math.min(v.hp, c.damage);
+      v.hp -= damage; v.ncTouched = true; v.revealed = true;
+      if (v.hp === 0) { knockOut(state, v, a, { deferExp: true }); knocked.push(v); }
+      chain.push({ unitId: v.id, damage, fainted: v.hp === 0, from: c.from, kind: ck });
+    }
+  }
   // 선제기: 기술이 나갔으면 이번 차례에 한 번 남은 이동력으로 다시 이동 (치고 빠지기)
   if (move.priority > 0 && state.units.includes(a)) a.retreatReady = true;
   // 흡수(+)·반동(−): 실제로 깎인 HP 합 기준
@@ -771,7 +789,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];

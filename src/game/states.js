@@ -8,7 +8,8 @@ import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js'
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/pathfind.js';
-import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus } from '../core/shapes.js';
+import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims } from '../core/shapes.js';
+import { hiddenFrom } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance, terrainCtx } from '../core/damage.js';
@@ -157,6 +158,7 @@ export function phaseNotices(events, expired, get) {
   return [...events.filter((e) => !START_EVENTS.includes(e.kind)).map(one), ...exp, ...events.filter((e) => START_EVENTS.includes(e.kind)).map(one)];
 }
 
+const CHAIN_SPARK = ['#1a2050', '#2c58c8', '#4a9cff', '#8ad8ff', '#e8f870', '#fffbc0', '#ffffff'], CHAIN_FIRE = ['#4a1712', '#c9281f', '#f2561d', '#ff8a2a', '#ffe26b', '#fff3a6', '#ffffff']; // 연쇄 번쩍임
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
 // 낙엽더미 대사 (arrive 의 piles 순서대로). 포켓몬: 튀어나옴 + 기습(피해 표시), 상자: 아이템
@@ -220,7 +222,7 @@ export function dangerWarning(enemy, units, weather = null) {
 export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLabel = null, onExit }) {
   let st, mode, cursor, sel, origin, reach, atkTiles, menu, menuSel, menuBox;
   let aims = null, aIdx = 0, enemyUnseen = new Set(); // 공격기 조준 후보와 현재 선택
-  let move, targets, tIdx, walk, anim, animThen, animAbility = null, banner, enemyQueue, pause, focus;
+  let move, targets, tIdx, walk, anim, animThen, animAbility = null, animResult = null, banner, enemyQueue, pause, focus;
   let resultT = 0, clock = 0, everyone;
   let notice = null; // { lines, then } 대사 후 다음 단계
   let moveLocked = false; // 보물상자를 연 이동은 취소할 수 없다
@@ -235,9 +237,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     st.grid.trees = (theme ?? 'field') !== 'cave'; // 벽이 나무인 맵: 유연이 지나갈 수 있음
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
-    if (theme === 'autumn' && typeof document !== 'undefined') { // 단풍 숲: 바닥 층을 미리 굽는다 (단풍길 = 출발 → 계단, 보스 층이면 보스 자리)
+    if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
       const goal = st.stairs ?? st.units.find((u) => u.boss) ?? null;
-      try { autumnGround = bakeAutumnGround(map.tiles, leafRoute(map.tiles, map.allySlots[0], goal)); } catch { autumnGround = null; }
+      const route = leafRoute(map.tiles, map.allySlots[0], goal);
+      st.leafTiles = route;
+      if (typeof document !== 'undefined') try { autumnGround = bakeAutumnGround(map.tiles, route); } catch { autumnGround = null; }
     }
     if (theme === 'beach' && typeof document !== 'undefined') { try { beachGround = bakeBeachGround(map.tiles); } catch { beachGround = null; } } // 해변: 모래 바닥 (물은 매 프레임)
     mode = 'banner';
@@ -276,14 +280,25 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!pickOne(mv)) return targetsOf(st, unit, mv);
     const [min, max0] = mv.range, max = max0 + sniperBonus(unit, max0); // 스나이퍼
     const want = mv.kind === 'ally' ? (o) => o.side === unit.side && o !== unit : (o) => o.side !== unit.side;
-    return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max && canTarget(mv, o)); // 숨은 포켓몬 제외
+    const dark = darkIds();
+    return st.units.filter((o) => want(o) && manhattan(unit, o) >= min && manhattan(unit, o) <= max && canTarget(mv, o) && !dark.has(o.id)); // 숨은 포켓몬 제외
   }
 
   // 안개: 지금 아군 누구에게서도 FOG_SIGHT 이상 떨어진 적 (실시간)
   const hiddenIds = () => new Set(st.weather === 'fog' ? st.units.filter((u) => u.side === 'enemy' && isHidden(u, allyUnits())).map((u) => u.id) : []);
 
-  // 공격기: 적이 하나 이상 맞는 조준만
-  const attackAims = (unit, mv) => aimsOf(st, unit, mv).filter((a) => unitsHit(st, unit, mv, a).some((u) => u.side !== unit.side));
+  // 악 수풀 숨기: 아군 누구에게서도 3칸 밖 수풀의 악 타입 적 — 맵에서 아예 안 보임 (안개의 회색 도트와 달리)
+  const darkIds = () => hiddenFrom(st, 'ally');
+  const sameAim = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const seenAt = (x, y) => { const u = unitAt(st, x, y); return u && !darkIds().has(u.id) ? u : null; };
+
+  // 공격기: 보이는 적이 하나 이상 맞는 조준 + 숨은 적이 있으면 비어 보이는 수풀 칸을 덮는 조준 (기억으로 겨냥)
+  const attackAims = (unit, mv) => {
+    const dark = darkIds();
+    const seen = aimsOf(st, unit, mv).filter((a) => unitsHit(st, unit, mv, a).some((u) => u.side !== unit.side && !dark.has(u.id)));
+    const extra = unit.side === 'ally' ? guessAims(st, unit, mv).filter((g) => !seen.some((a) => sameAim(a, g) || (a.unitId && st.units.find((o) => o.id === a.unitId && o.x === g.x && o.y === g.y)))) : [];
+    return [...seen, ...extra];
+  };
   const curAim = () => (aims ? aims[aIdx] : null);
   // 조준의 대표 칸 (커서 위치)
   // 압정(칸 조준): 사거리 1~3 의 벽 아닌 칸 / 덮는 칸 = 그 칸 + 4방
@@ -296,7 +311,6 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (aim.self) return { x: sel.x, y: sel.y };
     return { x: aim.x, y: aim.y };
   }
-  const sameAim = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   function fireAim() {
     const aim = curAim();
     const one = aim.unitId ? st.units.find((o) => o.id === aim.unitId) : null;
@@ -306,7 +320,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 페이즈 종료 때 풀린 랭크 → 대사 (한 건씩)
   // 페이즈 전환 알림: { lines, at?, hp? } — 스펙 순서(끝 데미지 → 랭크 만료 → 시작)
   // 층 시작 특성 대사 — 안개 속 적의 것은 정체가 드러나므로 뺀다
-  const floorNotices = () => abilityNotices((st.floorAbilityEvents ?? []).filter((e) => !hiddenIds().has(e.unitId)), (id) => everyone.get(id));
+  const floorNotices = () => abilityNotices((st.floorAbilityEvents ?? []).filter((e) => !hiddenIds().has(e.unitId) && !darkIds().has(e.unitId)), (id) => everyone.get(id));
   const phaseLines = () => { const get = (id) => everyone.get(id); return [...abilityNotices(st.log.phaseAbilityEvents, get), ...phaseNotices(st.log.statusEvents ?? [], st.log.expired ?? [], get)]; };
 
   // list: 대사 줄 또는 { lines, at, hp } 알림
@@ -404,15 +418,15 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     const u = st.units.find((o) => o.id === id);
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
-    const plan = planEnemyAction(st, u, { unseen: enemyUnseen });
+    const plan = planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy')]) }); // 안개 + 수풀에 숨은 악 타입 아군
     if (u.sealed) plan.attack = null; // 풀죽음: 이번 차례 기술 봉인 (이동만)
     // 안개: 이동한 뒤에도 안개 속이면 기술을 쓰지 않는다 (대사로 정체가 드러나지 않게)
     if (st.weather === 'fog' && plan.attack && isHidden(plan.moveTo, allyUnits())) plan.attack = null;
-    focus = u;
-    cursor = { x: u.x, y: u.y };
-    pause = { t: 0.35, fn: () => {
+    const sneaky = darkIds().has(u.id) && !plan.attack; // 숨은 악 타입이 숨은 채 움직임: 카메라·커서가 따라가지 않음
+    if (!sneaky) { focus = u; cursor = { x: u.x, y: u.y }; }
+    pause = { t: sneaky ? 0.05 : 0.35, fn: () => {
       startWalk(u, pathTo(st.grid, st.units, u, plan.moveTo.x, plan.moveTo.y), () => {
-        cursor = { ...plan.moveTo };
+        if (!sneaky) cursor = { ...plan.moveTo };
         if (plan.attack) {
           const target = st.units.find((o) => o.id === plan.attack.targetId);
           pause = { t: 0.2, fn: () => doAttack(u, target, plan.attack.moveId, () => enemyRetreat(u), plan.attack.aim) };
@@ -517,7 +531,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     anim = createAttackAnim({ attacker, defender: one, move: mv, result, hpBefore, lookup, fx: fxm });
     target = result.blocked ? attacker : one ?? attacker;
-    animThen = then; animAbility = result.abilityEvents;
+    animThen = then; animAbility = result.abilityEvents; animResult = result;
     focus = target;
     mode = 'anim';
   }
@@ -537,7 +551,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const lineEnd = mv.shape?.type === 'line' ? tilesOf(st, attacker, mv, a).at(-1) ?? { x: attacker.x, y: attacker.y } : null; // 벽·가장자리에서 멈춘 끝 칸
     anim = createAttackAnim({ attacker, defenders: result.blocked ? [] : defenders, move: mv, result, lookup, aim: a, endPt: lineEnd, fx: fxm });
     aims = null;
-    animThen = then; animAbility = result.abilityEvents;
+    animThen = then; animAbility = result.abilityEvents; animResult = result;
     focus = result.blocked || defenders.length !== 1 ? attacker : defenders[0];
     mode = 'anim';
   }
@@ -710,7 +724,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         if (mode === 'idle') {
           if (ev.type === 'endTurn') { enemyPhase(); return; }
           if (!pick) return;
-          const u = unitAt(st, cursor.x, cursor.y);
+          const u = seenAt(cursor.x, cursor.y);
           if (u && u.side === 'ally' && !u.acted && !u.bot) select(u); // 갸라도스 봇은 스스로 움직임
           else if (!u) openEndMenu();
           return;
@@ -844,19 +858,35 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         fxm.expire(1); // 남은 연기·잔해는 1초 뒤 정리
         // 다음 행동 전 대기(pause) 동안 'anim' 에 머물지 않도록 먼저 모드를 되돌린다
         mode = st.result ? 'result' : st.phase === 'enemy' ? 'enemy' : 'idle';
-        const lines = abilityNotices(animAbility, (id) => everyone.get(id)), back = mode;
-        animAbility = null;
+        const lines = [...strikeLines(animResult), ...abilityNotices(animAbility, (id) => everyone.get(id))], back = mode;
+        animAbility = null; animResult = null;
         if (!st.result) noticeChain(lines, () => { mode = back; animThen(); });
         else noticeChain(lines, () => { mode = 'result'; });
       }
     }
   }
 
+  // 공격 뒤 대사: 빈 수풀 칸 조준 → 아무도 없었다 · 전기·불꽃 연쇄 (번쩍임 + 한 줄씩)
+  function strikeLines(r) {
+    if (!r) return [];
+    const out = [];
+    if (r.empty) out.push({ lines: ['아무도 없었다…'], at: null, hp: null });
+    if (!r.chain?.length) return out;
+    for (const c of r.chain) {
+      const u = everyone.get(c.unitId);
+      if (!u) continue;
+      try { fxm.spawn({ id: 'impacts/hit-spark', opts: { palette: c.kind === 'fire' ? CHAIN_FIRE : CHAIN_SPARK, light: 1.4, seed: u.x * 13 + u.y }, timeScale: 1, layer: 'front' }, { x: u.x * TILE + TILE / 2, y: u.y * TILE + TILE - 4 }); } catch { /* 연출 실패는 무시 */ }
+      const name = unitLabel(u), fire = c.kind === 'fire';
+      out.push({ lines: [fire ? `불꽃이 번져 ${name}에게 옮겨 붙었다!` : `물을 타고 ${name}에게 전기가 흘렀다!`, ...(c.fainted ? [`${josa(name, '은/는')} 쓰러졌다!`] : [])], at: { x: u.x, y: u.y }, hp: null });
+    }
+    return out;
+  }
+
   // 상태이상 지속 표시: 살아 있는 유닛의 상태와 맞춘다 (없어진 건 멈추고, 새로 생긴 건 붙인다)
   function syncStatusFx() {
-    const wanted = new Map(), hidden = hiddenIds();
+    const wanted = new Map(), hidden = hiddenIds(), dark = darkIds();
     for (const u of st.units) {
-      if (hidden.has(u.id)) continue; // 안개 속 유닛에는 상태 표시를 그리지 않는다
+      if (hidden.has(u.id) || dark.has(u.id)) continue; // 안개 속 유닛에는 상태 표시를 그리지 않는다
       const kinds = [u.status, u.confusion > 0 ? 'confusion' : u.infatuation > 0 ? 'infatuation' : null].filter(Boolean); // 헤롱헤롱은 혼란과 같은 연출 → 하나만
       for (const k of kinds) {
         const loop = fxForAilment(k).loop;
@@ -900,7 +930,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fogSeen = new Map(); // 안개: 숨어 있던 유닛 id → 드러난 시각 (null = 아직 숨음)
   const REVEAL = 0.35;
   function drawUnits(ctx) {
-    const hidden = hiddenIds();
+    const hidden = hiddenIds(), dark = darkIds(), lurking = hiddenFrom(st, 'enemy');
     const list = [...st.units];
     for (const u of anim?.extraUnits ?? (anim?.defender ? [anim.defender] : [])) if (u && !list.includes(u)) list.push(u); // 기절 연출 중
     list.sort((a, b) => unitWorld(a).y - unitWorld(b).y);
@@ -909,6 +939,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       const cx = p.x + TILE / 2, cy = p.y + TILE / 2;
       const pose = anim?.unitPose(u);
       if (pose?.hidden) continue;
+      if (dark.has(u.id) && !pose) continue; // 수풀에 숨은 악 타입: 아예 그리지 않음
       drawShadow(ctx, cx, cy, u.side === 'ally' ? 'rgba(40,80,200,0.45)' : 'rgba(200,40,40,0.45)');
       const grey = u.acted && !pose && st.phase === (u.side === 'ally' ? 'player' : 'enemy');
       const walking = walk && walk.unit === u;
@@ -933,7 +964,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (revealK < 1) { ctx.save(); ctx.globalAlpha = revealK; }
       const burrowUnder = u.burrow && (u.burrow.kind === 'ground' || u.burrow.kind === 'water');
       if (burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 숨기: 흙더미·물웅덩이는 발밑에
-      if (u.burrow) { ctx.save(); ctx.globalAlpha = 0.45; } // 숨은 포켓몬은 반투명
+      const lurk = u.side === 'ally' && lurking.has(u.id); // 수풀에 숨은 악 타입 아군: 적에게 안 보임을 반투명으로
+      if (u.burrow || lurk) { ctx.save(); ctx.globalAlpha = u.burrow ? 0.45 : 0.6; } // 숨은 포켓몬은 반투명
       if (grey) { ctx.save(); ctx.filter = 'grayscale(1) brightness(0.85)'; }
       if (restFilter) { ctx.save(); ctx.filter = restFilter; }
       if (pose?.flash) { ctx.save(); ctx.filter = 'brightness(3)'; }
@@ -941,7 +973,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (pose?.flash) ctx.restore();
       if (restFilter) ctx.restore();
       if (grey) ctx.restore();
-      if (u.burrow) ctx.restore();
+      if (u.burrow || lurk) ctx.restore();
       if (revealK < 1) ctx.restore();
       if (u.burrow && !burrowUnder) ui.drawBurrowMark(ctx, u, p.x, p.y); // 구름·그림자는 위에
       if (!pose?.hidden) ui.drawStatusDot(ctx, u, cx, cy);
@@ -1092,7 +1124,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
     const onLeft = cursor.x * TILE - cx < W / 2;
     if (mode === 'idle' || mode === 'selected' || mode === 'enemy') {
-      const u = unitAt(st, cursor.x, cursor.y);
+      const u = seenAt(cursor.x, cursor.y);
       if (u) { const hidden = hiddenIds().has(u.id); ui.drawUnitInfo(ctx, u, onLeft, { hidden, warn: hidden ? null : dangerWarning(u, st.units, effectiveWeather(st)) }); }
     }
     if (mode === 'action' || mode === 'endMenu') {
