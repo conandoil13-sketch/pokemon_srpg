@@ -71,6 +71,14 @@ test('patrol: an enemy that has seen nobody walks at half speed; the boss waits'
   assert.deepEqual(huntPlan(b.s, b.at(15, 3), () => 0.1).moveTo, { x: 15, y: 3 });
 });
 
+test('patrol goals lean left, toward where the party comes in', () => {
+  const { s, at } = setup([['geodude', 0, 0]], [['geodude', 15, 3]], { rows: WIDE });
+  const e = at(15, 3), rng = createRng(7);
+  let sum = 0;
+  for (let i = 0; i < 200; i++) { e.hunt = undefined; huntPlan(s, e, rng); sum += e.hunt.goal.x; }
+  assert.ok(sum / 200 < (WIDE[0].length - 1) / 2 - 1.5, String(sum / 200)); // 무작위면 가운데쯤
+});
+
 test('spotting: an ally within 2 starts the chase and leaves the normal AI in charge', () => {
   const { s, at } = setup([['geodude', 5, 3]], [['geodude', 7, 3]]);
   const e = at(7, 3);

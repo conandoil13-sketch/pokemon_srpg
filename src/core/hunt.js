@@ -72,13 +72,14 @@ export function huntPlan(state, u, rng = Math.random) {
     u.hunt = turns > 0 ? { ...h, turns } : { mode: 'patrol' };
     return { moveTo: { x: pick[0], y: pick[1] }, attack: null };
   }
-  // 순찰: 보스는 제자리, 나머지는 이동력 절반으로 무작위 목표 칸까지
+  // 순찰: 보스는 제자리, 나머지는 이동력 절반으로 무작위 목표 칸까지 (왼쪽으로 치우침)
   if (u.boss) { u.hunt = { mode: 'patrol' }; return stay(u); }
   let goal = h.goal;
   if (!goal || manhattan(u, goal) <= 1) {
     const cells = [];
     for (let y = 0; y < state.height; y++) for (let x = 0; x < state.width; x++) if (state.grid[y][x] === '.' && canEnter('.', u)) cells.push({ x, y });
-    goal = cells[Math.floor(rng() * cells.length)] ?? { x: u.x, y: u.y };
+    const a = cells[Math.floor(rng() * cells.length)], b = cells[Math.floor(rng() * cells.length)];
+    goal = (a && b ? (a.x <= b.x ? a : b) : a) ?? { x: u.x, y: u.y }; // 둘 뽑아 더 왼쪽(아군이 들어오는 쪽) — 순찰이 조금씩 다가옴
   }
   u.hunt = { mode: 'patrol', goal };
   return { moveTo: toward(state, u, goal, Math.floor(moveBudget(u) / 2)), attack: null };
