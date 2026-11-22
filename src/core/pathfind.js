@@ -65,7 +65,8 @@ function search(grid, units, unit, budgetOverride = null) {
   const occ = new Map(others.map((o) => [`${o.x},${o.y}`, o.side]));
   const occU = new Map(others.map((o) => [`${o.x},${o.y}`, o]));
   const best = new Map([[`${unit.x},${unit.y}`, 0]]);
-  const parent = new Map(), via = new Map(), stops = new Set(); // via: 미끄러져 지나간 칸 · stops: 부딪혀 멈춘 칸 (거기서 더 안 감)
+  const parent = new Map(), via = new Map();
+  const stopBest = new Map(), stopFrom = new Map(), stopVia = new Map(); // 부딪혀·고드름에 멈춘 도착 (거기서 더 안 감) — 걸어 온 도착과 따로 셈
   const open = [{ x: unit.x, y: unit.y, c: 0 }];
   const slider = slides(unit), trees = !!grid.trees;
   // 빙판 미끄럼 끝: { x, y, cells(지나간 칸), stop(부딪힘·고드름) } — 못 움직이면 null
@@ -89,7 +90,6 @@ function search(grid, units, unit, budgetOverride = null) {
     open.sort((a, b) => a.c - b.c);
     const cur = open.shift();
     if (cur.c > best.get(`${cur.x},${cur.y}`)) continue;
-    if (stops.has(`${cur.x},${cur.y}`) && cur.c > 0) continue;
     for (const [dx, dy] of DIRS) {
       let x = cur.x + dx, y = cur.y + dy;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
@@ -97,9 +97,13 @@ function search(grid, units, unit, budgetOverride = null) {
         const s = slide(cur.x, cur.y, dx, dy);
         if (!s) continue;
         const c = cur.c + 1, k = `${s.x},${s.y}`;
-        if (c > budget || (best.has(k) && best.get(k) <= c)) continue;
+        if (c > budget) continue;
+        if (s.stop) { // 멈춘 도착: 따로 기록, 확장 안 함
+          if (!stopBest.has(k) || stopBest.get(k) > c) { stopBest.set(k, c); stopFrom.set(k, `${cur.x},${cur.y}`); stopVia.set(k, s.cells); }
+          continue;
+        }
+        if (best.has(k) && best.get(k) <= c) continue;
         best.set(k, c); parent.set(k, `${cur.x},${cur.y}`); via.set(k, s.cells);
-        if (s.stop) stops.add(k); else stops.delete(k);
         open.push({ x: s.x, y: s.y, c });
         continue;
       }
@@ -112,11 +116,17 @@ function search(grid, units, unit, budgetOverride = null) {
       const k = `${x},${y}`;
       if (best.has(k) && best.get(k) <= c) continue;
       best.set(k, c);
-      parent.set(k, `${cur.x},${cur.y}`); via.delete(k); stops.delete(k);
+      parent.set(k, `${cur.x},${cur.y}`); via.delete(k);
       open.push({ x, y, c });
     }
   }
-  return { best, parent, occ, via, stops };
+  // 멈춘 도착이 이기는 칸: 다른 포켓몬이 있는 칸(밀어내기 — 걸어서는 못 섬)이거나 더 싸거나 같을 때
+  const stops = new Set();
+  for (const [k, c] of stopBest) {
+    if (best.has(k) && !occ.has(k) && best.get(k) < c) continue;
+    stops.add(k); best.set(k, c); // 경로의 마지막 한 걸음만 stopFrom/stopVia — 이 칸을 지나는 다른 경로(parent)는 그대로
+  }
+  return { best, parent, occ, via, stops, stopFrom, stopVia };
 }
 
 // 반환: Map<"x,y", 누적비용> (정지 가능한 칸만, 시작 칸 포함)
@@ -130,16 +140,18 @@ export function reachable(grid, units, unit, budget = null) {
 
 // 시작 칸 → (tx,ty) 경로 (양끝 포함). 도달 불가면 [시작 칸]
 export function pathTo(grid, units, unit, tx, ty, budget = null) {
-  const { best, parent, via } = search(grid, units, unit, budget);
+  const { best, parent, via, stops, stopFrom, stopVia } = search(grid, units, unit, budget);
   let k = `${tx},${ty}`;
   if (!best.has(k)) return [{ x: unit.x, y: unit.y }];
   const out = [];
+  let last = stops.has(k); // 끝 칸이 멈춘 도착이면 마지막 한 걸음은 stopFrom
   while (k) {
     const [x, y] = k.split(',').map(Number);
     out.unshift({ x, y });
-    const v = via.get(k) ?? [];
+    const v = (last ? stopVia : via).get(k) ?? [];
     for (let i = v.length - 1; i >= 0; i--) out.unshift(v[i]); // 미끄러져 지나간 칸
-    k = parent.get(k);
+    k = (last ? stopFrom : parent).get(k);
+    last = false;
   }
   return out;
 }

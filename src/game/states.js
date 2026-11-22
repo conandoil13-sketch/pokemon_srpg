@@ -937,7 +937,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const end = path.at(-1);
         const cost = pathCost(st.grid, unit, path); // 치고 빠지기용 이동 비용 (옥상 오르기 2 · 빙판 미끄럼 공짜)
         const before = st.grid.join('');
-        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: canWarp && unit.side === 'ally' });
+        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: canWarp && unit.side === 'ally', slide: true });
         const warp = st.log.warp; // 시티 워프: 짝 타일로 날아감 (취소 불가)
         if (warp) {
           moveLocked = true; cursor = { ...warp.to };

@@ -13,7 +13,7 @@ function setup(rows, allies, foes = [['bidoof', rows[0].length - 1, rows.length 
   const s = createBattle(map, ms);
   for (const u of s.units) { u.hp = u.maxHp = 160; u.ability = null; }
   const at = (x, y) => s.units.find((u) => u.x === x && u.y === y);
-  const go = (u, x, y) => moveUnit(s, u.id, x, y, 1, pathTo(s.grid, s.units, u, x, y, 9));
+  const go = (u, x, y) => moveUnit(s, u.id, x, y, 1, pathTo(s.grid, s.units, u, x, y, 9), { slide: true });
   return { s, at, go };
 }
 
@@ -91,4 +91,20 @@ test('scene: an ally slides fast, shoves the foe with a short slide and a notice
   assert.equal(game.mode, 'action');
   game.handle({ type: 'cancel' });
   assert.deepEqual([p.x, p.y], [4, 0]);
+});
+
+test('a shove into a cell held by an unseen unit is blocked: nobody shares a cell', () => {
+  const { s, at } = setup(['._____', '......'], [['bidoof', 0, 0]], [['machop', 3, 0], ['sneasel', 4, 0]]);
+  const u = at(0, 0), o = at(3, 0), hidden = at(4, 0);
+  const path = pathTo(s.grid, [u, o], u, 3, 0, 9); // 숨은 포켓몬은 안 보임
+  moveUnit(s, u.id, 3, 0, 1, path, { slide: true });
+  assert.deepEqual([u.x, o.x, hidden.x], [2, 3, 4]);
+  assert.deepEqual(s.log.iceEvents.map((e) => e.kind), ['blocked']);
+});
+
+test('forced moves (roar, steam) along ice never bump or hit icicles', () => {
+  const { s, at } = setup(['.___Y', '.....'], [['bidoof', 0, 0]]);
+  const u = at(0, 0);
+  moveUnit(s, u.id, 3, 0, 0, [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 2, y: 0 }, { x: 3, y: 0 }]);
+  assert.equal(u.hp, 160); assert.deepEqual(s.log.iceEvents, []);
 });

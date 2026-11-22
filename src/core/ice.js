@@ -8,16 +8,20 @@ const isIce = (u) => typesOf(u).includes('ice');
 const unitAt = (state, x, y, not) => state.units.find((v) => v !== not && v.hp > 0 && v.x === x && v.y === y);
 
 // 미끄러진 경로가 끝날 때 (u 는 아직 출발 칸): 끝 칸의 포켓몬을 한 칸 밀고, 빙판 위에서 막혔으면 부딪힘·고드름.
-// 반환 = 고드름에 박힌 포켓몬 (없으면 null) · 이벤트는 events 에
+// 반환 = { icicle: 고드름에 박힌 포켓몬|null, stopAt: 끝 칸 대신 멈출 칸|null } · 이벤트는 events 에
 export function iceBump(state, u, path, events) {
   const end = path.at(-1), prev = path.at(-2), dx = end.x - prev.x, dy = end.y - prev.y;
   const o = unitAt(state, end.x, end.y, u);
-  if (o) { // pathfind 가 뒤 칸이 비었을 때만 이 칸을 허락함
+  if (o) { // pathfind 는 보이는 포켓몬만 앎 — 뒤 칸에 안 보이던 포켓몬이 있으면 막힘 (한 칸에 둘이 서지 않게)
+    if (unitAt(state, end.x + dx, end.y + dy, u)) { events.push({ kind: 'blocked', unitId: o.id, by: u.id }); return { icicle: null, stopAt: { x: prev.x, y: prev.y } }; }
     const from = { x: o.x, y: o.y };
     o.x += dx; o.y += dy;
     events.push({ kind: 'bump', unitId: o.id, by: u.id, from, to: { x: o.x, y: o.y } });
-    return null;
+    return { icicle: null, stopAt: null };
   }
+  return { icicle: iceStop(state, u, end, dx, dy, events), stopAt: null };
+}
+function iceStop(state, u, end, dx, dy, events) {
   if (state.grid[end.y][end.x] !== '_') return null; // 바닥에 닿아 멈춤
   const nx = end.x + dx, ny = end.y + dy, b = unitAt(state, nx, ny, u);
   if (b) {

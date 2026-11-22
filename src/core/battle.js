@@ -168,7 +168,9 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
     }
   }
   state.log.iceEvents = [];
-  const icicle = !stayed && path?.length > 1 && slides(u) ? iceBump(state, u, path, state.log.iceEvents) : null; // 얼음동굴: 미끄러져 부딪힘
+  const ice = opts.slide && !stayed && path?.length > 1 && slides(u) ? iceBump(state, u, path, state.log.iceEvents) : null; // 얼음동굴: 걸어서 미끄러진 이동만 부딪힘 (날려버리기 등 강제 이동은 아님)
+  const icicle = ice?.icicle ?? null;
+  if (ice?.stopAt) ({ x, y } = ice.stopAt);
   if (!stayed && state.grid[u.y][u.x] === '@' && !airborne(u) && !u.burrow) { cost = moveBudget(u); u.pitEscaped = true; } // 사막: 모래지옥 가운데 탈출 = 이동력 전부, 이번 턴엔 다시 안 끌림
   u.spent = (u.spent ?? 0) + cost;
   if (!stayed) u.walked = true; // 줌렌즈

@@ -72,3 +72,13 @@ test('ice types can step onto water (it freezes); others cannot', () => {
   assert.ok(!canEnter('Y', mon('starly', 0, 0)));
   assert.ok(canEnter('_', mon('bidoof', 0, 0)));
 });
+
+test('a cheap bump stop does not hide a cell that is also reached on foot (move range keeps the corridor beyond)', () => {
+  const u = mon('bidoof', 0, 1), a = mon('bidoof', 2, 1, 'ally');
+  const g = ['...#', '._..', '####'];
+  const r = R(g, [u, a], u, 5);
+  assert.ok(r.has('3,1'), JSON.stringify(keys(r)));
+  assert.ok(r.has('2,1')); // 미끄러져 부딪혀 밀어내는 칸으로도 여전히 고를 수 있음
+  assert.deepEqual(pathTo(g, [u, a], u, 2, 1, 5).map((p) => p.x + ',' + p.y), ['0,1', '1,1', '2,1']); // 고르면 미끄러져 밀어냄
+  assert.deepEqual(pathTo(g, [u, a], u, 3, 1, 5).map((p) => p.x + ',' + p.y), ['0,1', '0,0', '1,0', '2,0', '2,1', '3,1']); // 그 너머는 걸어서 (아군 칸 통과)
+});
