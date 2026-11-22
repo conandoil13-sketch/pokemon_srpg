@@ -23,6 +23,7 @@ import { bakeBeachGround, drawBeachMap } from '../render/beachTiles.js';
 import { bakeCityGround, drawCityMap } from '../render/cityTiles.js';
 import { bakeSewerGround, drawSewerMap } from '../render/sewerTiles.js';
 import { bakePowerGround, drawPowerMap, drawPulseWarn } from '../render/powerTiles.js';
+import { bakeDesertGround, drawDesertMap } from '../render/desertTiles.js';
 import { pulsePreview, firesAt } from '../core/generator.js';
 import { sandShift } from '../core/sand.js';
 import { drawDarkness } from '../render/darkness.js';
@@ -246,10 +247,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
+  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
   function reset() {
     st = createBattle(map, party, { hpRatio });
-    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
+    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant', 'desert'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
@@ -260,6 +261,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
     if (theme === 'sewer' && typeof document !== 'undefined') { try { sewerGround = bakeSewerGround(map.tiles); } catch { sewerGround = null; } } // 하수도: 벽·바닥·물길 (물결·거품·타이어·봉투는 매 프레임)
+    if (theme === 'desert' && typeof document !== 'undefined') { try { desertGround = bakeDesertGround(map.tiles); } catch { desertGround = null; } } // 사막: 모래·사구·모래지옥·절벽·계단 (모래결·소용돌이·바위는 매 프레임)
     if (theme === 'power-plant' && typeof document !== 'undefined') { try { powerGround = bakePowerGround(map.tiles); } catch { powerGround = null; } } // 발전소: 철판·기계 벽 (발전기·가벽·고철더미·예고는 매 프레임)
     if (theme === 'beach' && typeof document !== 'undefined') { try { beachGround = bakeBeachGround(map.tiles); } catch { beachGround = null; } } // 해변: 모래 바닥 (물은 매 프레임)
     mode = 'banner';
@@ -1163,6 +1165,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     else if (beachGround) drawBeachMap(ctx, st.grid, beachGround, cx, cy, W, H);
     else if (cityGround) drawCityMap(ctx, st.grid, cityGround, cx, cy, W, H, st.warps, time);
     else if (sewerGround) drawSewerMap(ctx, st.grid, sewerGround, cx, cy, W, H, time);
+    else if (desertGround) drawDesertMap(ctx, st.grid, desertGround, cx, cy, W, H, time, st.flows);
     else if (powerGround) drawPowerMap(ctx, st.grid, powerGround, cx, cy, W, H, time, st.generators, (g) => firesAt(g, st.turn) && st.result == null, pulseFx && { gens: pulseFx.gens, age: clock - pulseFx.at });
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     const tideWarn = tidePreview(st); // 물때 예고: 바뀔 칸에 물결 깜빡임
