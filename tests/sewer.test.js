@@ -29,6 +29,7 @@ test('pool: 1/8 damage, steel 1/16, poison and floaters immune, magic guard immu
   assert.equal(poolDamage({ ...b, ability: 'magic-guard' }, '%'), null);
   assert.equal(poolDamage({ ...b, grounded: true, types: ['flying'] }, '%').damage, 20); // 중력 비행은 맞음
   assert.equal(poolDamage({ ...b, hp: 3, maxHp: 3 }, '%').damage, 1); // 최소 1
+  assert.equal(poolDamage({ ...b, burrow: { kind: 'sky', moveId: 'fly' } }, '%'), null); // 숨기(공중·땅속·물속·그림자) 중엔 웅덩이 밖
   s.phase = 'player';
 });
 

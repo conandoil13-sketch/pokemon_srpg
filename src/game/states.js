@@ -18,6 +18,7 @@ import { drawMap, drawChest, TILE } from '../render/tiles.js';
 import { bakeAutumnGround, drawAutumnMap } from '../render/autumnTiles.js';
 import { bakeBeachGround, drawBeachMap } from '../render/beachTiles.js';
 import { bakeCityGround, drawCityMap } from '../render/cityTiles.js';
+import { bakeSewerGround, drawSewerMap } from '../render/sewerTiles.js';
 import { tideFor, tidePreview } from '../core/tide.js';
 const SAND_BURST = ['#7a5a2a', '#c8a868', '#dcc084', '#f6e4b4', '#ffffff']; // 모래더미가 터질 때
 import { leafRoute } from '../core/leafRoute.js';
@@ -160,6 +161,7 @@ export function phaseNotices(events, expired, get) {
 }
 
 const TRASH_BURST = ['#20382a', '#3e7050', '#7a8a70', '#b8b8a0', '#e8e8d8']; // 쓰레기통 열림
+const BAG_BURST = ['#141418', '#2a2a34', '#4a4a56', '#8a8a96', '#d0d0d8']; // 쓰레기봉투 열림
 const WARP_BLUE = ['#102040', '#2050c0', '#50a0ff', '#b0e0ff', '#ffffff'], WARP_ORANGE = ['#402010', '#c05010', '#ff9030', '#ffd090', '#ffffff']; // 워프 반짝임
 const CHAIN_SPARK = ['#1a2050', '#2c58c8', '#4a9cff', '#8ad8ff', '#e8f870', '#fffbc0', '#ffffff'], CHAIN_FIRE = ['#4a1712', '#c9281f', '#f2561d', '#ff8a2a', '#ffe26b', '#fff3a6', '#ffffff']; // 연쇄 번쩍임
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
@@ -234,7 +236,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null, cityGround = null;
+  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null;
   function reset() {
     st = createBattle(map, party, { hpRatio });
     st.grid.trees = (theme ?? 'field') !== 'cave'; // 벽이 나무인 맵: 유연이 지나갈 수 있음
@@ -247,6 +249,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (typeof document !== 'undefined') try { autumnGround = bakeAutumnGround(map.tiles, route); } catch { autumnGround = null; }
     }
     if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
+    if (theme === 'sewer' && typeof document !== 'undefined') { try { sewerGround = bakeSewerGround(map.tiles); } catch { sewerGround = null; } } // 하수도: 벽·바닥·물길 (물결·거품·타이어·봉투는 매 프레임)
     if (theme === 'beach' && typeof document !== 'undefined') { try { beachGround = bakeBeachGround(map.tiles); } catch { beachGround = null; } } // 해변: 모래 바닥 (물은 매 프레임)
     mode = 'banner';
     const first = st.units.find((u) => u.side === 'ally');
@@ -592,10 +595,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!a.piles?.length) { then(); return; }
     for (const p of a.piles) {
       if (p.unitId) { const e = st.units.find((u) => u.id === p.unitId); if (e) { everyone.set(e.id, e); facing[e.id] = DIR.Left; requestSprites([e.species]); } } // 미리 못 받았어도 여기서
-      try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y, ...(theme === 'beach' ? { palette: SAND_BURST } : theme === 'city' ? { palette: TRASH_BURST } : {}) }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
+      try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y, ...(theme === 'beach' ? { palette: SAND_BURST } : theme === 'city' ? { palette: TRASH_BURST } : theme === 'sewer' ? { palette: BAG_BURST } : {}) }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
     }
     if (a.piles.some((p) => p.kind === 'chest')) sound.jingle('item');
-    noticeChain(pileNotices(a.piles, unit, (id) => everyone.get(id), theme === 'beach' ? '모래' : theme === 'city' ? '쓰레기통' : '낙엽'), then);
+    noticeChain(pileNotices(a.piles, unit, (id) => everyone.get(id), theme === 'beach' ? '모래' : theme === 'city' ? '쓰레기통' : theme === 'sewer' ? '쓰레기봉투' : '낙엽'), then);
   }
 
   // 아군 이동 완료: 낙엽더미 → 상자 열기 → 행동 메뉴, 계단 → 즉시 층 클리어 (취소 불가)
@@ -1114,6 +1117,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (autumnGround) drawAutumnMap(ctx, st.grid, autumnGround, cx, cy, W, H);
     else if (beachGround) drawBeachMap(ctx, st.grid, beachGround, cx, cy, W, H);
     else if (cityGround) drawCityMap(ctx, st.grid, cityGround, cx, cy, W, H, st.warps, time);
+    else if (sewerGround) drawSewerMap(ctx, st.grid, sewerGround, cx, cy, W, H, time);
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     const tideWarn = tidePreview(st); // 물때 예고: 바뀔 칸에 물결 깜빡임
     if (tideWarn && Math.floor(time * 2) % 2 === 0) { ctx.fillStyle = tideWarn.next > (st.tide ?? 0) ? 'rgba(40,110,220,0.35)' : 'rgba(250,240,200,0.35)'; for (const p of tideWarn.cells) ctx.fillRect(p.x * TILE + 2, p.y * TILE + 9, TILE - 4, 2), ctx.fillRect(p.x * TILE + 4, p.y * TILE + 15, TILE - 8, 2); }

@@ -7,6 +7,6 @@ export const POOL = '%';
 export function poolDamage(unit, tile) {
   if (tile !== POOL) return null;
   const t = typesOf(unit);
-  if (t.includes('poison') || airborne(unit) || magicGuard(unit)) return null;
+  if (t.includes('poison') || airborne(unit) || magicGuard(unit) || unit.burrow) return null; // 숨기 중(공중·땅속·물속·그림자)엔 웅덩이 밖
   return { damage: Math.max(1, Math.floor(unit.maxHp / (t.includes('steel') ? 16 : 8))), kind: 'poisonPool' };
 }
