@@ -16,6 +16,7 @@ import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate,
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
 import { statsAt, expYield } from './stats.js';
 import { tideFor, applyTide } from './tide.js';
+import { chainKind, chainSpread } from './chain.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE, FIELD_RADIUS } from './field.js';
 import { pathTo, canEnter, reachable } from './pathfind.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal, BIND_MOVES, BIND_TURNS, bindCheck } from './volatile.js';
@@ -701,6 +702,21 @@ export function applyMove(state, userId, moveId, aim, rng) {
     }
     for (const c of contacts) c();
   }
+  // 전기·불꽃 연쇄: 맞은 상대가 물(전기)·수풀·단풍길(불꽃) 칸이면 옆 칸 상대에게 10% (흡수·반동 합계엔 안 셈)
+  const chain = [];
+  const ck = move.power ? chainKind(moveTypeOf(a, move)) : null;
+  if (ck) {
+    const starts = targets.filter((d) => d.side !== a.side).map((d) => ({ unit: d, damage: hits.filter((h) => h.unitId === d.id && h.typeMult > 0).reduce((t, h) => t + h.damage, 0) }));
+    const blocked = (v) => v.guard === 'protect' || typeEffect(a, v, move, W) === 0 || !!immunity(a, v, move);
+    for (const c of chainSpread(state, a, ck, starts, targets.map((d) => d.id), blocked)) {
+      const v = c.unit;
+      if (!state.units.includes(v)) continue;
+      const damage = Math.min(v.hp, c.damage);
+      v.hp -= damage; v.ncTouched = true;
+      if (v.hp === 0) { knockOut(state, v, a, { deferExp: true }); knocked.push(v); }
+      chain.push({ unitId: v.id, damage, fainted: v.hp === 0, from: c.from });
+    }
+  }
   // 선제기: 기술이 나갔으면 이번 차례에 한 번 남은 이동력으로 다시 이동 (치고 빠지기)
   if (move.priority > 0 && state.units.includes(a)) a.retreatReady = true;
   // 흡수(+)·반동(−): 실제로 깎인 HP 합 기준
@@ -771,7 +787,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded] };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];

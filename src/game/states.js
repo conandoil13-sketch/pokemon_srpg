@@ -235,9 +235,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     st.grid.trees = (theme ?? 'field') !== 'cave'; // 벽이 나무인 맵: 유연이 지나갈 수 있음
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
-    if (theme === 'autumn' && typeof document !== 'undefined') { // 단풍 숲: 바닥 층을 미리 굽는다 (단풍길 = 출발 → 계단, 보스 층이면 보스 자리)
+    if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
       const goal = st.stairs ?? st.units.find((u) => u.boss) ?? null;
-      try { autumnGround = bakeAutumnGround(map.tiles, leafRoute(map.tiles, map.allySlots[0], goal)); } catch { autumnGround = null; }
+      const route = leafRoute(map.tiles, map.allySlots[0], goal);
+      st.leafTiles = route;
+      if (typeof document !== 'undefined') try { autumnGround = bakeAutumnGround(map.tiles, route); } catch { autumnGround = null; }
     }
     if (theme === 'beach' && typeof document !== 'undefined') { try { beachGround = bakeBeachGround(map.tiles); } catch { beachGround = null; } } // 해변: 모래 바닥 (물은 매 프레임)
     mode = 'banner';
