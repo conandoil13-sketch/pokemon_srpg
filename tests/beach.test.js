@@ -196,9 +196,18 @@ test('every beach tile piece draws pixels', () => {
   }
 });
 
-import { waterDepths } from '../src/render/beachTiles.js';
+import { waterDepths, shoreAt } from '../src/render/beachTiles.js';
 test('water depth: shallow 1, deep grows with distance from land', () => {
   const d = waterDepths(['..,~~~~']);
   assert.deepEqual(d[0].slice(2), [1, 2, 3, 4, 5]);
   assert.equal(d[0][0], 0.2);
+});
+
+test('물가 경계는 칸 가운데는 그대로, 곧은 해안도 울퉁불퉁', () => {
+  const grid = Array.from({ length: 8 }, () => '....~~~~'), wet = shoreAt(grid);
+  for (let y = 0; y < 8; y++) { assert.ok(wet(1 * 24 + 12, y * 24 + 12) < 0.5); assert.ok(wet(6 * 24 + 12, y * 24 + 12) > 0.5); }
+  const edges = new Set();
+  for (let py = 0; py < 8 * 24; py++) { let px = 0; while (wet(px, py) <= 0.5) px++; edges.add(px); }
+  assert.ok(edges.size >= 5, `해안선 x 위치 ${edges.size}가지`);
+  assert.ok(Math.min(...edges) >= 4 * 24 - 8 && Math.max(...edges) <= 4 * 24 + 8); // 칸 경계에서 ±8px 안
 });
