@@ -13,6 +13,7 @@ import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.j
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { poolDamage } from './pool.js';
 import { firesAt, genRange, shockDamage } from './generator.js';
+import { ventFires, steamPath, steamDamage, pushEnd, basaltBurn } from './vent.js';
 import { wakeAmbush, AMBUSH_MOVE } from './ambush.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps, airborne } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
@@ -98,6 +99,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     generators: (mapDef.generators ?? []).map((g) => ({ ...g })), // 발전소 발전기 (칸 문자 'G')
+    vents: (mapDef.vents ?? []).map((v) => ({ ...v })), // 화산동굴 분출구 (칸 문자 'V')
     flows: mapDef.flows ? { ...mapDef.flows } : null, // 사막 흐르는 모래 방향 ("x,y" → up/down/left/right)
     piles: (mapDef.piles ?? []).map((p) => ({ ...p })), // 열리지 않은 낙엽더미 (칸 문자 '*')
     warps: (mapDef.warps ?? []).map((w) => ({ ...w, to: { ...w.to } })), // 시티 워프 타일 (core/warp.js)
@@ -887,6 +889,42 @@ export function quickClawUnit(state, side, rng) {
   return null;
 }
 
+// 화산동굴 분출: 이번 라운드 차례인 분출구마다 경로 위 유닛을 먼 쪽부터 — 물 피해 후 그 방향으로 막힐 때까지 밀림
+function steamVents(state, events) {
+  state.log.steamed = []; state.log.steamPushes = [];
+  for (const v of state.vents ?? []) {
+    if (!ventFires(v, state.turn)) continue;
+    state.log.steamed.push({ x: v.x, y: v.y, dir: v.dir });
+    const path = steamPath(state, v), dist = (p) => Math.abs(p.x - v.x) + Math.abs(p.y - v.y);
+    const hit = state.units.filter((u) => u.hp > 0 && !u.burrow && path.some((p) => p.x === u.x && p.y === u.y)).sort((a, b) => dist(b) - dist(a));
+    for (const u of hit) {
+      const dmg = steamDamage(u);
+      if (dmg) {
+        const hpBefore = u.hp;
+        u.hp = Math.max(0, u.hp - dmg);
+        events.push({ unitId: u.id, kind: 'steam', damage: dmg, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
+        if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
+      }
+      const to = pushEnd(state, u, v.dir);
+      if (to.x === u.x && to.y === u.y) continue;
+      state.log.steamPushes.push({ unitId: u.id, from: { x: u.x, y: u.y }, to });
+      u.x = to.x; u.y = to.y;
+    }
+  }
+  if (state.log.steamPushes.length) { markExplored(state); refreshField(state); }
+}
+
+// 화산동굴 현무암: 행동을 마친 칸이 현무암이면 열 피해 (화면은 행동 끝에 부름). 반환 이벤트 목록
+export function basaltHeat(state, u) {
+  const dmg = state.units.includes(u) && u.hp > 0 ? basaltBurn(state, u) : 0;
+  if (!dmg) return [];
+  const hpBefore = u.hp, out = [];
+  u.hp = Math.max(0, u.hp - dmg);
+  out.push({ unitId: u.id, kind: 'basalt', damage: dmg, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
+  if (u.hp === 0) { knockOut(state, u, null); out.push({ unitId: u.id, kind: 'fainted' }); checkResult(state); }
+  return out;
+}
+
 // 발전기 방출: 범위 안 유닛 모두 (양쪽). 축전 회복 · 전기엔진/피뢰침 능력치 +1
 function pulseGenerators(state, events, abilityLog) {
   state.log.pulsed = [];
@@ -981,6 +1019,7 @@ export function endPhase(state, rng = Math.random) {
     }
   }
   if (ending === 'enemy') pulseGenerators(state, events, abilityLog); // 발전소: 이번 라운드 차례인 발전기 방출
+  if (ending === 'enemy') steamVents(state, events); // 화산동굴: 이번 라운드 차례인 분출구 스팀
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
   for (const u of state.units) if (u.burrow && u.side !== ending) u.burrow = null; // 숨기: 상대 페이즈가 끝나면 나옴
   tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
