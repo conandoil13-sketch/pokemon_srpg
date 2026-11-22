@@ -102,3 +102,88 @@ test('walking onto a warp on screen: lands on the roof, notice, and the move can
   game.handle({ type: 'cancel' });
   assert.deepEqual([p.x, p.y], [5, 1]);
 });
+
+import { generateFloor, reachableFrom } from '../src/core/floorgen.js';
+import { CITY } from '../src/data/city.js';
+import { DUNGEONS } from '../src/data/dungeons.js';
+import { SPECIES } from '../src/data/species.js';
+
+const SEEDS = Array.from({ length: 24 }, (_, i) => 1000 + i * 7919);
+const floors = () => SEEDS.flatMap((seed, i) => { const f = 1 + (i % CITY.floors); return [{ f, seed, m: generateFloor(CITY, f, seed) }]; });
+
+test('city dungeon takes trial slot 3 with its curve and types', () => {
+  const i = DUNGEONS.findIndex((d) => d.id === 'city');
+  assert.ok(i > 0);
+  assert.equal(DUNGEONS[i].name, '???시티');
+  assert.equal(DUNGEONS[i].unlock, 'beach');
+  assert.equal(CITY.baseLevel[0], 37);
+  assert.deepEqual(CITY.bossTypes, ['poison', 'psychic']);
+});
+
+test('city floors: 3x2 buildings with alleys, everything important reachable by road', () => {
+  for (const { f, m } of floors()) {
+    const g = m.tiles, H = g.length, W = g[0].length;
+    let b = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (g[y][x] === 'B') b++;
+    assert.ok(b >= 6 && b % 6 === 0, `floor ${f}: ${b} building tiles`);
+    assert.ok(b / (W * H) > 0.15, 'buildings cover a good share');
+    // 건물마다 3×2 덩어리 (붙은 건물 없음)
+    const seen = new Set();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (g[y][x] !== 'B' || seen.has(`${x},${y}`)) continue;
+      const q = [[x, y]], blob = [];
+      seen.add(`${x},${y}`);
+      while (q.length) { const [cx, cy] = q.pop(); blob.push([cx, cy]); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const nx = cx + dx, ny = cy + dy; if (g[ny]?.[nx] === 'B' && !seen.has(`${nx},${ny}`)) { seen.add(`${nx},${ny}`); q.push([nx, ny]); } } }
+      assert.equal(blob.length, 6);
+      const xs = blob.map((p) => p[0]), ys = blob.map((p) => p[1]);
+      assert.equal(Math.max(...xs) - Math.min(...xs), 2); assert.equal(Math.max(...ys) - Math.min(...ys), 1);
+    }
+    const reach = reachableFrom(g, m.allySlots[0]);
+    if (m.stairs) assert.ok(reach.has(`${m.stairs.x},${m.stairs.y}`));
+    const boss = m.enemies.find((e) => e.boss);
+    if (boss) assert.ok(reach.has(`${boss.x},${boss.y}`));
+    for (const p of m.piles) assert.equal(g[p.y][p.x], '*');
+    for (const e of m.enemies) assert.ok('."^B'.includes(g[e.y][e.x]));
+  }
+});
+
+test('city floors: some foes start on roofs; warps come in colored pairs with a road-to-roof link', () => {
+  let roofFoes = 0, warpFloors = 0;
+  for (const { m } of floors()) {
+    const g = m.tiles;
+    roofFoes += m.enemies.filter((e) => g[e.y][e.x] === 'B').length;
+    assert.ok(!m.enemies.some((e) => e.boss && g[e.y][e.x] === 'B'));
+    if (!m.warps.length) continue;
+    warpFloors++;
+    assert.equal(m.warps.length, 8);
+    for (const w of m.warps) {
+      const back = m.warps.find((o) => o.x === w.to.x && o.y === w.to.y);
+      assert.ok(back && back.color === w.color && back.to.x === w.x && back.to.y === w.y);
+      assert.ok('.B'.includes(g[w.y][w.x]));
+      assert.ok(!m.chests.some((c) => c.x === w.x && c.y === w.y) && !m.enemies.some((e) => e.x === w.x && e.y === w.y));
+    }
+    assert.ok(m.warps.some((w) => g[w.y][w.x] === '.' && g[w.to.y][w.to.x] === 'B'));
+    assert.equal(new Set(m.warps.map((w) => `${w.x},${w.y}`)).size, 8);
+  }
+  assert.ok(roofFoes > 0);
+  assert.ok(warpFloors >= 10 && warpFloors <= 22);
+});
+
+test('city trash cans hide street species; bosses are poison or psychic', () => {
+  for (const { m } of floors()) {
+    for (const p of m.piles.filter((p) => p.kind === 'mon')) assert.ok(CITY.pileSpecies.includes(p.species));
+    for (const e of m.enemies.filter((e) => e.boss)) assert.ok(SPECIES[e.species].types.some((t) => t === 'poison' || t === 'psychic'));
+  }
+});
+
+import { newGame, saveGame, loadGame } from '../src/core/save.js';
+test('old saves move trial-3 progress to the city', () => {
+  const data = {};
+  const store = { getItem: (k) => data[k] ?? null, setItem: (k, v) => { data[k] = v; } };
+  saveGame(store, newGame());
+  const raw = JSON.parse(data['pokemon-tactics-save']);
+  raw.unlocked = ['sinnoh-field', 'sinnoh-cave', 'trial-1', 'trial-2', 'trial-3']; raw.cleared = ['trial-3']; raw.best = { 'trial-3': 5 };
+  data['pokemon-tactics-save'] = JSON.stringify(raw);
+  const l = loadGame(store);
+  assert.ok(l.unlocked.includes('city')); assert.ok(l.cleared.includes('city')); assert.equal(l.best.city, 5);
+});

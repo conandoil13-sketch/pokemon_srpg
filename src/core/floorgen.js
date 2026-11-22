@@ -5,6 +5,7 @@ import { rollEnemies } from './difficulty.js';
 import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
 import { rollChestHeld } from '../data/heldItems.js';
+import { SPECIES } from '../data/species.js';
 
 import { DEFAULT_SIZE } from '../data/mapSize.js'; // 후반 던전은 넓음 (data/mapSize.js)
 const WALK = '."^>'; // 땅 타입이 지나갈 수 있는 칸
@@ -103,6 +104,9 @@ export function generateFloor(dungeon, floor, seed) {
     while (y !== best.y) { y += Math.sign(best.y - y); if (!WALK.includes(g[y][x])) g[y][x] = '.'; }
   }
 
+  // 3a. 시티: 3×2 건물 (별도 난수 — 다른 던전은 결과·난수 소비 그대로). 도로가 안 끊길 때만
+  if (dungeon.city) cityBlocks(g, anchor, createRng(hashSeed(seed, 5000)));
+
   const used = new Set();
   const take = (p) => { used.add(key(p.x, p.y)); return p; };
 
@@ -173,11 +177,14 @@ export function generateFloor(dungeon, floor, seed) {
 
   if (island) chests.push(island.chest);
 
+  // 8a. 시티: 적 일부·상자 하나를 옥상으로, 워프 타일 (별도 난수)
+  const warps = dungeon.city ? cityExtras(g, used, enemies, chests, allySlots, seed) : null;
+
   // 9. 낙엽더미 (던전에 piles 가 있을 때만, 별도 난수 — 다른 던전은 결과·난수 소비 그대로)
   const piles = dungeon.piles ? placePiles(dungeon, floor, seed, g, used, allySlots, anchor) : [];
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed),
-    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}) };
+    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}) };
 }
 
 // 바다 띠: 위 또는 아래 가장자리, 열마다 깊이 D 또는 D+1 (D = H/4 반올림), 출발 3열 제외.
@@ -273,4 +280,56 @@ function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
     }
   }
   return out;
+}
+
+// 시티 건물: 3×2, 둘레 한 칸엔 다른 건물 없음(골목), 출발 3열 + 한 칸 밖. 바닥 '.' 위에만, 놓아도 도로가 안 끊길 때만. 면적 약 30% 목표
+export const BLOCK_W = 3, BLOCK_H = 2;
+function cityBlocks(g, anchor, rng) {
+  const W = g[0].length, H = g.length, want = Math.round((W * H * 0.3) / (BLOCK_W * BLOCK_H));
+  let size = reachableFrom(g.map((r) => r.join('')), anchor).size, placed = 0;
+  for (let tries = 0; tries < 400 && placed < want; tries++) {
+    const x0 = SAFE_COLS + 1 + Math.floor(rng() * (W - BLOCK_W - SAFE_COLS)), y0 = Math.floor(rng() * (H - BLOCK_H + 1));
+    let ok = x0 + BLOCK_W <= W;
+    for (let y = y0 - 1; y <= y0 + BLOCK_H && ok; y++) for (let x = x0 - 1; x <= x0 + BLOCK_W && ok; x++) {
+      const inside = x >= x0 && x < x0 + BLOCK_W && y >= y0 && y < y0 + BLOCK_H;
+      if (inside) ok = g[y][x] === '.';
+      else if (g[y]?.[x] === 'B') ok = false;
+    }
+    if (!ok) continue;
+    for (let y = y0; y < y0 + BLOCK_H; y++) for (let x = x0; x < x0 + BLOCK_W; x++) g[y][x] = 'B';
+    const now = reachableFrom(g.map((r) => r.join('')), anchor).size;
+    if (now !== size - BLOCK_W * BLOCK_H) { for (let y = y0; y < y0 + BLOCK_H; y++) for (let x = x0; x < x0 + BLOCK_W; x++) g[y][x] = '.'; continue; }
+    size = now; placed++;
+  }
+}
+
+// 옥상 배치(일반 적 약 25% — 비행·에스퍼 먼저, 상자 하나 50%) + 워프 70%: 파랑·주황 × 2쌍, 파랑 첫 쌍은 도로↔옥상
+const WARP_COLORS = ['blue', 'orange'];
+function cityExtras(g, used, enemies, chests, allySlots, seed) {
+  const W = g[0].length, H = g.length, rng = createRng(hashSeed(seed, 5100));
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const roofs = [], roads = [];
+  const nearAlly = (x, y) => allySlots.some((a) => Math.abs(a.x - x) + Math.abs(a.y - y) <= 1);
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) {
+    if (used.has(key(x, y))) continue;
+    if (g[y][x] === 'B') roofs.push({ x, y }); else if (g[y][x] === '.' && !nearAlly(x, y)) roads.push({ x, y });
+  }
+  shuffle(roofs); shuffle(roads);
+  const roofFoes = roofs.filter((p) => p.x >= 8);
+  const up = (thing) => { const p = roofFoes.pop(); if (!p) return; roofs.splice(roofs.indexOf(p), 1); used.delete(key(thing.x, thing.y)); thing.x = p.x; thing.y = p.y; used.add(key(p.x, p.y)); };
+  const flier = (e) => SPECIES[e.species]?.types.some((t) => t === 'flying' || t === 'psychic') ? 0 : 1;
+  const movable = enemies.filter((e) => !e.boss).map((e) => ({ e, r: flier(e) + rng() })).sort((a, b) => a.r - b.r).map((o) => o.e);
+  for (const e of movable.slice(0, Math.round(movable.length * 0.25))) up(e);
+  const chest = chests.find((c) => !c.island);
+  if (chest && rng() < 0.5) up(chest);
+  const warps = [];
+  if (rng() >= 0.7) return warps;
+  for (const color of WARP_COLORS) for (let k = 0; k < 2; k++) {
+    const link = (color === 'blue' && k === 0) || rng() < 0.5;
+    const a = roads.pop(), b = (link ? roofs.pop() : null) ?? roads.pop();
+    if (!a || !b) break;
+    for (const p of [a, b]) used.add(key(p.x, p.y));
+    warps.push({ x: a.x, y: a.y, color, to: { x: b.x, y: b.y } }, { x: b.x, y: b.y, color, to: { x: a.x, y: a.y } });
+  }
+  return warps;
 }

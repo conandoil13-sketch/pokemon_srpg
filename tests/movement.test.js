@@ -24,7 +24,7 @@ import { generateFloor, reachableFrom } from '../src/core/floorgen.js';
 import { dungeonById } from '../src/data/dungeons.js';
 test('later trials get wider maps that still generate cleanly', () => {
   const size = (id, f = 1, s = 1) => { const m = generateFloor(dungeonById(id), f, s); return [m.tiles[0].length, m.tiles.length]; };
-  assert.deepEqual(size('sinnoh-field'), [16, 12]); assert.deepEqual(size('trial-3'), [16, 12]);
+  assert.deepEqual(size('sinnoh-field'), [16, 12]); assert.deepEqual(size('city'), [16, 12]);
   assert.deepEqual(size('trial-4'), [18, 13]); assert.deepEqual(size('trial-7'), [20, 14]);
   for (const id of ['trial-4', 'trial-7']) {
     const d = dungeonById(id);
