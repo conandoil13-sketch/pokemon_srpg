@@ -5,12 +5,13 @@ import { stageSlots, fillerStage } from './fillerStages.js';
 import { POWER_PLANT } from './powerPlant.js';
 import { DESERT } from './desert.js';
 import { VOLCANO } from './volcano.js';
+import { ICE_CAVE } from './iceCave.js';
 import { AUTUMN_FOREST } from './autumnForest.js';
 import { BEACH } from './beach.js';
 import { CITY } from './city.js';
 import { SEWER } from './sewer.js';
 import { DEEP_CAVE } from './deepCave.js';
 
-export const DUNGEONS = [...SINNOH_DUNGEONS.map((d, i) => ({ ...d, stage: i + 1 })), ...stageSlots({ 1: AUTUMN_FOREST, 2: BEACH, 3: CITY, 4: [SEWER, DEEP_CAVE], 5: [POWER_PLANT, DESERT], 6: [fillerStage(6), VOLCANO] })]; // 진짜 맵이 생긴 자리
+export const DUNGEONS = [...SINNOH_DUNGEONS.map((d, i) => ({ ...d, stage: i + 1 })), ...stageSlots({ 1: AUTUMN_FOREST, 2: BEACH, 3: CITY, 4: [SEWER, DEEP_CAVE], 5: [POWER_PLANT, DESERT], 6: [ICE_CAVE, VOLCANO] })]; // 진짜 맵이 생긴 자리
 
 export const dungeonById = (id) => DUNGEONS.find((d) => d.id === id);

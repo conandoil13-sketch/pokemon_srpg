@@ -129,7 +129,7 @@ export function unlockFromCleared(game) {
 }
 
 // 자리가 진짜 맵으로 바뀐 던전 id (예전 저장의 해금·돌파·최고 층·진행 중 탐험을 옮긴다)
-const RENAMED = { 'trial-1': 'autumn-forest', 'trial-2': 'beach', 'trial-3': 'city', 'trial-4': 'deep-cave', 'trial-5': 'desert' }; // 4번 자리: 6-2 임시 → 깊은 동굴 · 5번: 7-2 임시 → 사막
+const RENAMED = { 'trial-1': 'autumn-forest', 'trial-2': 'beach', 'trial-3': 'city', 'trial-4': 'deep-cave', 'trial-5': 'desert', 'trial-6': 'ice-cave' }; // 4번 자리: 6-2 임시 → 깊은 동굴 · 5번: 7-2 임시 → 사막
 function renameDungeons(data, map) {
   const r = (id) => map[id] ?? id;
   const list = (a) => (Array.isArray(a) ? a.map(r) : a);

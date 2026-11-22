@@ -22,7 +22,8 @@ import { statsAt, expYield } from './stats.js';
 import { tideFor, applyTide } from './tide.js';
 import { chainKind, chainSpread } from './chain.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE, FIELD_RADIUS } from './field.js';
-import { pathTo, canEnter, reachable } from './pathfind.js';
+import { pathTo, canEnter, reachable, slides } from './pathfind.js';
+import { iceBump, icicleDamage, freezeWater } from './ice.js';
 import { useWarp } from './warp.js';
 import { markExplored } from './vision.js';
 import { alertHunt } from './hunt.js';
@@ -166,10 +167,15 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
       }
     }
   }
+  state.log.iceEvents = [];
+  const ice = opts.slide && !stayed && path?.length > 1 && slides(u) ? iceBump(state, u, path, state.log.iceEvents) : null; // 얼음동굴: 걸어서 미끄러진 이동만 부딪힘 (날려버리기 등 강제 이동은 아님)
+  const icicle = ice?.icicle ?? null;
+  if (ice?.stopAt) ({ x, y } = ice.stopAt);
   if (!stayed && state.grid[u.y][u.x] === '@' && !airborne(u) && !u.burrow) { cost = moveBudget(u); u.pitEscaped = true; } // 사막: 모래지옥 가운데 탈출 = 이동력 전부, 이번 턴엔 다시 안 끌림
   u.spent = (u.spent ?? 0) + cost;
   if (!stayed) u.walked = true; // 줌렌즈
   u.x = x; u.y = y; u.moved = true;
+  freezeWater(state, u, path ?? [{ x, y }]); // 얼음 타입: 지나간 물이 빙판으로
   state.log.warp = opts.warp && !stayed ? useWarp(state, u) : null; // 시티: 걸어서 워프 위에서 멈추면 짝 타일로 (아군만)
   markExplored(state); // 깊은 동굴: 새로 본 칸 기억
   wakeAmbush(state); // 발전소: 3칸 안에 들어온 기습 찌리리공은 깨어남
@@ -185,6 +191,12 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
       u.intimNow.push(f.id);
       log.push({ unitId: u.id, ability: 'intimidate', target: f.id, applied: r.applied });
     }
+  }
+  if (icicle && state.units.includes(icicle)) { // 고드름 충돌: 최대 HP 1/8
+    const damage = icicleDamage(icicle), hpBefore = icicle.hp;
+    icicle.hp = Math.max(0, icicle.hp - damage);
+    state.log.iceEvents.push({ kind: 'icicle', unitId: icicle.id, damage, hpBefore, maxHp: icicle.maxHp, x: icicle.x, y: icicle.y });
+    if (icicle.hp === 0) { knockOut(state, icicle, null); state.log.iceEvents.push({ kind: 'fainted', unitId: icicle.id }); checkResult(state); }
   }
 }
 

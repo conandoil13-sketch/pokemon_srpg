@@ -7,7 +7,7 @@ import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
 import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js';
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
-import { reachable, tilesInRange, manhattan, pathTo, TILE_COST, tileCost } from '../core/pathfind.js';
+import { reachable, tilesInRange, manhattan, pathTo, pathCost, slides } from '../core/pathfind.js';
 import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims } from '../core/shapes.js';
 import { hiddenFrom, seenOnly } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
@@ -25,6 +25,7 @@ import { bakeSewerGround, drawSewerMap } from '../render/sewerTiles.js';
 import { bakePowerGround, drawPowerMap, drawPulseWarn } from '../render/powerTiles.js';
 import { bakeDesertGround, drawDesertMap } from '../render/desertTiles.js';
 import { bakeVolcanoGround, drawVolcanoMap, drawSteamWarn } from '../render/volcanoTiles.js';
+import { bakeIceGround, drawIceMap, drawFrozen } from '../render/iceTiles.js';
 import { pulsePreview, firesAt } from '../core/generator.js';
 import { sandShift, markSettled, unsettled } from '../core/sand.js';
 import { steamPreview, ventFires, steamPath } from '../core/vent.js';
@@ -44,6 +45,11 @@ import { createFxManager } from '../render/fx.js';
 import { drawWeather } from '../render/weatherFx.js';
 
 const STEP = 0.11; // 타일당 이동 시간(초)
+const SLIDE_STEP = 0.05; // 빙판 미끄럼 한 칸
+// 경로의 i 번째 걸음이 빙판 위 미끄럼인지 (pathfind.pathCost 와 같은 기준 + 빙판에 들어서는 첫 걸음)
+const sliding = (grid, unit, path, i) => { if (i < 2 || !slides(unit)) return false; const a = path[i - 1], p = path[i - 2], b = path[i]; return grid[a.y][a.x] === '_' && b.x - a.x === a.x - p.x && b.y - a.y === a.y - p.y; };
+// 걷기 진행: 지금 몇 번째 칸 사이(i)·그 안의 비율(k)
+const walkAt = (walk) => { const { ts, t } = walk; let i = 0; while (i < ts.length - 2 && t >= ts[i + 1]) i++; return { i, k: Math.min(1, (t - ts[i]) / (ts[i + 1] - ts[i] || 1)) }; };
 const SLIDE = 0.3; // 사막: 모래에 밀려 미끄러지는 시간(초)
 const BANNER = 1.4;
 const RESULT_LOCK = 0.8; // 결과 화면 입력 잠금(초)
@@ -104,7 +110,7 @@ export function ailmentNote(target, mv, attacker = null) {
 const STATUS_LINE = {
   poison: '독의 데미지를 입었다!', toxic: '독의 데미지를 입었다!', burn: '화상 데미지를 입었다!', fainted: '쓰러졌다!',
   asleep: '쿨쿨 잠들어 있다', woke: '눈을 떴다!', frozen: '얼어 버려서 움직일 수 없다!',
-  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!', poisonPool: '독 웅덩이에 몸이 상했다!', shock: '발전기 방출에 감전됐다!', steam: '분출구 스팀에 휩쓸렸다!', basalt: '뜨거운 현무암에 데었다!',
+  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!', poisonPool: '독 웅덩이에 몸이 상했다!', shock: '발전기 방출에 감전됐다!', steam: '분출구 스팀에 휩쓸렸다!', basalt: '뜨거운 현무암에 데었다!', icicle: '고드름에 부딪혔다!',
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
@@ -250,10 +256,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, volcanoGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
+  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, volcanoGround = null, iceGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
   function reset() {
     st = createBattle(map, party, { hpRatio });
-    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant', 'desert', 'volcano'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
+    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant', 'desert', 'volcano', 'ice'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
@@ -264,6 +270,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
     if (theme === 'sewer' && typeof document !== 'undefined') { try { sewerGround = bakeSewerGround(map.tiles); } catch { sewerGround = null; } } // 하수도: 벽·바닥·물길 (물결·거품·타이어·봉투는 매 프레임)
+    if (theme === 'ice' && typeof document !== 'undefined') { try { iceGround = bakeIceGround(map.tiles); } catch { iceGround = null; } } // 얼음동굴: 돌판·눈·호수·벽·계단 (빙판·고드름·눈더미는 매 프레임)
     if (theme === 'volcano' && typeof document !== 'undefined') { try { volcanoGround = bakeVolcanoGround(map.tiles); } catch { volcanoGround = null; } } // 화산동굴: 화산암·현무암·벽·물 (용암·분출구·스팀은 매 프레임)
     if (theme === 'desert' && typeof document !== 'undefined') { try { desertGround = bakeDesertGround(map.tiles); } catch { desertGround = null; } } // 사막: 모래·사구·모래지옥·절벽·계단 (모래결·소용돌이·바위는 매 프레임)
     if (theme === 'power-plant' && typeof document !== 'undefined') { try { powerGround = bakePowerGround(map.tiles); } catch { powerGround = null; } } // 발전소: 철판·기계 벽 (발전기·가벽·고철더미·예고는 매 프레임)
@@ -579,7 +586,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
 
   function startWalk(unit, path, onDone, onDead = null, warp = false) { // warp: 플레이어가 고른 아군 이동만 워프를 탄다 (모으기 돌진·봇은 안 탐)
     path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
-    walk = { unit, path, t: 0, onDone, onDead, prevMode: mode, warp };
+    const ts = [0]; // 칸마다 도착 시각: 빙판 미끄럼 칸은 빠르게
+    for (let i = 1; i < path.length; i++) ts.push(ts[i - 1] + (sliding(st.grid, unit, path, i) ? SLIDE_STEP : STEP));
+    walk = { unit, path, t: 0, ts, onDone, onDead, prevMode: mode, warp };
     if (unit.side === 'ally' && path.length > 1) { // 도착할 칸 표시 (도착하면 사라짐)
       const end = path.at(-1);
       fxm.unfollow('moveMarker');
@@ -915,19 +924,20 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       }
     } else if (mode === 'walking') {
       walk.t += dt;
-      const i = Math.min(Math.floor(walk.t / STEP), walk.path.length - 2);
-      if (i >= 0) {
+      const { i } = walkAt(walk);
+      if (walk.path.length > 1) {
         const a = walk.path[i], b = walk.path[i + 1];
         facing[walk.unit.id] = dirFromDelta(b.x - a.x, b.y - a.y);
       }
-      if (walk.t >= STEP * (walk.path.length - 1)) {
+      if (walk.t >= walk.ts.at(-1)) {
         fxm.unfollow('moveMarker');
         const { onDone, onDead, prevMode, unit, path, warp: canWarp } = walk;
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
-        const cost = path.slice(1).reduce((c, p, i) => c + (st.grid[p.y][p.x] === '#' ? 1 : st.grid[p.y][p.x] === 'B' && st.grid[path[i].y][path[i].x] !== 'B' ? 2 : st.grid[p.y][p.x] === ':' ? tileCost(':', unit) : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용 (옥상 오르기 2)
-        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: canWarp && unit.side === 'ally' });
+        const cost = pathCost(st.grid, unit, path); // 치고 빠지기용 이동 비용 (옥상 오르기 2 · 빙판 미끄럼 공짜)
+        const before = st.grid.join('');
+        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: canWarp && unit.side === 'ally', slide: true });
         const warp = st.log.warp; // 시티 워프: 짝 타일로 날아감 (취소 불가)
         if (warp) {
           moveLocked = true; cursor = { ...warp.to };
@@ -938,12 +948,19 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const arriveLines = st.units.includes(unit) && !quiet ? abilityNotices(st.log.arriveAbilityEvents, get) : [];
         const trapLines = quiet ? [] : trapNotices(st.log.trapEvents, get);
         if ((arriveLines.length || trapLines.length) && unit.side === 'ally') moveLocked = true; // 위협·압정이 걸린 이동은 취소할 수 없다
-        const dead = !st.units.includes(unit);
         const bumpLines = bumped ? [{ lines: [`수풀에 ${josa(unitLabel(bumped), '이/가')} 숨어 있었다!`], at: { x: bumped.x, y: bumped.y }, hp: null }] : [];
         if (bumped && unit.side === 'ally') moveLocked = true;
         bumped = null;
         const warpLines = warp ? [{ lines: ['워프 타일이 빛났다!', `${josa(unitLabel(unit), '은/는')} 다른 곳으로 날아갔다!`], at: { ...warp.to }, hp: null }] : [];
-        noticeChain([...warpLines, ...bumpLines, ...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
+        // 얼음동굴: 부딪힘·고드름 알림, 밀린 포켓몬은 짧게 미끄러짐. 얼린 물·부딪힘이 있으면 취소 불가
+        const ice = st.log.iceEvents ?? [];
+        const iceLines = ice.flatMap((e) => (e.kind === 'bump' || e.kind === 'blocked'
+          ? [{ lines: [`${josa(unitLabel(get(e.by)), '은/는')} ${josa(unitLabel(get(e.unitId)), '와/과')} 부딪혔다!`], at: { x: get(e.unitId).x, y: get(e.unitId).y }, hp: null }]
+          : phaseNotices([e], [], get)));
+        if ((ice.length || st.grid.join('') !== before) && unit.side === 'ally') moveLocked = true;
+        const finish = () => noticeChain([...warpLines, ...bumpLines, ...trapLines, ...iceLines, ...arriveLines], () => { mode = prevMode; if (!st.units.includes(unit)) (onDead ?? afterTrapFaint)(unit); else onDone(); });
+        const shoved = ice.filter((e) => e.kind === 'bump').map((e) => ({ unit: get(e.unitId), from: e.from, to: e.to }));
+        if (shoved.length) startSlide(shoved, 0.22, [], finish); else finish();
       }
     } else if (mode === 'anim') {
       anim.update(dt);
@@ -1017,10 +1034,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       return { x: Math.round((sm.from.x + (sm.to.x - sm.from.x) * k) * TILE), y: Math.round((sm.from.y + (sm.to.y - sm.from.y) * k) * TILE) };
     }
     if (walk && walk.unit === u) {
-      const f = walk.t / STEP;
-      const i = Math.min(Math.floor(f), walk.path.length - 1);
+      const { i, k } = walkAt(walk);
       const a = walk.path[i], b = walk.path[Math.min(i + 1, walk.path.length - 1)];
-      const k = f - i;
       return { x: Math.round((a.x + (b.x - a.x) * k) * TILE), y: Math.round((a.y + (b.y - a.y) * k) * TILE) };
     }
     return { x: u.x * TILE, y: u.y * TILE };
@@ -1190,8 +1205,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     else if (sewerGround) drawSewerMap(ctx, st.grid, sewerGround, cx, cy, W, H, time);
     else if (desertGround) drawDesertMap(ctx, st.grid, desertGround, cx, cy, W, H, time, st.flows);
     else if (volcanoGround) drawVolcanoMap(ctx, st.grid, volcanoGround, cx, cy, W, H, time, st.vents, (v) => ventFires(v, st.turn) && st.result == null, steamFx && { vents: steamFx.vents, age: clock - steamFx.at }, (v) => steamPath(st, v));
+    else if (iceGround) drawIceMap(ctx, st.grid, iceGround, cx, cy, W, H, time);
     else if (powerGround) drawPowerMap(ctx, st.grid, powerGround, cx, cy, W, H, time, st.generators, (g) => firesAt(g, st.turn) && st.result == null, pulseFx && { gens: pulseFx.gens, age: clock - pulseFx.at });
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
+    if (!iceGround && st.grid.some((r) => r.includes('_'))) drawFrozen(ctx, st.grid, cx, cy, W, H, time); // 얼음 타입이 얼린 물
     const tideWarn = tidePreview(st); // 물때 예고: 바뀔 칸에 물결 깜빡임
     if (tideWarn && Math.floor(time * 2) % 2 === 0) { ctx.fillStyle = tideWarn.next > (st.tide ?? 0) ? 'rgba(40,110,220,0.35)' : 'rgba(250,240,200,0.35)'; for (const p of tideWarn.cells) ctx.fillRect(p.x * TILE + 2, p.y * TILE + 9, TILE - 4, 2), ctx.fillRect(p.x * TILE + 4, p.y * TILE + 15, TILE - 8, 2); }
     if (st.generators?.length && !st.result) drawPulseWarn(ctx, pulsePreview(st), time); // 발전소: 이번 라운드 방출 칸
