@@ -716,7 +716,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       const damage = Math.min(v.hp, c.damage);
       v.hp -= damage; v.ncTouched = true; v.revealed = true;
       if (v.hp === 0) { knockOut(state, v, a, { deferExp: true }); knocked.push(v); }
-      chain.push({ unitId: v.id, damage, fainted: v.hp === 0, from: c.from });
+      chain.push({ unitId: v.id, damage, fainted: v.hp === 0, from: c.from, kind: ck });
     }
   }
   // 선제기: 기술이 나갔으면 이번 차례에 한 번 남은 이동력으로 다시 이동 (치고 빠지기)
