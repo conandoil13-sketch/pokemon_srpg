@@ -4,6 +4,7 @@ import { effectiveWeather } from './weather.js';
 import { poolDamage } from './pool.js';
 import { pulseRisk } from './generator.js';
 import { sandLanding } from './sand.js';
+import { steamRisk, basaltBurn } from './vent.js';
 const PIT_STUCK = 0.2; // 사막: 모래지옥 가운데에 끌려 묶이는 칸 = 최대 HP 20% 만큼 손해
 import { MOVES } from '../data/moves.js';
 import { reachable, tilesInRange, manhattan, canEnter, TILE_COST } from './pathfind.js';
@@ -138,7 +139,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
     const ghost = { ...unit, x: p.x, y: p.y };
     const land = state.flows ? sandLanding(state, unit, p) : null; // 사막: 행동이 끝난 뒤 밀리거나 끌린 자리로 위험 계산
     const at = land ?? p;
-    const risk = THREAT_WEIGHT * threatAt(threats, { ...unit, x: at.x, y: at.y }, at.x, at.y, state.grid[at.y][at.x]) + (land?.stuck ? unit.maxHp * PIT_STUCK : 0) + (poolDamage(ghost, state.grid[p.y][p.x])?.damage ?? 0) + pulseRisk(state, ghost, p); // 독 웅덩이·발전기 방출: 피해만큼 손해
+    const risk = THREAT_WEIGHT * threatAt(threats, { ...unit, x: at.x, y: at.y }, at.x, at.y, state.grid[at.y][at.x]) + (land?.stuck ? unit.maxHp * PIT_STUCK : 0) + (poolDamage(ghost, state.grid[p.y][p.x])?.damage ?? 0) + pulseRisk(state, ghost, p) + steamRisk(state, unit, p) + basaltBurn(state, ghost); // 화산동굴: 스팀 경로·현무암 // 독 웅덩이·발전기 방출: 피해만큼 손해
     for (const mid of unit.sealed ? [] : unit.moves.filter((m) => !moveBlock(unit, m))) { // 풀죽음 봉인: 기술 없이 이동만, 도발·앙코르 … 로 못 쓰는 기술 제외
       const move = MOVES[mid];
       if (move.heal) { // 회복기: HP 절반 이하이고 남은 횟수가 있을 때만, 안전한 칸에서
@@ -184,7 +185,7 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
   let approach = { x: unit.x, y: unit.y }, bestDist = Infinity;
   for (const k of reach.keys()) {
     const p = parse(k);
-    const dist = (walk.get(k) ?? 1000 + Math.min(...allFoes.map((f) => manhattan(p, f)))) + (state.flows && sandLanding(state, unit, p).stuck ? 3 : 0); // 모래지옥 가운데로 끌리는 칸은 피해서 다가감
+    const dist = (walk.get(k) ?? 1000 + Math.min(...allFoes.map((f) => manhattan(p, f)))) + (state.flows && sandLanding(state, unit, p).stuck ? 3 : 0) + (state.vents?.length && steamRisk(state, unit, p) ? 3 : 0); // 모래지옥 가운데·이번 라운드 스팀 경로는 피해서 다가감
     if (dist < bestDist) { bestDist = dist; approach = p; }
   }
   // 변화기 위치의 위험은 그냥 다가갈 때의 위험과 비교 → 그래도 이득이고 자신 버프보다 나을 때만
