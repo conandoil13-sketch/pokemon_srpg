@@ -519,9 +519,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     } else nextEnemy();
   }
 
-  function startWalk(unit, path, onDone, onDead = null) {
+  function startWalk(unit, path, onDone, onDead = null, warp = false) { // warp: 플레이어가 고른 아군 이동만 워프를 탄다 (모으기 돌진·봇은 안 탐)
     path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
-    walk = { unit, path, t: 0, onDone, onDead, prevMode: mode };
+    walk = { unit, path, t: 0, onDone, onDead, prevMode: mode, warp };
     if (unit.side === 'ally' && path.length > 1) { // 도착할 칸 표시 (도착하면 사라짐)
       const end = path.at(-1);
       fxm.unfollow('moveMarker');
@@ -729,7 +729,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
             if (a.item) { showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item] ?? '아이템', '을/를')} 얻었다!`], finishAllyAction); return; }
             finishAllyAction();
             });
-          });
+          }, null, true);
         }
         return;
       }
@@ -747,7 +747,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         }
         if (ev.type === 'cancel') { sel = null; mode = 'idle'; return; }
         if (pick && reach.has(`${cursor.x},${cursor.y}`)) {
-          startWalk(sel, allyPath(sel, cursor.x, cursor.y), afterAllyMove);
+          startWalk(sel, allyPath(sel, cursor.x, cursor.y), afterAllyMove, null, true);
         }
         return;
       }
@@ -854,12 +854,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       }
       if (walk.t >= STEP * (walk.path.length - 1)) {
         fxm.unfollow('moveMarker');
-        const { onDone, onDead, prevMode, unit, path } = walk;
+        const { onDone, onDead, prevMode, unit, path, warp: canWarp } = walk;
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
         const cost = path.slice(1).reduce((c, p, i) => c + (st.grid[p.y][p.x] === '#' ? 1 : st.grid[p.y][p.x] === 'B' && st.grid[path[i].y][path[i].x] !== 'B' ? 2 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용 (옥상 오르기 2)
-        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: unit.side === 'ally' });
+        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: canWarp && unit.side === 'ally' });
         const warp = st.log.warp; // 시티 워프: 짝 타일로 날아감 (취소 불가)
         if (warp) {
           moveLocked = true; cursor = { ...warp.to };

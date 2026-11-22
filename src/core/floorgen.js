@@ -261,7 +261,7 @@ function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
   const [lo, hi] = dungeon.piles, want = lo + Math.floor(rng() * (hi - lo + 1));
   const nearAlly = (x, y) => allySlots.some((a) => Math.abs(a.x - x) + Math.abs(a.y - y) <= 1);
   const cells = [];
-  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) if (g[y][x] === '.' && !used.has(key(x, y)) && !nearAlly(x, y)) cells.push({ x, y });
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) if (g[y][x] === '.' && !used.has(key(x, y)) && !nearAlly(x, y) && !DIRS.some(([dx, dy]) => g[y + dy]?.[x + dx] === 'B')) cells.push({ x, y }); // 시티: 건물 바로 옆엔 안 놓음 (옥상에서 내려올 길을 막지 않게)
   for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
   const pool = dungeon.pileSpecies ?? encounterPool(dungeon, floor), out = []; // 해변: 바닷가 종만
   let size = reachableFrom(g.map((r) => r.join('')), anchor).size;

@@ -136,6 +136,7 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
   const stayed = u.x === x && u.y === y;
   if (!stayed) u.revealed = false; // 악 수풀 숨기: 움직이면 다시 숨을 수 있음
   state.log.trapEvents = [];
+  state.log.warp = null; // 압정에 쓰러져 일찍 끝나도 지난 워프가 남지 않게
   if (!stayed && state.spikes?.length) {
     let route = path;
     if (!route) { const p = pathTo(state.grid, state.units, u, x, y); route = p.length > 1 && p.at(-1).x === x && p.at(-1).y === y ? p : [{ x: u.x, y: u.y }, { x, y }]; }

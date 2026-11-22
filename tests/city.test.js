@@ -187,3 +187,19 @@ test('old saves move trial-3 progress to the city', () => {
   const l = loadGame(store);
   assert.ok(l.unlocked.includes('city')); assert.ok(l.cleared.includes('city')); assert.equal(l.best.city, 5);
 });
+
+test('trash cans never sit right next to a building (roof exits stay open)', () => {
+  for (const { m } of floors()) for (const p of m.piles) assert.ok(![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => m.tiles[p.y + dy]?.[p.x + dx] === 'B'), `${p.x},${p.y}`);
+});
+
+import { moveUnit } from '../src/core/battle.js';
+test('a walker fainting on spikes does not leave the previous warp in the log', () => {
+  const { s, at } = warped([['bidoof', 1, 3], ['bidoof', 0, 0]], [['bidoof', 9, 0]]);
+  moveUnit(s, at(1, 3).id, 1, 3, 0, null, { warp: true }); // 제자리 — 워프 안 함
+  const b = at(0, 0); b.hp = 1;
+  s.log.warp = { from: { x: 1, y: 3 }, to: { x: 5, y: 1 }, color: 'blue' }; // 앞 아군의 워프
+  s.spikes.push({ x: 0, y: 1, kind: 'spikes', side: 'enemy', by: 'x', revealed: false });
+  moveUnit(s, b.id, 0, 1, 1, [{ x: 0, y: 0 }, { x: 0, y: 1 }], { warp: true });
+  assert.equal(b.hp, 0);
+  assert.equal(s.log.warp, null);
+});
