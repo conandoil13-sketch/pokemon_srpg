@@ -111,3 +111,32 @@ test('AI: an enemy does not end its move in a steam path that fires this round',
   const plan = planEnemyAction(s, foe);
   assert.notEqual(plan.moveTo.y, 0, JSON.stringify(plan.moveTo));
 });
+
+// ---- 층 생성 ----
+import { generateFloor } from '../src/core/floorgen.js';
+import { VEC as V4 } from '../src/core/vent.js';
+
+test('volcano floors: lava rivers, 2-3 vents facing a straight run of ground, basalt only next to lava/water, nothing in the start columns, stairs reachable on foot', () => {
+  let slugOnLava = 0;
+  for (let seed = 1; seed <= 30; seed++) {
+    const f = 1 + (seed % VC.floors), m = generateFloor(VC, f, seed), T = m.tiles, W = T[0].length, H = T.length;
+    const cells = (c) => { const o = []; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (T[y][x] === c) o.push({ x, y }); return o; };
+    assert.ok(cells('L').length >= 8, `seed ${seed}: lava`);
+    assert.ok(m.vents.length >= 2 && m.vents.length <= 3, `seed ${seed}: ${m.vents.length} vents`);
+    for (const v of m.vents) {
+      assert.equal(T[v.y][v.x], 'V'); assert.ok(v.x >= 3); assert.ok([0, 1, 2].includes(v.phase));
+      const [dx, dy] = V4[v.dir];
+      for (let i = 1; i <= 4; i++) assert.ok('.v'.includes(T[v.y + dy * i]?.[v.x + dx * i]) && v.x + dx * i >= 3, `seed ${seed}: vent run`);
+    }
+    for (const c of cells('v')) assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => 'L~'.includes(T[c.y + dy]?.[c.x + dx] ?? '#')), `seed ${seed}: basalt`);
+    for (const c of [...cells('L'), ...cells('V'), ...cells('v')]) assert.ok(c.x >= 3, `seed ${seed}: start columns`);
+    for (const e of m.enemies) if (T[e.y][e.x] === 'L') { assert.ok(['slugma', 'magcargo'].includes(e.species)); slugOnLava++; }
+    for (const p of [...m.allySlots, ...m.chests, ...(m.stairs ? [m.stairs] : [])]) assert.ok(!'LVv'.includes(T[p.y][p.x]));
+    if (m.stairs) {
+      const s = createBattle(m, [newMember('bidoof', 40, createRng(1))]);
+      assert.ok(reachable(s.grid, [s.units[0]], s.units[0], 999).has(`${m.stairs.x},${m.stairs.y}`), `seed ${seed}: stairs`);
+    }
+  }
+  assert.ok(slugOnLava > 0);
+  assert.equal(generateFloor(DUNGEONS[0], 1, 1).vents, undefined);
+});

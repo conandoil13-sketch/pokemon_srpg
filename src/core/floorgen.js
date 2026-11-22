@@ -85,6 +85,8 @@ export function generateFloor(dungeon, floor, seed) {
   const tiles = () => g.map((r) => r.join(''));
   // 2a. 하수도: 벽 + 직선 통로 (별도 난수 — 다른 던전은 결과·난수 소비 그대로). 연결성 단계가 마른 길을 보장
   if (dungeon.sewer) sewerLayout(g, createRng(hashSeed(seed, 6000)));
+  // 2b. 화산동굴: 용암 강 (별도 난수). 용암은 WALK 가 아니라 연결성 단계가 돌다리를 뚫음
+  if (dungeon.volcano) lavaLayout(g, createRng(hashSeed(seed, 7300)));
 
   // 3. 연결성 보장: 도달 못 한 칸 → 가장 가까운 도달 칸까지 막힌 칸을 뚫는다
   const anchor = { x: 1, y: Math.floor(H / 2) };
@@ -193,9 +195,11 @@ export function generateFloor(dungeon, floor, seed) {
 
   // 11. 사막 모래 (별도 난수, 맨 끝): 빈 바닥 '.' 만 덮음 — 모래는 누구나 걸을 수 있어 길·자리 배치는 그대로
   const flows = dungeon.desert ? desertLayout(g, used, createRng(hashSeed(seed, 7200))) : null;
+  // 12. 화산동굴: 현무암·분출구·용암 위 마그마그 (별도 난수, 맨 끝)
+  const vents = dungeon.volcano ? volcanoExtras(g, used, enemies, createRng(hashSeed(seed, 7400))) : null;
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed), ...(dungeon.dark ? { dark: true } : {}),
-    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}), ...(flows ? { flows } : {}) };
+    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}), ...(flows ? { flows } : {}), ...(vents ? { vents } : {}) };
 }
 
 // 바다 띠: 위 또는 아래 가장자리, 열마다 깊이 D 또는 D+1 (D = H/4 반올림), 출발 3열 제외.
@@ -302,6 +306,60 @@ function placeAmbush(dungeon, floor, g, used, rng) {
   const order = [...free.filter(cover), ...free.filter((p) => !cover(p))];
   const level = dungeon.baseLevel[floor - 1] - dungeon.ambush.drop;
   return order.slice(0, want).map((p) => { used.add(key(p.x, p.y)); return { species: dungeon.ambush.species, level, x: p.x, y: p.y, ambush: true }; });
+}
+
+// 화산동굴 용암: 위→아래로 굽이치는 강 1~2줄 (폭 1~2) + 용암 웅덩이 1개. 출발 3열과 그 옆 두 열 밖
+function lavaLayout(g, rng) {
+  const W = g[0].length, H = g.length, int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+  const lo = SAFE_COLS + 2, hi = W - 2;
+  const rivers = 1 + (rng() < 0.5 ? 1 : 0);
+  for (let r = 0; r < rivers; r++) {
+    let x = int(lo + 1, hi - 1);
+    for (let y = 0; y < H; y++) {
+      g[y][x] = 'L';
+      if (rng() < 0.5 && x + 1 <= hi) g[y][x + 1] = 'L';
+      if (rng() < 0.35) x = Math.min(hi, Math.max(lo, x + (rng() < 0.5 ? -1 : 1)));
+    }
+  }
+  let x = int(lo, hi), y = int(0, H - 1);
+  for (let n = int(4, 8); n > 0; n--) {
+    g[y][x] = 'L';
+    const [dx, dy] = DIRS[Math.floor(rng() * 4)];
+    x = Math.min(hi, Math.max(lo, x + dx)); y = Math.min(H - 1, Math.max(0, y + dy));
+  }
+}
+
+// 화산동굴 마무리: 용암·물 옆 빈 바닥 50% 현무암 → 분출구 2~3개 (벽 칸, 앞으로 바닥 4칸 이상 곧게, 서로 다른 행·열) → 마그마그 계열 적 하나를 육지와 맞닿은 용암 칸으로
+function volcanoExtras(g, used, enemies, rng) {
+  const W = g[0].length, H = g.length;
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const near = (x, y, set) => DIRS.some(([dx, dy]) => set.includes(g[y + dy]?.[x + dx] ?? '#'));
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) if (g[y][x] === '.' && !used.has(key(x, y)) && near(x, y, 'L~') && rng() < 0.5) g[y][x] = 'v';
+  const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const cands = [];
+  for (let y = 0; y < H; y++) for (let x = SAFE_COLS; x < W; x++) {
+    if (g[y][x] !== '#') continue;
+    for (const dir of Object.keys(VEC)) {
+      const [dx, dy] = VEC[dir];
+      let ok = true;
+      for (let i = 1; i <= 4 && ok; i++) if (!'.v'.includes(g[y + dy * i]?.[x + dx * i] ?? '#') || x + dx * i < SAFE_COLS) ok = false; // 출발 구역으로는 안 뿜음
+      if (ok) cands.push({ x, y, dir });
+    }
+  }
+  const want = 2 + (rng() < 0.5 ? 1 : 0), vents = [];
+  for (const c of shuffle(cands)) {
+    if (vents.length >= want) break;
+    if (vents.some((v) => v.x === c.x || v.y === c.y)) continue;
+    g[c.y][c.x] = 'V';
+    vents.push({ ...c, phase: vents.length % 3 });
+  }
+  const slug = enemies.find((e) => !e.boss && (e.species === 'slugma' || e.species === 'magcargo'));
+  if (slug) {
+    const spots = [];
+    for (let y = 0; y < H; y++) for (let x = 8; x < W; x++) if (g[y][x] === 'L' && !used.has(key(x, y)) && near(x, y, '.v')) spots.push({ x, y });
+    if (spots.length) { const p = spots[Math.floor(rng() * spots.length)]; used.delete(key(slug.x, slug.y)); slug.x = p.x; slug.y = p.y; used.add(key(p.x, p.y)); }
+  }
+  return vents;
 }
 
 // 사막: 모래지옥 3×3 (가운데 '@', 둘레 'o') 1개·넓은 맵 2개 → 흐르는 모래 띠 '=' 2~3줄 (3~6칸, 띠 방향으로 흐름) → 깊은 모래 ':' 덩어리
