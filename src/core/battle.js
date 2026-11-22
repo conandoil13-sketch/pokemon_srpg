@@ -133,8 +133,9 @@ export function moveUnit(state, id, x, y, cost = 0, path = null) {
   if (!stayed && state.spikes?.length) {
     let route = path;
     if (!route) { const p = pathTo(state.grid, state.units, u, x, y); route = p.length > 1 && p.at(-1).x === x && p.at(-1).y === y ? p : [{ x: u.x, y: u.y }, { x, y }]; }
+    const hitBy = new Set(); // 한 이동에서 시전자당 압정 1회
     for (const p of route.slice(1)) {
-      const evs = stepOn(state, u, p.x, p.y);
+      const evs = stepOn(state, u, p.x, p.y, hitBy);
       state.log.trapEvents.push(...evs);
       if (u.hp === 0) { // 압정에 쓰러짐: 그 칸에서 멈춘다
         u.x = p.x; u.y = p.y; u.moved = true;

@@ -169,13 +169,13 @@ test('spikes lay on the aimed tile and its 4 neighbours, walls skipped, no dupli
   assert.equal(applyMove(s, a[0].id, 'spikes', { x: 9, y: 1 }, hit).effects[0].reason, 'range');
 });
 
-test('a foe walking through spikes takes 1/8 per tile; flying and levitate are immune; own side is safe', () => {
+test('a foe walking through spikes takes 1/8 once per caster per move; flying and levitate are immune; own side is safe', () => {
   const { s, a, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
   applyMove(s, a[0].id, 'spikes', { x: 4, y: 1 }, hit); // (3,1)(4,1)(5,1)(4,0)(4,2)
   const hp = f[0].hp, d = Math.max(1, Math.floor(f[0].maxHp / 8));
   moveUnit(s, f[0].id, 2, 1, 0, P([6, 1], [5, 1], [4, 1], [3, 1], [2, 1]));
-  assert.equal(f[0].hp, hp - 3 * d);
-  assert.equal(s.log.trapEvents.length, 3);
+  assert.equal(f[0].hp, hp - d); // 긴급패치: 같은 시전자 압정은 한 이동에 1회
+  assert.equal(s.log.trapEvents.length, 1);
   const fly = field([['cloyster', 1, 1]], [['pidgey', 6, 1]]);
   applyMove(fly.s, fly.a[0].id, 'spikes', { x: 4, y: 1 }, hit);
   const fh = fly.f[0].hp;
@@ -336,4 +336,45 @@ test('a weather call reports the weather before and after', () => {
   const e = applyMove(s, a[0].id, 'rain-dance', a[0].id, hit).effects[0];
   assert.equal(e.from, null);
   assert.equal(e.to, 'rain');
+});
+
+// ---- 긴급패치: 압정은 한 이동에서 시전자당 피해 1회 (codex-reviews/hotfixes.md) ----
+const spikeHits = (s) => s.log.trapEvents.filter((e) => e.kind === 'spikes').length;
+const lay = (s, by, ...xy) => { for (const [x, y] of xy) s.spikes.push({ x, y, kind: 'spikes', side: 'ally', by, revealed: false }); };
+
+test('hotfix: one caster\'s spikes hurt once per move', () => {
+  const { s, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  lay(s, 'A', [5, 1], [4, 1], [3, 1]);
+  moveUnit(s, f[0].id, 2, 1, 4, P([6, 1], [5, 1], [4, 1], [3, 1], [2, 1]));
+  assert.equal(spikeHits(s), 1);
+});
+
+test('hotfix: different casters each hurt once; later spikes from the same caster do not', () => {
+  const { s, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  lay(s, 'A', [5, 1]); lay(s, 'B', [4, 1]); lay(s, 'A', [3, 1]);
+  moveUnit(s, f[0].id, 2, 1, 4, P([6, 1], [5, 1], [4, 1], [3, 1], [2, 1]));
+  assert.equal(spikeHits(s), 2);
+});
+
+test('hotfix: a new move hurts again', () => {
+  const { s, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  lay(s, 'A', [5, 1]);
+  moveUnit(s, f[0].id, 5, 1, 1, P([6, 1], [5, 1]));
+  moveUnit(s, f[0].id, 6, 1, 1, P([5, 1], [6, 1]));
+  moveUnit(s, f[0].id, 5, 1, 1, P([6, 1], [5, 1]));
+  assert.equal(spikeHits(s), 1);
+});
+
+test('hotfix: laid spikes remember their caster', () => {
+  const { s, a } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  applyMove(s, a[0].id, 'spikes', { x: 4, y: 1 }, hit);
+  assert.ok(s.spikes.length && s.spikes.every((t) => t.by === a[0].id));
+});
+
+test('hotfix: walk preview counts one hit per caster', () => {
+  const { s, f } = field([['cloyster', 1, 1]], [['snorlax', 6, 1]]);
+  lay(s, 'A', [5, 1], [4, 1], [3, 1]);
+  f[0].hp = Math.floor(f[0].maxHp / 8) + 1; // 1회는 버팀, 2회면 쓰러짐
+  const path = P([6, 1], [5, 1], [4, 1], [3, 1], [2, 1]);
+  assert.equal(lethalTrapCut(s, f[0], path).length, 5);
 });
