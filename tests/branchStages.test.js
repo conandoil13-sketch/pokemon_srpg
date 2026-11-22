@@ -48,14 +48,14 @@ test('level cap moves on once any branch of a stage is cleared', async () => {
   const ids = DUNGEONS.map((d) => d.id);
   const before = levelCapFor({ cleared: ids.slice(0, 5) }); // 시티까지
   assert.equal(before, DUNGEONS[5].levelCap);
-  assert.equal(levelCapFor({ cleared: [...ids.slice(0, 5), 'trial-4'] }), DUNGEONS.find((d) => d.stage === 7).levelCap); // 6-2 하나만 깨도
+  assert.equal(levelCapFor({ cleared: [...ids.slice(0, 5), 'deep-cave'] }), DUNGEONS.find((d) => d.stage === 7).levelCap); // 6-2 하나만 깨도
   assert.equal(typeof finishRun, 'function');
 });
 
-test('the real table: stage 6 branches into sewer and the trial cave', () => {
+test('the real table: stage 6 branches into sewer and deep cave', () => {
   assert.deepEqual(DUNGEONS.map((d) => d.stage), [1, 2, 3, 4, 5, 6, 6, 7, 8, 9, 10]);
-  assert.deepEqual(DUNGEONS.slice(5, 7).map((d) => [d.id, d.branch, d.unlock]), [['sewer', 1, 'city'], ['trial-4', 2, 'city']]); // 6-1 하수도 · 6-2 임시
-  assert.deepEqual(DUNGEONS[7].unlock, ['sewer', 'trial-4']); // 여럿 → 1: 하나라도
+  assert.deepEqual(DUNGEONS.slice(5, 7).map((d) => [d.id, d.branch, d.unlock]), [['sewer', 1, 'city'], ['deep-cave', 2, 'city']]); // 6-1 하수도 · 6-2 깊은 동굴
+  assert.deepEqual(DUNGEONS[7].unlock, ['sewer', 'deep-cave']); // 여럿 → 1: 하나라도
 });
 
 test('level cap with real branches: clearing one branch is enough', () => {

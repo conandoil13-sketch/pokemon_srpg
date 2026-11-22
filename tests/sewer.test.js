@@ -90,3 +90,14 @@ test('sewer floors: walls with straight corridors, water channel and poison shor
   }
   assert.ok(water >= 20 && poison >= 20, `water ${water} poison ${poison}`);
 });
+
+test('sewer walls are walls, not trees: nobody slips through them', async () => {
+  const { createGame } = await import('../src/game/states.js');
+  const map = { tiles: ['....', '.##.', '....'], allySlots: [{ x: 0, y: 0 }], enemies: [{ species: 'grimer', x: 3, y: 2, level: 5 }] };
+  for (const theme of ['sewer', 'deep-cave', 'cave']) {
+    const game = createGame({ rng: createRng(3), map, party: [newMember('bidoof', 40, createRng(1))], theme });
+    assert.equal(!!game.state.grid.trees, false, theme);
+  }
+  const field = createGame({ rng: createRng(3), map, party: [newMember('bidoof', 40, createRng(1))], theme: 'field' });
+  assert.equal(field.state.grid.trees, true);
+});

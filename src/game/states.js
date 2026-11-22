@@ -11,6 +11,8 @@ import { reachable, tilesInRange, manhattan, pathTo, TILE_COST } from '../core/p
 import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims } from '../core/shapes.js';
 import { hiddenFrom } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
+import { huntPlan } from '../core/hunt.js';
+import { canSee, seenCells } from '../core/vision.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance, terrainCtx } from '../core/damage.js';
 import { MOVES } from '../data/moves.js';
@@ -239,7 +241,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null;
   function reset() {
     st = createBattle(map, party, { hpRatio });
-    st.grid.trees = (theme ?? 'field') !== 'cave'; // 벽이 나무인 맵: 유연이 지나갈 수 있음
+    st.grid.trees = !['cave', 'deep-cave', 'sewer'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
@@ -437,7 +439,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     const u = st.units.find((o) => o.id === id);
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
-    const plan = planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy')]) }); // 안개 + 수풀에 숨은 악 타입 아군
+    // 깊은 동굴: 아무도 못 보면 순찰·추적·수색 (core/hunt.js), 보이면 그 적이 보는 아군만 노림
+    const blind = st.dark ? new Set(allyUnits().filter((a) => !canSee(u, a)).map((a) => a.id)) : new Set();
+    const plan = (st.dark && huntPlan(st, u, rng)) || planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy', { dark: false }), ...blind]) }); // 안개 + 수풀에 숨은 악 타입 아군
     if (u.sealed) plan.attack = null; // 풀죽음: 이번 차례 기술 봉인 (이동만)
     // 안개: 이동한 뒤에도 안개 속이면 기술을 쓰지 않는다 (대사로 정체가 드러나지 않게)
     if (st.weather === 'fog' && plan.attack && isHidden(plan.moveTo, allyUnits())) plan.attack = null;
@@ -959,7 +963,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fogSeen = new Map(); // 안개: 숨어 있던 유닛 id → 드러난 시각 (null = 아직 숨음)
   const REVEAL = 0.35;
   function drawUnits(ctx) {
-    const hidden = hiddenIds(), dark = darkIds(), lurking = hiddenFrom(st, 'enemy');
+    const hidden = hiddenIds(), dark = darkIds(), lurking = hiddenFrom(st, 'enemy', { dark: false }); // 아군 반투명은 수풀 숨기만
     const list = [...st.units];
     for (const u of anim?.extraUnits ?? (anim?.defender ? [anim.defender] : [])) if (u && !list.includes(u)) list.push(u); // 기절 연출 중
     list.sort((a, b) => unitWorld(a).y - unitWorld(b).y);
