@@ -128,7 +128,7 @@ export function unlockFromCleared(game) {
 }
 
 // 자리가 진짜 맵으로 바뀐 던전 id (예전 저장의 해금·돌파·최고 층·진행 중 탐험을 옮긴다)
-const RENAMED = { 'trial-1': 'autumn-forest' };
+const RENAMED = { 'trial-1': 'autumn-forest', 'trial-2': 'beach' };
 function renameDungeons(data, map) {
   const r = (id) => map[id] ?? id;
   const list = (a) => (Array.isArray(a) ? a.map(r) : a);

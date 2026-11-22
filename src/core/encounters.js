@@ -27,9 +27,11 @@ function basePool(dungeon, floor, { boss = false } = {}) {
       .sort();
     if (pool.length) {
       if (!boss) return [...new Set([...pool, ...(dungeon.early ?? []).filter((k) => SPECIES[k].stage <= stageCap)])].sort();
-      // 보스: 그 층 상한 단계를 우선
-      const top = pool.filter((k) => SPECIES[k].stage === Math.min(stageCap, 2));
-      return top.length ? top : pool;
+      // 보스: 그 층 상한 단계를 우선. bossTypes 가 있으면 그 타입만 (해변: 물·얼음)
+      const typed = dungeon.bossTypes ? pool.filter((k) => SPECIES[k].types.some((t) => dungeon.bossTypes.includes(t))) : pool;
+      if (!typed.length) { stageCap = Math.min(2, stageCap + 1); bstCap += 50; continue; }
+      const top = typed.filter((k) => SPECIES[k].stage === Math.min(stageCap, 2));
+      return top.length ? top : typed;
     }
     stageCap = Math.min(2, stageCap + 1); // 후보가 없으면 조건을 조금씩 완화
     bstCap += 50;
