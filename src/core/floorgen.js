@@ -188,6 +188,9 @@ export function generateFloor(dungeon, floor, seed) {
   // 9. 낙엽더미 (던전에 piles 가 있을 때만, 별도 난수 — 다른 던전은 결과·난수 소비 그대로)
   const piles = dungeon.piles ? placePiles(dungeon, floor, seed, g, used, allySlots, anchor) : [];
 
+  // 10. 발전소 찌리리공 기습 (별도 난수): 2마리, 마지막 두 층 3마리. 가벽·고철더미 옆 바닥 먼저
+  if (dungeon.ambush) enemies.push(...placeAmbush(dungeon, floor, g, used, createRng(hashSeed(seed, 7100))));
+
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed), ...(dungeon.dark ? { dark: true } : {}),
     ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}) };
 }
@@ -285,6 +288,17 @@ function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
     }
   }
   return out;
+}
+
+function placeAmbush(dungeon, floor, g, used, rng) {
+  const W = g[0].length, H = g.length, want = floor >= dungeon.floors - 1 ? 3 : 2;
+  const free = [];
+  for (let y = 0; y < H; y++) for (let x = 8; x < W; x++) if (g[y][x] === '.' && !used.has(key(x, y))) free.push({ x, y });
+  for (let i = free.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [free[i], free[j]] = [free[j], free[i]]; }
+  const cover = (p) => DIRS.some(([dx, dy]) => '^*'.includes(g[p.y + dy]?.[p.x + dx] ?? '#'));
+  const order = [...free.filter(cover), ...free.filter((p) => !cover(p))];
+  const level = dungeon.baseLevel[floor - 1] - dungeon.ambush.drop;
+  return order.slice(0, want).map((p) => { used.add(key(p.x, p.y)); return { species: dungeon.ambush.species, level, x: p.x, y: p.y, ambush: true }; });
 }
 
 // 발전소 발전기: 바닥 '.' 2×2 를 'G' 로. 출발 3열 밖, 다른 발전기와 맨해튼 3칸 이상, 놓아도 나머지 칸이 다 이어질 때만. 위상은 번갈아

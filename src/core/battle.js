@@ -13,6 +13,7 @@ import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.j
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { poolDamage } from './pool.js';
 import { firesAt, genRange, shockDamage } from './generator.js';
+import { wakeAmbush, AMBUSH_MOVE } from './ambush.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
@@ -31,7 +32,7 @@ import { newParty, abilityOf } from './progress.js';
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base, ivs, gender, weight, memberKey, held = null }) {
+export function makeUnit({ species, side, x, y, level, moves, id, boss, ambush, ability, types, base, ivs, gender, weight, memberKey, held = null }) {
   // 개체값·성별: 아군은 멤버 값, 적은 위치·레벨로 정해지는 무작위 (같은 층이면 같음). 메타몽은 31·성별 없음
   ivs ??= species === 'ditto' ? null : hashIvs(species, x, y, level);
   if (gender === undefined) gender = hashGender(species, x, y, level);
@@ -52,6 +53,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss, ability,
     ...newStatus(),
     ...newVolatile(),
     ...(boss ? { boss: true } : {}),
+    ...(ambush ? { ambush: 'hidden' } : {}), // 발전소 찌리리공 기습 (core/ambush.js)
     ...(memberKey !== undefined ? { memberKey } : {}), // 동료: 파티 멤버 열쇠(uid) — 경험치·기절 기록용
   };
 }
@@ -82,6 +84,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     units.push(u);
   });
   for (const e of mapDef.enemies) units.push(makeUnit({ ...e, side: 'enemy', id: uniqueId(units, 'enemy', e.species) }));
+  for (const u of units) if (u.ambush && !u.moves.includes(AMBUSH_MOVE)) u.moves = [...u.moves.slice(0, 3), AMBUSH_MOVE]; // 기습 찌리리공은 자폭을 꼭 앎
   const state = {
     grid: mapDef.tiles.slice(),
     width: mapDef.tiles[0].length,
@@ -165,6 +168,7 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
   u.x = x; u.y = y; u.moved = true;
   state.log.warp = opts.warp && !stayed ? useWarp(state, u) : null; // 시티: 걸어서 워프 위에서 멈추면 짝 타일로 (아군만)
   markExplored(state); // 깊은 동굴: 새로 본 칸 기억
+  wakeAmbush(state); // 발전소: 3칸 안에 들어온 기습 찌리리공은 깨어남
   refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
   state.log.arriveAbilityEvents = [];
   // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외

@@ -138,3 +138,64 @@ test('other dungeons get no generators', () => {
   assert.equal(f.generators, undefined);
   assert.ok(!f.tiles.join('').includes('G'));
 });
+
+// ---- 찌리리공 기습 ----
+import { ambushPlan, AMBUSH_SIGHT } from '../src/core/ambush.js';
+import { hiddenFrom } from '../src/core/stealth.js';
+import { moveUnit } from '../src/core/battle.js';
+
+const OPEN = Array.from({ length: 6 }, () => '............');
+function ambushSetup(allies, voltorbs, extra = []) {
+  const ms = allies.map(([sp]) => newMember(sp, 50, createRng(1)));
+  const map = { tiles: OPEN, allySlots: allies.map(([, x, y]) => ({ x, y })), enemies: [...voltorbs.map(([x, y]) => ({ species: 'voltorb', x, y, level: 30, ambush: true })), ...extra.map(([species, x, y]) => ({ species, x, y, level: 30 }))] };
+  const s = createBattle(map, ms);
+  const at = (x, y) => s.units.find((u) => u.x === x && u.y === y);
+  return { s, at };
+}
+
+test('ambush voltorb: hidden and still until an ally comes within 3 or hits it', () => {
+  const { s, at } = ambushSetup([['bidoof', 0, 2]], [[8, 2]]);
+  const v = at(8, 2);
+  assert.ok(v.moves.includes('self-destruct'));
+  assert.ok(hiddenFrom(s, 'ally').has(v.id));
+  assert.deepEqual(ambushPlan(s, v), { moveTo: { x: 8, y: 2 }, attack: null });
+  const b = at(0, 2);
+  moveUnit(s, b.id, 5, 2); // 3칸 안
+  assert.equal(AMBUSH_SIGHT, 3);
+  assert.equal(v.ambush, 'awake');
+  moveUnit(s, b.id, 0, 2); // 멀어져도 다시 숨지 않음
+  assert.ok(!hiddenFrom(s, 'ally').has(v.id));
+  const w = ambushSetup([['bidoof', 0, 2]], [[9, 4]]);
+  const v2 = w.at(9, 4); v2.revealed = true; // 맞음
+  assert.notDeepEqual(ambushPlan(w.s, v2).moveTo, { x: 9, y: 4 });
+  assert.equal(v2.ambush, 'awake');
+});
+
+test('awake voltorb rushes the nearest ally and always self-destructs when it can reach one', () => {
+  const { s, at } = ambushSetup([['bidoof', 2, 2], ['bidoof', 2, 4]], [[5, 2]]);
+  const v = at(5, 2); v.ambush = 'awake';
+  const plan = ambushPlan(s, v);
+  assert.equal(plan.attack?.moveId, 'self-destruct');
+  const d = (p, q) => Math.abs(p.x - q.x) + Math.abs(p.y - q.y);
+  assert.ok(Math.max(Math.abs(plan.moveTo.x - 2), Math.abs(plan.moveTo.y - 2)) <= 1 && Math.max(Math.abs(plan.moveTo.x - 2), Math.abs(plan.moveTo.y - 4)) <= 1, JSON.stringify(plan.moveTo)); // 둘 다 맞는 자리
+  const far = ambushSetup([['bidoof', 0, 0]], [[11, 5]]);
+  const fv = far.at(11, 5); fv.ambush = 'awake';
+  const p2 = ambushPlan(far.s, fv);
+  assert.equal(p2.attack, null);
+  assert.ok(d(p2.moveTo, { x: 0, y: 0 }) < d(fv, { x: 0, y: 0 }) - 2); // 전력으로 다가감
+});
+
+test('power floors place 2 ambush voltorbs (3 on the last two floors), 12 levels under the floor, away from the start', () => {
+  for (let seed = 1; seed <= 12; seed++) for (const floor of [1, PP.floors - 1, PP.floors]) {
+    const f = generateFloor(PP, floor, seed * 131);
+    const am = f.enemies.filter((e) => e.ambush);
+    assert.equal(am.length, floor >= PP.floors - 1 ? 3 : 2, `${seed}/${floor}`);
+    for (const e of am) {
+      assert.equal(e.species, 'voltorb');
+      assert.equal(e.level, PP.baseLevel[floor - 1] - 12);
+      assert.ok(e.x >= 8 && f.tiles[e.y][e.x] === '.');
+    }
+    const spots = f.enemies.map((e) => `${e.x},${e.y}`);
+    assert.equal(new Set(spots).size, spots.length);
+  }
+});

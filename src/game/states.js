@@ -12,6 +12,7 @@ import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims }
 import { hiddenFrom, seenOnly } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { huntPlan } from '../core/hunt.js';
+import { ambushPlan } from '../core/ambush.js';
 import { canSee, seenCells } from '../core/vision.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance, terrainCtx } from '../core/damage.js';
@@ -442,7 +443,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
     // 깊은 동굴: 아무도 못 보면 순찰·추적·수색 (core/hunt.js), 보이면 그 적이 보는 아군만 노림
     const blind = st.dark ? new Set(allyUnits().filter((a) => !canSee(u, a)).map((a) => a.id)) : new Set();
-    const plan = (st.dark && huntPlan(st, u, rng)) || planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy', { dark: false }), ...blind]) }); // 안개 + 수풀에 숨은 악 타입 아군
+    const plan = (u.ambush && ambushPlan(st, u)) || (st.dark && huntPlan(st, u, rng)) || planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy', { dark: false }), ...blind]) }); // 안개 + 수풀에 숨은 악 타입 아군
     if (u.sealed) plan.attack = null; // 풀죽음: 이번 차례 기술 봉인 (이동만)
     // 안개: 이동한 뒤에도 안개 속이면 기술을 쓰지 않는다 (대사로 정체가 드러나지 않게)
     if (st.weather === 'fog' && plan.attack && isHidden(plan.moveTo, allyUnits())) plan.attack = null;

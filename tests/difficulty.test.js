@@ -85,7 +85,7 @@ test('same seeds keep terrain, chests, stairs, ally slots and weather (enemies o
 test('generated floors place the rolled enemies (minus missing spots) plus the boss', () => {
   for (const d of DUNGEONS) for (let seed = 1; seed <= 60; seed++) for (const f of [1, d.floors]) {
     const m = generateFloor(d, f, seed);
-    const normal = m.enemies.filter((e) => !e.boss);
+    const normal = m.enemies.filter((e) => !e.boss && !e.ambush); // 발전소 기습 찌리리공은 예산 밖
     const rolled = rollEnemies(d, f, seed);
     assert.ok(normal.length <= rolled.length && normal.length >= Math.min(2, rolled.length), `${d.id} ${f} ${seed}`);
     assert.deepEqual(normal.map((e) => e.species), rolled.slice(0, normal.length).map((e) => e.species));
