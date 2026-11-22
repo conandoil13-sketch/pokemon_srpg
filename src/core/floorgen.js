@@ -105,7 +105,7 @@ export function generateFloor(dungeon, floor, seed) {
   }
 
   // 3a. 시티: 3×2 건물 (별도 난수 — 다른 던전은 결과·난수 소비 그대로). 도로가 안 끊길 때만
-  if (dungeon.city) cityBlocks(g, anchor, createRng(hashSeed(seed, 5000)));
+  if (dungeon.city) { cityParks(g, anchor, createRng(hashSeed(seed, 5050))); cityBlocks(g, anchor, createRng(hashSeed(seed, 5000))); } // 공원 먼저 (나무는 공원 안에만)
 
   const used = new Set();
   const take = (p) => { used.add(key(p.x, p.y)); return p; };
@@ -282,14 +282,44 @@ function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
   return out;
 }
 
+// 시티 공원: 잔디(") 직사각형 4~5 × 3~4, 모서리와 가장자리 몇 칸에 나무(#). 나무는 길을 안 끊을 때만. 큰 맵은 하나 더
+function cityParks(g, anchor, rng) {
+  const W = g[0].length, H = g.length, want = W * H > 220 ? 3 : 2;
+  let made = 0;
+  for (let tries = 0; tries < 60 && made < want; tries++) {
+    const w = 4 + Math.floor(rng() * 2), h = 3 + Math.floor(rng() * 2);
+    const x0 = SAFE_COLS + 1 + Math.floor(rng() * (W - w - SAFE_COLS)), y0 = Math.floor(rng() * (H - h + 1));
+    if (x0 + w > W) continue;
+    let ok = true;
+    for (let y = y0 - 1; y <= y0 + h && ok; y++) for (let x = x0 - 1; x <= x0 + w && ok; x++) if (g[y]?.[x] !== undefined && g[y][x] !== '.') ok = false;
+    if (!ok) continue;
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) g[y][x] = '"';
+    const edge = [];
+    for (let y = y0; y < y0 + h; y++) for (let x = x0; x < x0 + w; x++) {
+      const corner = (x === x0 || x === x0 + w - 1) && (y === y0 || y === y0 + h - 1), side = x === x0 || x === x0 + w - 1 || y === y0 || y === y0 + h - 1;
+      if (corner || (side && rng() < 0.3)) edge.push({ x, y });
+    }
+    let size = reachableFrom(g.map((r) => r.join('')), anchor).size;
+    for (const p of edge) {
+      g[p.y][p.x] = '#';
+      const now = reachableFrom(g.map((r) => r.join('')), anchor).size;
+      if (now !== size - 1) g[p.y][p.x] = '"'; else size = now;
+    }
+    made++;
+  }
+}
+
 // 시티 건물: 3×2, 둘레 한 칸엔 다른 건물 없음(골목), 출발 3열 + 한 칸 밖. 바닥 '.' 위에만, 놓아도 도로가 안 끊길 때만. 면적 약 30% 목표
 export const BLOCK_W = 3, BLOCK_H = 2;
 function cityBlocks(g, anchor, rng) {
   const W = g[0].length, H = g.length, want = Math.round((W * H * 0.3) / (BLOCK_W * BLOCK_H));
   let size = reachableFrom(g.map((r) => r.join('')), anchor).size, placed = 0;
-  for (let tries = 0; tries < 400 && placed < want; tries++) {
-    const x0 = SAFE_COLS + 1 + Math.floor(rng() * (W - BLOCK_W - SAFE_COLS)), y0 = Math.floor(rng() * (H - BLOCK_H + 1));
-    let ok = x0 + BLOCK_W <= W;
+  const spots = [];
+  for (let y0 = 0; y0 + BLOCK_H <= H; y0++) for (let x0 = SAFE_COLS + 1; x0 + BLOCK_W <= W; x0++) spots.push({ x0, y0 });
+  for (const { x0, y0 } of spots) { // 위 줄부터 차례로 (거리처럼 줄지어 빽빽하게), 자리마다 30% 는 건너뛰어 빈터·광장을 남김
+    if (placed >= want) break;
+    if (rng() < 0.3) continue;
+    let ok = true;
     for (let y = y0 - 1; y <= y0 + BLOCK_H && ok; y++) for (let x = x0 - 1; x <= x0 + BLOCK_W && ok; x++) {
       const inside = x >= x0 && x < x0 + BLOCK_W && y >= y0 && y < y0 + BLOCK_H;
       if (inside) ok = g[y][x] === '.';

@@ -203,3 +203,19 @@ test('a walker fainting on spikes does not leave the previous warp in the log', 
   assert.equal(b.hp, 0);
   assert.equal(s.log.warp, null);
 });
+
+test('city trees only grow in parks (next to lawn), never alone on the road', () => {
+  let trees = 0, lawns = 0;
+  for (const { m } of floors()) {
+    const g = m.tiles;
+    for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) {
+      if (g[y][x] === '"') lawns++;
+      if (g[y][x] !== '#') continue;
+      trees++;
+      let lawn = false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (g[y + dy]?.[x + dx] === '"') lawn = true;
+      assert.ok(lawn, `tree at ${x},${y} is not in a park`);
+    }
+  }
+  assert.ok(trees > 0 && lawns > 0);
+});

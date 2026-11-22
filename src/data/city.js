@@ -14,7 +14,7 @@ export const CITY = {
   bossTypes: ['poison', 'psychic'],
   early: [],
   fallback: 'grimer',
-  clusters: { '~': 0, '#': 2, '^': 0, '"': [1, 2] }, // 화단·가로수 (건물은 city 단계가 따로)
+  clusters: { '~': 0, '#': 0, '^': 0, '"': 0 }, // 공원(잔디·나무)·건물은 city 단계가 따로
   weather: [{ id: 'rain', chance: 0.15 }, { id: 'fog', chance: 0.1 }],
   piles: [2, 3], // 쓰레기통
   pileSpecies: ['grimer', 'muk', 'koffing', 'weezing', 'stunky', 'skuntank'],
