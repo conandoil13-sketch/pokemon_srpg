@@ -127,6 +127,7 @@ test('volcano floors: lava rivers, 2-3 vents facing a straight run of ground, ba
       assert.equal(T[v.y][v.x], 'V'); assert.ok(v.x >= 3); assert.ok([0, 1, 2].includes(v.phase));
       const [dx, dy] = V4[v.dir];
       for (let i = 1; i <= 4; i++) assert.ok('.v'.includes(T[v.y + dy * i]?.[v.x + dx * i]) && v.x + dx * i >= 3, `seed ${seed}: vent run`);
+      for (const c of steamPath({ grid: T }, v)) assert.ok(c.x >= 3, `seed ${seed}: steam reaches the start columns`);
     }
     for (const c of cells('v')) assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => 'L~'.includes(T[c.y + dy]?.[c.x + dx] ?? '#')), `seed ${seed}: basalt`);
     for (const c of [...cells('L'), ...cells('V'), ...cells('v')]) assert.ok(c.x >= 3, `seed ${seed}: start columns`);
@@ -139,4 +140,30 @@ test('volcano floors: lava rivers, 2-3 vents facing a straight run of ground, ba
   }
   assert.ok(slugOnLava > 0);
   assert.equal(generateFloor(DUNGEONS[0], 1, 1).vents, undefined);
+});
+
+const vmap = (tiles, enemies) => ({ tiles, allySlots: [{ x: 0, y: 0 }, { x: 0, y: 2 }], enemies, vents: [{ x: 5, y: 0, dir: 'down', phase: 2 }] });
+const tick = (game, until, sec = 60) => { for (let t = 0; t < sec; t += 0.05) { if (game.mode === 'notice') game.handle({ type: 'confirm' }); game.update(0.05); if (until()) return true; } return false; };
+
+test('scene: basalt knocking out the last real ally while a bot is still unsettled ends the battle (no loop)', async () => {
+  const { createGame } = await import('../src/game/states.js');
+  const game = createGame({ rng: createRng(3), map: vmap(['v....V', '......', '......'], [{ species: 'machop', x: 4, y: 2, level: 5 }]), party: [newMember('bidoof', 40, createRng(1)), newMember('bidoof', 40, createRng(2))], theme: 'volcano' });
+  game.handle({ type: 'confirm' }); tick(game, () => game.mode === 'idle');
+  const s = game.state, [a, b] = s.units.filter((u) => u.side === 'ally');
+  a.x = 0; a.y = 0; a.hp = 1; b.bot = true; b.acted = b.moved = true;
+  assert.doesNotThrow(() => game.handle({ type: 'endTurn' }));
+  assert.ok(tick(game, () => game.mode === 'result')); assert.equal(s.result, 'lose');
+});
+
+test('scene: an enemy releasing a charged move on basalt is burned once', async () => {
+  const { createGame } = await import('../src/game/states.js');
+  const game = createGame({ rng: createRng(3), map: vmap(['.....V', '......', '....vv'], [{ species: 'machop', x: 5, y: 2, level: 40 }]), party: [newMember('bidoof', 5, createRng(1)), newMember('bidoof', 5, createRng(2))], theme: 'volcano' });
+  game.handle({ type: 'confirm' }); tick(game, () => game.mode === 'idle');
+  const s = game.state, e = s.units.find((u) => u.side === 'enemy');
+  let burns = 0; const hp0 = e.hp;
+  e.charging = { moveId: 'solar-beam', targetId: s.units.find((u) => u.side === 'ally').id };
+  game.handle({ type: 'endTurn' });
+  tick(game, () => s.phase === 'player' && s.turn === 2);
+  burns = Math.round((hp0 - e.hp) / Math.max(1, Math.floor(e.maxHp / 12)));
+  assert.ok(burns <= 1, `burned ${burns} times`);
 });

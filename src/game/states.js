@@ -412,6 +412,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     sel = null;
     const idle = terrainEnds() ? unsettled(st, 'ally')[0] : null; // 사막: 행동 안 한·잠든 아군도 차례가 끝나면 모래 판정 (손톱 굴림보다 먼저 — 한 번만 굴리게)
     if (idle) { settleSand(idle, enemyPhase); return; }
+    if (st.result) { mode = 'result'; return; }
     const bonus = speedBonusUnit(st, 'ally');
     const claw = bonus ? null : quickClawUnit(st, 'ally', rng); // 스피드 보너스 다음에 손톱
     const extra = bonus ?? claw;
@@ -463,7 +464,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     const u = st.units.find((o) => o.id === id);
     if (!u) { nextEnemy(); return; } // 기절
-    if (u.acted) { settleSand(u, nextEnemy); return; } // 잠듦·얼음으로 쉬는 중 (사막: 모래는 그래도 민다)
+    if (u.acted) { if (u.sandTurn === st.turn) nextEnemy(); else settleSand(u, nextEnemy); return; } // 모으기 발사로 이미 정산했으면 두 번 안 함 // 잠듦·얼음으로 쉬는 중 (사막: 모래는 그래도 민다)
     // 깊은 동굴: 아무도 못 보면 순찰·추적·수색 (core/hunt.js), 보이면 그 적이 보는 아군만 노림
     const blind = st.dark ? new Set(allyUnits().filter((a) => !canSee(u, a)).map((a) => a.id)) : new Set();
     const plan = (u.ambush && ambushPlan(st, u)) || (st.dark && huntPlan(st, u, rng)) || planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy', { dark: false }), ...blind]) }); // 안개 + 수풀에 숨은 악 타입 아군
@@ -501,8 +502,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   // 화산동굴: 행동을 마친 칸이 현무암이면 열 피해 (core battle.basaltHeat)
   const terrainEnds = () => !!(st.flows || st.vents?.length); // 행동 끝 지형 정산이 있는 맵 (사막·화산동굴)
   function settleSand(u, then) {
-    if (!terrainEnds() || st.result || !u || !st.units.includes(u)) { then(); return; }
-    markSettled(st, u);
+    if (!terrainEnds() || !u || !st.units.includes(u)) { then(); return; }
+    markSettled(st, u); // 결과가 났어도 표시 — 안 그러면 enemyPhase 가 같은 아군을 다시 골라 무한 반복
+    if (st.result) { then(); return; }
     const quiet = u.side !== 'ally' && darkIds().has(u.id);
     if (st.vents?.length) {
       const evs = basaltHeat(st, u);

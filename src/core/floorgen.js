@@ -6,6 +6,7 @@ import { rollWeather } from './weather.js';
 import { encounterPool } from './encounters.js';
 import { rollChestHeld } from '../data/heldItems.js';
 import { SPECIES } from '../data/species.js';
+import { STEAM_RANGE } from './vent.js';
 
 import { DEFAULT_SIZE } from '../data/mapSize.js'; // 후반 던전은 넓음 (data/mapSize.js)
 const WALK = '."^>'; // 땅 타입이 지나갈 수 있는 칸
@@ -342,7 +343,8 @@ function volcanoExtras(g, used, enemies, rng) {
     for (const dir of Object.keys(VEC)) {
       const [dx, dy] = VEC[dir];
       let ok = true;
-      for (let i = 1; i <= 4 && ok; i++) if (!'.v'.includes(g[y + dy * i]?.[x + dx * i] ?? '#') || x + dx * i < SAFE_COLS) ok = false; // 출발 구역으로는 안 뿜음
+      for (let i = 1; i <= 4 && ok; i++) if (!'.v'.includes(g[y + dy * i]?.[x + dx * i] ?? '#') || x + dx * i < SAFE_COLS) ok = false;
+      if (x + dx * STEAM_RANGE < SAFE_COLS) ok = false; // 스팀 6칸 전체가 출발 구역에 닿지 않게
       if (ok) cands.push({ x, y, dir });
     }
   }
