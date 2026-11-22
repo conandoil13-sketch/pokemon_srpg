@@ -1,5 +1,6 @@
 // 기술 범위 모양 (순수). 전투·AI·화면이 모두 이 계산만 쓴다.
 // aim: { unitId } (단일) | { dir } (직선·부채꼴) | { self: true } (주변) | { x, y } (착탄·단일 칸)
+import { hiddenFrom } from './stealth.js';
 export const DIRS = ['up', 'down', 'left', 'right'];
 const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
@@ -79,6 +80,25 @@ export function aimsOf(state, user, move) {
     return out;
   }
   return state.units.filter((u) => u.side !== user.side && u.hp > 0 && dist(u, user) >= lo && dist(u, user) <= hi).map((u) => ({ unitId: u.id }));
+}
+
+// 기억으로 겨냥 (악 수풀 숨기): 쓰는 쪽에게 숨은 상대가 하나라도 있으면, 비어 보이는 수풀 칸(숨은 상대 칸 포함)을 덮는 조준
+// 숨은 상대가 없으면 [] (위치는 알려 주지 않음 — 어딘가 숨어 있다는 것만)
+export function guessAims(state, user, move) {
+  const hidden = hiddenFrom(state, user.side);
+  if (!hidden.size) return [];
+  const looksEmpty = (t) => state.grid[t.y]?.[t.x] === '"' && !state.units.some((u) => u.x === t.x && u.y === t.y && !hidden.has(u.id));
+  const covers = (aim) => tilesOf(state, user, move, aim).some(looksEmpty);
+  const type = move.shape?.type ?? 'single';
+  if (type === 'around') return covers({ self: true }) ? [{ self: true }] : [];
+  if (type === 'line' || type === 'cone') return DIRS.filter((dir) => covers({ dir })).map((dir) => ({ dir }));
+  const [lo, hi0] = aimRangeOf(move), hi = hi0 + sniperBonus(user, hi0), out = [];
+  for (let y = user.y - hi; y <= user.y + hi; y++) for (let x = user.x - hi; x <= user.x + hi; x++) {
+    const d = dist(user, { x, y });
+    if (d < lo || d > hi || !inMap(state, x, y)) continue;
+    if (type === 'blast' ? covers({ x, y }) : looksEmpty({ x, y })) out.push({ x, y });
+  }
+  return out;
 }
 
 // 적 수 − 같은 편 수가 가장 큰 조준 (동점은 앞쪽)
