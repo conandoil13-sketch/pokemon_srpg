@@ -10,11 +10,11 @@ test('eight filler stages follow the curve and alternate field and cave', () => 
   const t = DUNGEONS.slice(2);
   assert.equal(FILLER_COUNT, 8);
   assert.equal(t.length, 8);
-  assert.deepEqual(t.map((d) => d.theme), ['autumn', 'cave', 'field', 'cave', 'field', 'cave', 'field', 'cave']); // 1번 자리 = 단풍 숲
+  assert.deepEqual(t.map((d) => d.theme), ['autumn', 'beach', 'field', 'cave', 'field', 'cave', 'field', 'cave']); // 1번 = 단풍 숲, 2번 = 해변
   assert.deepEqual(t.map((d) => d.floors), [7, 7, 8, 8, 8, 9, 9, 9]);
   assert.deepEqual(t.map((d) => d.baseLevel[0]), [23, 30, 37, 44, 51, 58, 65, 72]);
   assert.deepEqual(t.map((d) => d.levelCap), [31, 38, 45, 52, 59, 66, 73, 80]);
-  assert.equal(t[0].name, '단풍 숲'); assert.equal(t[1].name, '시련의 동굴 Ⅰ'); assert.equal(t[7].name, '시련의 동굴 Ⅳ');
+  assert.equal(t[0].name, '단풍 숲'); assert.equal(t[1].name, '해변'); assert.equal(t[7].name, '시련의 동굴 Ⅳ');
   assert.equal(t[0].unlock, 'sinnoh-cave'); assert.equal(t[1].unlock, 'autumn-forest');
 });
 test('a replaced slot keeps the unlock chain in order', () => {
