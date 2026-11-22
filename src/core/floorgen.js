@@ -191,8 +191,11 @@ export function generateFloor(dungeon, floor, seed) {
   // 10. 발전소 찌리리공 기습 (별도 난수): 2마리, 마지막 두 층 3마리. 가벽·고철더미 옆 바닥 먼저
   if (dungeon.ambush) enemies.push(...placeAmbush(dungeon, floor, g, used, createRng(hashSeed(seed, 7100))));
 
+  // 11. 사막 모래 (별도 난수, 맨 끝): 빈 바닥 '.' 만 덮음 — 모래는 누구나 걸을 수 있어 길·자리 배치는 그대로
+  const flows = dungeon.desert ? desertLayout(g, used, createRng(hashSeed(seed, 7200))) : null;
+
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed), ...(dungeon.dark ? { dark: true } : {}),
-    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}) };
+    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}), ...(flows ? { flows } : {}) };
 }
 
 // 바다 띠: 위 또는 아래 가장자리, 열마다 깊이 D 또는 D+1 (D = H/4 반올림), 출발 3열 제외.
@@ -299,6 +302,45 @@ function placeAmbush(dungeon, floor, g, used, rng) {
   const order = [...free.filter(cover), ...free.filter((p) => !cover(p))];
   const level = dungeon.baseLevel[floor - 1] - dungeon.ambush.drop;
   return order.slice(0, want).map((p) => { used.add(key(p.x, p.y)); return { species: dungeon.ambush.species, level, x: p.x, y: p.y, ambush: true }; });
+}
+
+// 사막: 모래지옥 3×3 (가운데 '@', 둘레 'o') 1개·넓은 맵 2개 → 흐르는 모래 띠 '=' 2~3줄 (3~6칸, 띠 방향으로 흐름) → 깊은 모래 ':' 덩어리
+// 모두 빈 바닥 '.'(자리 잡힌 칸 제외)만, 출발 3열과 그 옆 한 열 밖. 반환 flows { "x,y": dir }
+function desertLayout(g, used, rng) {
+  const W = g[0].length, H = g.length, int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+  const free = (x, y) => x > SAFE_COLS && y >= 0 && x < W && y < H && g[y][x] === '.' && !used.has(key(x, y));
+  const pits = W * H > 220 ? 2 : 1;
+  for (let made = 0, tries = 0; made < pits && tries < 400; tries++) {
+    const cx = int(SAFE_COLS + 2, W - 2), cy = int(1, H - 2);
+    let ok = true; // 3×3 + 둘레 한 칸이 비어 있어야 (끌려가는 길이 막히지 않게)
+    for (let y = cy - 1; y <= cy + 1 && ok; y++) for (let x = cx - 1; x <= cx + 1 && ok; x++) if (!free(x, y)) ok = false;
+    for (let y = cy - 2; y <= cy + 2 && ok; y++) for (let x = cx - 2; x <= cx + 2 && ok; x++) if ('o@'.includes(g[y]?.[x] ?? '')) ok = false;
+    if (!ok) continue;
+    for (let y = cy - 1; y <= cy + 1; y++) for (let x = cx - 1; x <= cx + 1; x++) g[y][x] = x === cx && y === cy ? '@' : 'o';
+    made++;
+  }
+  const flows = {};
+  const want = 2 + (rng() < 0.5 ? 1 : 0);
+  for (let made = 0, tries = 0; made < want && tries < 400; tries++) {
+    const horiz = rng() < 0.6, len = int(3, 6), dir = horiz ? (rng() < 0.5 ? 'right' : 'left') : rng() < 0.5 ? 'down' : 'up';
+    const x0 = int(SAFE_COLS + 1, W - 1), y0 = int(0, H - 1);
+    const cells = Array.from({ length: len }, (_, i) => (horiz ? { x: x0 + i, y: y0 } : { x: x0, y: y0 + i }));
+    if (!cells.every((c) => free(c.x, c.y))) continue;
+    const near = (c) => DIRS.some(([dx, dy]) => g[c.y + dy]?.[c.x + dx] === '='); // 다른 띠와 붙지 않게
+    if (cells.some(near)) continue;
+    for (const c of cells) { g[c.y][c.x] = '='; flows[key(c.x, c.y)] = dir; }
+    made++;
+  }
+  const patches = Math.round(4 * Math.max(1, (W * H) / 192));
+  for (let i = 0; i < patches; i++) {
+    let x = int(SAFE_COLS + 1, W - 1), y = int(0, H - 1);
+    for (let n = int(4, 9); n > 0; n--) {
+      if (free(x, y)) g[y][x] = ':';
+      const [dx, dy] = DIRS[Math.floor(rng() * 4)];
+      x = Math.min(W - 1, Math.max(SAFE_COLS + 1, x + dx)); y = Math.min(H - 1, Math.max(0, y + dy));
+    }
+  }
+  return flows;
 }
 
 // 발전소 발전기: 바닥 '.' 2×2 를 'G' 로. 출발 3열 밖, 다른 발전기와 맨해튼 3칸 이상, 놓아도 나머지 칸이 다 이어질 때만. 위상은 번갈아
