@@ -79,6 +79,23 @@ test('spotting: an ally within 2 starts the chase and leaves the normal AI in ch
   assert.deepEqual(e.hunt.last, { x: 5, y: 3 });
 });
 
+test('relay: a fresh sighting tells only the nearest enemy that knows nothing; it passes it on when it sees too', () => {
+  const rows = Array.from({ length: 7 }, () => '..................');
+  const { s, at } = setup([['geodude', 5, 3]], [['geodude', 7, 3], ['geodude', 11, 3], ['geodude', 15, 3], ['onix', 9, 0, true]], { rows });
+  const spotter = at(7, 3), near = at(11, 3), far = at(15, 3), boss = at(9, 0);
+  huntPlan(s, spotter, () => 0.1);
+  assert.equal(near.hunt?.mode, 'track');
+  assert.deepEqual(near.hunt.goal, { x: 5, y: 3 });
+  assert.equal(far.hunt, undefined); // 한 명에게만
+  assert.notEqual(boss.hunt?.mode, 'track'); // 보스는 제외
+  huntPlan(s, spotter, () => 0.1); // 계속 보고 있는 동안은 다시 알리지 않음
+  assert.equal(far.hunt, undefined);
+  near.x = 6; near.y = 4; // 도착해서 직접 봄 → 다음 적에게 넘김
+  huntPlan(s, near, () => 0.1);
+  assert.equal(near.hunt.mode, 'chase');
+  assert.equal(far.hunt?.mode, 'track');
+});
+
 test('losing sight rolls once: 60% track to the real spot, 40% lose the trail at the last seen cell', () => {
   assert.equal(TRACK_CHANCE, 0.6);
   for (const [roll, mode] of [[0.59, 'track'], [0.6, 'lost']]) {

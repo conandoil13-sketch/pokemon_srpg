@@ -36,6 +36,14 @@ function toward(state, u, goal, budget = null) {
   return best;
 }
 
+// 정보 전달: 발견한 적이 아무것도 모르는 가장 가까운 적 하나에게 아군 위치를 알림 → 그 적이 와서 직접 보면 또 다음 적에게
+function relay(state, u, target) {
+  const uninformed = state.units.filter((o) => o !== u && o.side === u.side && o.hp > 0 && !o.boss && !['chase', 'track'].includes(o.hunt?.mode));
+  if (!uninformed.length) return;
+  const n = uninformed.reduce((m, o) => (manhattan(u, o) < manhattan(u, m) ? o : m));
+  n.hunt = { mode: 'track', goal: { x: target.x, y: target.y } };
+}
+
 const stay = (u) => ({ moveTo: { x: u.x, y: u.y }, attack: null });
 
 export function huntPlan(state, u, rng = Math.random) {
@@ -43,6 +51,7 @@ export function huntPlan(state, u, rng = Math.random) {
   const seen = foes.filter((a) => canSee(u, a));
   if (seen.length) {
     const t = seen.reduce((m, a) => (manhattan(u, a) < manhattan(u, m) ? a : m));
+    if (u.hunt?.mode !== 'chase') relay(state, u, t); // 새로 발견했을 때만 한 명에게 알림
     u.hunt = { mode: 'chase', last: { x: t.x, y: t.y }, targetId: t.id };
     return null;
   }
