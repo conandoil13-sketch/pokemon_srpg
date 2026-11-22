@@ -26,7 +26,7 @@ function basePool(dungeon, floor, { boss = false } = {}) {
       .map((s) => s.key)
       .sort();
     if (pool.length) {
-      if (!boss) return [...new Set([...pool, ...(dungeon.early ?? []).filter((k) => SPECIES[k].stage <= stageCap)])].sort();
+      if (!boss) return [...new Set([...pool, ...[...(dungeon.early ?? []), ...(dungeon.signature ?? [])].filter((k) => SPECIES[k].stage <= stageCap)])].sort(); // signature: 고유종 (사막 선인왕 계열)
       // 보스: 그 층 상한 단계를 우선. bossTypes 가 있으면 그 타입만 (해변: 물·얼음)
       const typed = dungeon.bossTypes ? pool.filter((k) => SPECIES[k].types.some((t) => dungeon.bossTypes.includes(t))) : pool;
       if (!typed.length) { stageCap = Math.min(2, stageCap + 1); bstCap += 50; continue; }
