@@ -86,3 +86,33 @@ test('enemy AI ignores allies hidden in grass', () => {
   const plan = planEnemyAction(s, foe, { unseen });
   assert.equal(plan.attack, null);
 });
+
+test('a status move aimed at the other side also reveals; self moves do not', () => {
+  const { s, at } = setup([['pikachu', 1, 2]], [['umbreon', 6, 2]]);
+  const um = at(6, 2);
+  um.moves = ['swords-dance', 'leer'];
+  applyMove(s, um.id, 'swords-dance', { self: true }, hit);
+  assert.equal(darkHidden(s, um), true);
+  um.acted = false;
+  applyMove(s, um.id, 'leer', at(1, 2).id, hit);
+  assert.equal(darkHidden(s, um), false);
+});
+
+test('walking into a hidden foe stops one tile short and reveals it', async () => {
+  const { createGame } = await import('../src/game/states.js');
+  const tiles = ['##########', '##########', '....""""".', '##########'];
+  const map = { tiles, allySlots: [{ x: 3, y: 2 }], enemies: [{ species: 'umbreon', x: 7, y: 2, level: 5 }] };
+  const game = createGame({ rng: createRng(3), map, party: [newMember('ponyta', 40, createRng(1))], theme: 'field' });
+  const s = game.state, p = s.units[0], um = s.units[1];
+  for (let i = 0; i < 200; i++) { game.update(0.05); if (game.mode === 'idle') break; game.handle({ type: 'confirm' }); }
+  assert.equal(game.mode, 'idle');
+  assert.equal(darkHidden(s, um), true);
+  game.handle({ type: 'confirm' }); // 포니타 선택
+  assert.equal(game.mode, 'selected');
+  for (let i = 0; i < 5; i++) game.handle({ type: 'dir', dx: 1, dy: 0 }); // (8,2) — 숨은 블래키 너머
+  game.handle({ type: 'confirm' });
+  for (let i = 0; i < 200 && game.mode !== 'notice'; i++) game.update(0.05);
+  assert.equal(game.mode, 'notice');
+  assert.deepEqual([p.x, p.y], [6, 2]);
+  assert.equal(darkHidden(s, um), false);
+});
