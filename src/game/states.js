@@ -158,6 +158,7 @@ export function phaseNotices(events, expired, get) {
   return [...events.filter((e) => !START_EVENTS.includes(e.kind)).map(one), ...exp, ...events.filter((e) => START_EVENTS.includes(e.kind)).map(one)];
 }
 
+const WARP_BLUE = ['#102040', '#2050c0', '#50a0ff', '#b0e0ff', '#ffffff'], WARP_ORANGE = ['#402010', '#c05010', '#ff9030', '#ffd090', '#ffffff']; // 워프 반짝임
 const CHAIN_SPARK = ['#1a2050', '#2c58c8', '#4a9cff', '#8ad8ff', '#e8f870', '#fffbc0', '#ffffff'], CHAIN_FIRE = ['#4a1712', '#c9281f', '#f2561d', '#ff8a2a', '#ffe26b', '#fff3a6', '#ffffff']; // 연쇄 번쩍임
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
@@ -855,7 +856,12 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         mode = prevMode;
         const end = path.at(-1);
         const cost = path.slice(1).reduce((c, p, i) => c + (st.grid[p.y][p.x] === '#' ? 1 : st.grid[p.y][p.x] === 'B' && st.grid[path[i].y][path[i].x] !== 'B' ? 2 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용 (옥상 오르기 2)
-        moveUnit(st, unit.id, end.x, end.y, cost, path);
+        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: unit.side === 'ally' });
+        const warp = st.log.warp; // 시티 워프: 짝 타일로 날아감 (취소 불가)
+        if (warp) {
+          moveLocked = true; cursor = { ...warp.to };
+          for (const p of [warp.from, warp.to]) try { fxm.spawn({ id: 'impacts/hit-spark', opts: { palette: warp.color === 'blue' ? WARP_BLUE : WARP_ORANGE, light: 1.2, seed: p.x * 5 + p.y }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 6 }); } catch { /* 연출 실패는 무시 */ }
+        }
         const get = (id) => everyone.get(id);
         const quiet = unit.side !== 'ally' && darkIds().has(unit.id); // 숨은 채 도착한 악 타입: 알림 없음
         const arriveLines = st.units.includes(unit) && !quiet ? abilityNotices(st.log.arriveAbilityEvents, get) : [];
@@ -865,7 +871,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const bumpLines = bumped ? [{ lines: [`수풀에 ${josa(unitLabel(bumped), '이/가')} 숨어 있었다!`], at: { x: bumped.x, y: bumped.y }, hp: null }] : [];
         if (bumped && unit.side === 'ally') moveLocked = true;
         bumped = null;
-        noticeChain([...bumpLines, ...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
+        const warpLines = warp ? [{ lines: ['워프 타일이 빛났다!', `${josa(unitLabel(unit), '은/는')} 다른 곳으로 날아갔다!`], at: { ...warp.to }, hp: null }] : [];
+        noticeChain([...warpLines, ...bumpLines, ...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
       }
     } else if (mode === 'anim') {
       anim.update(dt);
