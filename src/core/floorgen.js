@@ -109,6 +109,9 @@ export function generateFloor(dungeon, floor, seed) {
   // 3a. 시티: 3×2 건물 (별도 난수 — 다른 던전은 결과·난수 소비 그대로). 도로가 안 끊길 때만
   if (dungeon.city) { cityParks(g, anchor, createRng(hashSeed(seed, 5050))); cityBlocks(g, anchor, createRng(hashSeed(seed, 5000))); } // 공원 먼저 (나무는 공원 안에만)
 
+  // 3b. 발전소: 2×2 발전기 2~3개 (별도 난수 — 다른 던전은 결과·난수 소비 그대로). 길이 안 끊길 때만
+  const generators = dungeon.power ? powerLayout(g, anchor, createRng(hashSeed(seed, 7000))) : null;
+
   const used = new Set();
   const take = (p) => { used.add(key(p.x, p.y)); return p; };
 
@@ -186,7 +189,7 @@ export function generateFloor(dungeon, floor, seed) {
   const piles = dungeon.piles ? placePiles(dungeon, floor, seed, g, used, allySlots, anchor) : [];
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed), ...(dungeon.dark ? { dark: true } : {}),
-    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}) };
+    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}) };
 }
 
 // 바다 띠: 위 또는 아래 가장자리, 열마다 깊이 D 또는 D+1 (D = H/4 반올림), 출발 3열 제외.
@@ -280,6 +283,27 @@ function placePiles(dungeon, floor, seed, g, used, allySlots, anchor) {
       const h = rollChestHeld(hashSeed(seed, 3100 + out.length));
       out.push({ x: p.x, y: p.y, kind: 'chest', item: h ? `held-${h}` : roll < 0.15 ? 'evoStone' : roll < 0.25 ? powder : roll < 0.7 ? 'candy' : 'coins' });
     }
+  }
+  return out;
+}
+
+// 발전소 발전기: 바닥 '.' 2×2 를 'G' 로. 출발 3열 밖, 다른 발전기와 맨해튼 3칸 이상, 놓아도 나머지 칸이 다 이어질 때만. 위상은 번갈아
+function powerLayout(g, anchor, rng) {
+  const W = g[0].length, H = g.length, want = 2 + (rng() < 0.5 ? 1 : 0), out = [];
+  const cells = [];
+  for (let y = 0; y < H - 1; y++) for (let x = SAFE_COLS; x < W - 1; x++) cells.push({ x, y });
+  for (let i = cells.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [cells[i], cells[j]] = [cells[j], cells[i]]; }
+  const body = (p) => [[0, 0], [1, 0], [0, 1], [1, 1]].map(([dx, dy]) => ({ x: p.x + dx, y: p.y + dy }));
+  const gap = (a, b) => Math.min(...body(a).flatMap((c) => body(b).map((d) => Math.abs(c.x - d.x) + Math.abs(c.y - d.y))));
+  let size = reachableFrom(g.map((r) => r.join('')), anchor).size;
+  for (const p of cells) {
+    if (out.length >= want) break;
+    if (!body(p).every((c) => g[c.y][c.x] === '.') || out.some((o) => gap(o, p) < 3)) continue;
+    for (const c of body(p)) g[c.y][c.x] = 'G';
+    const now = reachableFrom(g.map((r) => r.join('')), anchor).size;
+    if (now !== size - 4) { for (const c of body(p)) g[c.y][c.x] = '.'; continue; } // 길을 끊으면 건너뜀
+    size = now;
+    out.push({ x: p.x, y: p.y, phase: out.length % 2 });
   }
   return out;
 }

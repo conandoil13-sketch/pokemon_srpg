@@ -12,9 +12,10 @@ const sp = (unit) => SPECIES[unit.species];
 const isType = (u, t) => (u.types ?? SPECIES[u.species].types).includes(t);
 
 // 타입별 지형 이득용 상황: 공격자가 선 칸, 맞는 쪽 상하좌우의 같은 편 수
+import { charged, CHARGE_MULT } from './generator.js';
 export function terrainCtx(state, a, d) {
   const guards = state.units.filter((o) => o !== d && o.side === d.side && o.hp > 0 && Math.abs(o.x - d.x) + Math.abs(o.y - d.y) === 1).length;
-  return { atkTile: state.grid[a.y]?.[a.x], guards };
+  return { atkTile: state.grid[a.y]?.[a.x], guards, charged: charged(state, a) }; // 발전소: 발전기에 붙어 섬
 }
 
 export function hitChance(attacker, defender, move, defTile, weather = null, ctx = {}) {
@@ -64,7 +65,8 @@ function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {})
   const burn = physical && attacker.status === 'burn' && !ignoresBurn(attacker) ? 0.5 : 1; // 화상: 물리 데미지 절반 (근성 제외)
   const ab = attackMult(attacker, defender, move, { typeMult, weather }) * defendMult(attacker, defender, move, { typeMult });
   const guard = isType(defender, 'normal') ? 1 - 0.03 * Math.min(4, ctx.guards ?? 0) : 1; // 노말: 옆 아군 1마리당 3% (최대 12%)
-  return { raw: base * stab * typeMult * burn * ab * guard * weatherDamageMult(weather, move, defender), typeMult, blocked };
+  const gen = ctx.charged && move.type === 'electric' && isType(attacker, 'electric') ? CHARGE_MULT : 1; // 발전소: 발전기에 붙은 전기 타입의 전기 기술
+  return { raw: base * stab * typeMult * burn * ab * guard * gen * weatherDamageMult(weather, move, defender), typeMult, blocked };
 }
 
 // spread: 여러 마리를 맞히면 0.75 (본가 4세대)
@@ -93,8 +95,8 @@ export function fixedDamage(attacker, defender, move, weather = null) {
 }
 
 // forceHit: 연속 공격 2타째부터 (명중은 첫 타만)
-export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false, atkTile, guards }) {
-  const ctx = { atkTile, guards };
+export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false, atkTile, guards, charged: chg }) {
+  const ctx = { atkTile, guards, charged: chg };
   if (move.fixedDamage) {
     const fd = fixedDamage(attacker, defender, move, weather);
     if (fd === 0 && move.fixedDamage === 'ohko' && defender.boss) return { hit: true, crit: false, typeMult: 0, damage: 0, ohkoBoss: true }; // 보스 전용 문구

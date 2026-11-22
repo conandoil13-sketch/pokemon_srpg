@@ -53,7 +53,7 @@ test('terrainCtx reads attacker tile and defender neighbours', () => {
   const a = u('machop', 'ally', 0, 0), d = u('snorlax', 'enemy', 2, 0);
   const m1 = u('bidoof', 'enemy', 3, 0), m2 = u('bidoof', 'enemy', 2, 1), foe = u('bidoof', 'ally', 1, 0);
   const state = { grid: ['^...', '....'], units: [a, d, m1, m2, foe] };
-  assert.deepEqual(terrainCtx(state, a, d), { atkTile: '^', guards: 2 });
+  assert.deepEqual(terrainCtx(state, a, d), { atkTile: '^', guards: 2, charged: false });
 });
 
 // ── 2차분: 물·풀 출발 이동력 +1, 고스트 상대 칸 통과 ──

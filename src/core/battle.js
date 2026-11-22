@@ -12,6 +12,7 @@ import { calcDamage, hitChance, confusionDamage, rollHits, terrainCtx } from './
 import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { poolDamage } from './pool.js';
+import { firesAt, genRange, shockDamage } from './generator.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
@@ -93,6 +94,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] }, // defeated: 캡슐 굴림용 쓰러뜨린 적 // 획득 경험치(동료 열쇠별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
+    generators: (mapDef.generators ?? []).map((g) => ({ ...g })), // 발전소 발전기 (칸 문자 'G')
     piles: (mapDef.piles ?? []).map((p) => ({ ...p })), // 열리지 않은 낙엽더미 (칸 문자 '*')
     warps: (mapDef.warps ?? []).map((w) => ({ ...w, to: { ...w.to } })), // 시티 워프 타일 (core/warp.js)
     bossFloor: units.some((u) => u.boss),
@@ -879,6 +881,26 @@ export function quickClawUnit(state, side, rng) {
   return null;
 }
 
+// 발전기 방출: 범위 안 유닛 모두 (양쪽). 축전 회복 · 전기엔진/피뢰침 능력치 +1
+function pulseGenerators(state, events, abilityLog) {
+  state.log.pulsed = [];
+  const hit = new Set();
+  for (const g of state.generators ?? []) if (firesAt(g, state.turn)) for (const p of genRange(state, g)) hit.add(`${p.x},${p.y}`);
+  if (!hit.size) return;
+  state.log.pulsed = (state.generators ?? []).filter((g) => firesAt(g, state.turn)).map((g) => ({ x: g.x, y: g.y }));
+  for (const u of [...state.units]) {
+    if (u.hp <= 0 || !hit.has(`${u.x},${u.y}`)) continue;
+    const r = shockDamage(u);
+    if (!r) continue;
+    if (r.heal) { if (canHeal(u) && u.hp < u.maxHp) { u.hp = Math.min(u.maxHp, u.hp + r.heal); abilityLog.push({ unitId: u.id, ability: r.ability }); } continue; }
+    if (r.boost) { applyStageChange(u, r.boost, 1); abilityLog.push({ unitId: u.id, ability: r.ability }); continue; }
+    const hpBefore = u.hp;
+    u.hp = Math.max(0, u.hp - r.damage);
+    events.push({ unitId: u.id, kind: r.kind, damage: r.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
+    if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); }
+  }
+}
+
 export function endPhase(state, rng = Math.random) {
   state.bonusGiven = false; // 다음 페이즈는 다시 보너스 가능
   state.quickGiven = false;
@@ -952,6 +974,7 @@ export function endPhase(state, rng = Math.random) {
       if (f.hp === 0) { knockOut(state, f, null); events.push({ unitId: f.id, kind: 'fainted' }); }
     }
   }
+  if (ending === 'enemy') pulseGenerators(state, events, abilityLog); // 발전소: 이번 라운드 차례인 발전기 방출
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
   for (const u of state.units) if (u.burrow && u.side !== ending) u.burrow = null; // 숨기: 상대 페이즈가 끝나면 나옴
   tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
