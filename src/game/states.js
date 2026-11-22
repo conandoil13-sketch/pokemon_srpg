@@ -17,6 +17,7 @@ import { MOVES } from '../data/moves.js';
 import { drawMap, drawChest, TILE } from '../render/tiles.js';
 import { bakeAutumnGround, drawAutumnMap } from '../render/autumnTiles.js';
 import { bakeBeachGround, drawBeachMap } from '../render/beachTiles.js';
+import { bakeCityGround, drawCityMap } from '../render/cityTiles.js';
 import { tideFor, tidePreview } from '../core/tide.js';
 const SAND_BURST = ['#7a5a2a', '#c8a868', '#dcc084', '#f6e4b4', '#ffffff']; // 모래더미가 터질 때
 import { leafRoute } from '../core/leafRoute.js';
@@ -158,6 +159,8 @@ export function phaseNotices(events, expired, get) {
   return [...events.filter((e) => !START_EVENTS.includes(e.kind)).map(one), ...exp, ...events.filter((e) => START_EVENTS.includes(e.kind)).map(one)];
 }
 
+const TRASH_BURST = ['#20382a', '#3e7050', '#7a8a70', '#b8b8a0', '#e8e8d8']; // 쓰레기통 열림
+const WARP_BLUE = ['#102040', '#2050c0', '#50a0ff', '#b0e0ff', '#ffffff'], WARP_ORANGE = ['#402010', '#c05010', '#ff9030', '#ffd090', '#ffffff']; // 워프 반짝임
 const CHAIN_SPARK = ['#1a2050', '#2c58c8', '#4a9cff', '#8ad8ff', '#e8f870', '#fffbc0', '#ffffff'], CHAIN_FIRE = ['#4a1712', '#c9281f', '#f2561d', '#ff8a2a', '#ffe26b', '#fff3a6', '#ffffff']; // 연쇄 번쩍임
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
 
@@ -231,7 +234,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null;
+  let autumnGround = null, beachGround = null, cityGround = null;
   function reset() {
     st = createBattle(map, party, { hpRatio });
     st.grid.trees = (theme ?? 'field') !== 'cave'; // 벽이 나무인 맵: 유연이 지나갈 수 있음
@@ -243,6 +246,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       st.leafTiles = route;
       if (typeof document !== 'undefined') try { autumnGround = bakeAutumnGround(map.tiles, route); } catch { autumnGround = null; }
     }
+    if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
     if (theme === 'beach' && typeof document !== 'undefined') { try { beachGround = bakeBeachGround(map.tiles); } catch { beachGround = null; } } // 해변: 모래 바닥 (물은 매 프레임)
     mode = 'banner';
     const first = st.units.find((u) => u.side === 'ally');
@@ -515,9 +519,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     } else nextEnemy();
   }
 
-  function startWalk(unit, path, onDone, onDead = null) {
+  function startWalk(unit, path, onDone, onDead = null, warp = false) { // warp: 플레이어가 고른 아군 이동만 워프를 탄다 (모으기 돌진·봇은 안 탐)
     path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
-    walk = { unit, path, t: 0, onDone, onDead, prevMode: mode };
+    walk = { unit, path, t: 0, onDone, onDead, prevMode: mode, warp };
     if (unit.side === 'ally' && path.length > 1) { // 도착할 칸 표시 (도착하면 사라짐)
       const end = path.at(-1);
       fxm.unfollow('moveMarker');
@@ -588,10 +592,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!a.piles?.length) { then(); return; }
     for (const p of a.piles) {
       if (p.unitId) { const e = st.units.find((u) => u.id === p.unitId); if (e) { everyone.set(e.id, e); facing[e.id] = DIR.Left; requestSprites([e.species]); } } // 미리 못 받았어도 여기서
-      try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y, ...(theme === 'beach' ? { palette: SAND_BURST } : {}) }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
+      try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y, ...(theme === 'beach' ? { palette: SAND_BURST } : theme === 'city' ? { palette: TRASH_BURST } : {}) }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
     }
     if (a.piles.some((p) => p.kind === 'chest')) sound.jingle('item');
-    noticeChain(pileNotices(a.piles, unit, (id) => everyone.get(id), theme === 'beach' ? '모래' : '낙엽'), then);
+    noticeChain(pileNotices(a.piles, unit, (id) => everyone.get(id), theme === 'beach' ? '모래' : theme === 'city' ? '쓰레기통' : '낙엽'), then);
   }
 
   // 아군 이동 완료: 낙엽더미 → 상자 열기 → 행동 메뉴, 계단 → 즉시 층 클리어 (취소 불가)
@@ -725,7 +729,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
             if (a.item) { showNotice(['보물상자를 열었다!', `${josa(ITEM_NAME[a.item] ?? '아이템', '을/를')} 얻었다!`], finishAllyAction); return; }
             finishAllyAction();
             });
-          });
+          }, null, true);
         }
         return;
       }
@@ -743,7 +747,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         }
         if (ev.type === 'cancel') { sel = null; mode = 'idle'; return; }
         if (pick && reach.has(`${cursor.x},${cursor.y}`)) {
-          startWalk(sel, allyPath(sel, cursor.x, cursor.y), afterAllyMove);
+          startWalk(sel, allyPath(sel, cursor.x, cursor.y), afterAllyMove, null, true);
         }
         return;
       }
@@ -850,12 +854,17 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       }
       if (walk.t >= STEP * (walk.path.length - 1)) {
         fxm.unfollow('moveMarker');
-        const { onDone, onDead, prevMode, unit, path } = walk;
+        const { onDone, onDead, prevMode, unit, path, warp: canWarp } = walk;
         walk = null;
         mode = prevMode;
         const end = path.at(-1);
-        const cost = path.slice(1).reduce((c, p) => c + (st.grid[p.y][p.x] === '#' ? 1 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용
-        moveUnit(st, unit.id, end.x, end.y, cost, path);
+        const cost = path.slice(1).reduce((c, p, i) => c + (st.grid[p.y][p.x] === '#' ? 1 : st.grid[p.y][p.x] === 'B' && st.grid[path[i].y][path[i].x] !== 'B' ? 2 : TILE_COST[st.grid[p.y][p.x]] ?? 1), 0); // 치고 빠지기용 이동 비용 (옥상 오르기 2)
+        moveUnit(st, unit.id, end.x, end.y, cost, path, { warp: canWarp && unit.side === 'ally' });
+        const warp = st.log.warp; // 시티 워프: 짝 타일로 날아감 (취소 불가)
+        if (warp) {
+          moveLocked = true; cursor = { ...warp.to };
+          for (const p of [warp.from, warp.to]) try { fxm.spawn({ id: 'impacts/hit-spark', opts: { palette: warp.color === 'blue' ? WARP_BLUE : WARP_ORANGE, light: 1.2, seed: p.x * 5 + p.y }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 6 }); } catch { /* 연출 실패는 무시 */ }
+        }
         const get = (id) => everyone.get(id);
         const quiet = unit.side !== 'ally' && darkIds().has(unit.id); // 숨은 채 도착한 악 타입: 알림 없음
         const arriveLines = st.units.includes(unit) && !quiet ? abilityNotices(st.log.arriveAbilityEvents, get) : [];
@@ -865,7 +874,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         const bumpLines = bumped ? [{ lines: [`수풀에 ${josa(unitLabel(bumped), '이/가')} 숨어 있었다!`], at: { x: bumped.x, y: bumped.y }, hp: null }] : [];
         if (bumped && unit.side === 'ally') moveLocked = true;
         bumped = null;
-        noticeChain([...bumpLines, ...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
+        const warpLines = warp ? [{ lines: ['워프 타일이 빛났다!', `${josa(unitLabel(unit), '은/는')} 다른 곳으로 날아갔다!`], at: { ...warp.to }, hp: null }] : [];
+        noticeChain([...warpLines, ...bumpLines, ...trapLines, ...arriveLines], () => { mode = prevMode; if (dead) (onDead ?? afterTrapFaint)(unit); else onDone(); });
       }
     } else if (mode === 'anim') {
       anim.update(dt);
@@ -957,6 +967,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (pose?.hidden) continue;
       if (dark.has(u.id) && !pose) continue; // 수풀에 숨은 악 타입: 아예 그리지 않음
       drawShadow(ctx, cx, cy, u.side === 'ally' ? 'rgba(40,80,200,0.45)' : 'rgba(200,40,40,0.45)');
+      if (st.grid[u.y]?.[u.x] === 'B') { ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(Math.round(cx) - 10, Math.round(cy) + 9, 20, 2); } // 옥상: 그림자를 넓게 (높이 티)
       const grey = u.acted && !pose && st.phase === (u.side === 'ally' ? 'player' : 'enemy');
       const walking = walk && walk.unit === u;
       // 쉬는 중: 잠듦은 Sleep 동작(없으면 회색 정지), 얼음은 푸르스름한 정지
@@ -1102,6 +1113,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ctx.translate(-cx, -cy);
     if (autumnGround) drawAutumnMap(ctx, st.grid, autumnGround, cx, cy, W, H);
     else if (beachGround) drawBeachMap(ctx, st.grid, beachGround, cx, cy, W, H);
+    else if (cityGround) drawCityMap(ctx, st.grid, cityGround, cx, cy, W, H, st.warps, time);
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     const tideWarn = tidePreview(st); // 물때 예고: 바뀔 칸에 물결 깜빡임
     if (tideWarn && Math.floor(time * 2) % 2 === 0) { ctx.fillStyle = tideWarn.next > (st.tide ?? 0) ? 'rgba(40,110,220,0.35)' : 'rgba(250,240,200,0.35)'; for (const p of tideWarn.cells) ctx.fillRect(p.x * TILE + 2, p.y * TILE + 9, TILE - 4, 2), ctx.fillRect(p.x * TILE + 4, p.y * TILE + 15, TILE - 8, 2); }

@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity }; // '*' = 열리지 않은 낙엽더미
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1 }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티)
 
 // 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
 const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
@@ -23,6 +23,7 @@ const ab = (who) => (typeof who === 'object' && !who.abilityOff ? who.ability : 
 export function canEnter(tile, who, trees = false, pass = false) {
   if (tile === undefined) return false;
   if (pass && (tile === '#' || tile === '*') && soars(who)) return true;
+  if (tile === 'B') return soars(who); // 건물: 지상에선 벽, 비행·드래곤만 옥상으로 (옥상 안 이동은 search 가 따로)
   if (tile === '*') return false; // 낙엽더미: 누구도 못 들어감
   if (tile === '#') return climbs(who, trees); // 유연·벌레: 나무 통과
   if (tile === '~') {
@@ -53,11 +54,11 @@ function search(grid, units, unit, budgetOverride = null) {
     for (const [dx, dy] of DIRS) {
       const x = cur.x + dx, y = cur.y + dy;
       if (x < 0 || y < 0 || x >= w || y >= h) continue;
-      const tile = grid[y][x];
-      if (!canEnter(tile, unit, !!grid.trees, true)) continue;
+      const tile = grid[y][x], roofWalk = tile === 'B' && grid[cur.y][cur.x] === 'B'; // 옥상 위에서는 누구나 건물 칸끼리 걷는다
+      if (!roofWalk && !canEnter(tile, unit, !!grid.trees, true)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side && !typesOfWho(unit).includes('ghost')) continue; // 고스트: 상대 칸 통과
-      const c = cur.c + tileCost(tile, unit, !!grid.trees);
+      const c = cur.c + (tile === 'B' && !roofWalk ? 2 : tileCost(tile, unit, !!grid.trees)); // 비행·드래곤 옥상 오르기 2
       if (c > budget) continue;
       const k = `${x},${y}`;
       if (best.has(k) && best.get(k) <= c) continue;

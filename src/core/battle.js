@@ -19,6 +19,7 @@ import { tideFor, applyTide } from './tide.js';
 import { chainKind, chainSpread } from './chain.js';
 import { newField, refreshField, tickField, layTraps, stepOn, TRAP_RANGE, FIELD_RADIUS } from './field.js';
 import { pathTo, canEnter, reachable } from './pathfind.js';
+import { useWarp } from './warp.js';
 import { newVolatile, applyEffect, moveBlock, tickEnd, tickStart, moveFor, canHeal, BIND_MOVES, BIND_TURNS, bindCheck } from './volatile.js';
 import { startingMoves } from './learn.js';
 import { newParty, abilityOf } from './progress.js';
@@ -90,6 +91,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
     piles: (mapDef.piles ?? []).map((p) => ({ ...p })), // 열리지 않은 낙엽더미 (칸 문자 '*')
+    warps: (mapDef.warps ?? []).map((w) => ({ ...w, to: { ...w.to } })), // 시티 워프 타일 (core/warp.js)
     bossFloor: units.some((u) => u.boss),
     weather: mapDef.weather ?? null, // 층 날씨 (없으면 null)
     ...newField(), // 오라 · 장판 · 압정 · 날씨 부르기 (층마다 새로)
@@ -129,11 +131,12 @@ const byId = (state, id) => state.units.find((u) => u.id === id);
 
 // cost: 이번 이동의 경로 비용 (치고 빠지기에서 남은 이동력 계산)
 // path: 지나온 칸들 (처음 = 출발 칸). 없으면 경로를 계산한다. 지나는 칸마다 압정 판정, 쓰러지면 그 칸에서 멈춤
-export function moveUnit(state, id, x, y, cost = 0, path = null) {
+export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
   const u = byId(state, id);
   const stayed = u.x === x && u.y === y;
   if (!stayed) u.revealed = false; // 악 수풀 숨기: 움직이면 다시 숨을 수 있음
   state.log.trapEvents = [];
+  state.log.warp = null; // 압정에 쓰러져 일찍 끝나도 지난 워프가 남지 않게
   if (!stayed && state.spikes?.length) {
     let route = path;
     if (!route) { const p = pathTo(state.grid, state.units, u, x, y); route = p.length > 1 && p.at(-1).x === x && p.at(-1).y === y ? p : [{ x: u.x, y: u.y }, { x, y }]; }
@@ -153,6 +156,7 @@ export function moveUnit(state, id, x, y, cost = 0, path = null) {
   u.spent = (u.spent ?? 0) + cost;
   if (!stayed) u.walked = true; // 줌렌즈
   u.x = x; u.y = y; u.moved = true;
+  state.log.warp = opts.warp && !stayed ? useWarp(state, u) : null; // 시티: 걸어서 워프 위에서 멈추면 짝 타일로 (아군만)
   refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
   state.log.arriveAbilityEvents = [];
   // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
