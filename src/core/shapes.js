@@ -29,7 +29,7 @@ export function tilesOf(state, user, move, aim) {
       const len = (s.length ?? 3) + sniperBonus(user, s.length ?? 3);
       for (let i = 1; i <= len; i++) {
         const x = user.x + dx * i, y = user.y + dy * i;
-        if (!inMap(state, x, y) || state.grid[y][x] === '#') break; // 벽에서 멈춤
+        if (!inMap(state, x, y) || state.grid[y][x] === '#' || state.grid[y][x] === 'G') break; // 벽·발전기에서 멈춤
         out.push({ x, y });
       }
       return out;

@@ -12,6 +12,8 @@ import { calcDamage, hitChance, confusionDamage, rollHits, terrainCtx } from './
 import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
 import { poolDamage } from './pool.js';
+import { firesAt, genRange, shockDamage } from './generator.js';
+import { wakeAmbush, AMBUSH_MOVE } from './ambush.js';
 import { typeEffect, immunity, has, magicGuard, weatherChipImmune, phaseEndHp, CONTACT_AILMENT, moveTypeOf, WEATHER_SETTER, REDIRECT, SYNC_AILMENTS, traps } from './abilities.js';
 import { newStatus, inflict, cure, checkAction, phaseStart, phaseEnd, infatuate, moveBudget } from './status.js';
 import { newStages, applyStageChange, tickStages, API_STAT, STAGE_TURNS, AREA_STAGE_TURNS, effectiveStat } from './stages.js';
@@ -30,7 +32,7 @@ import { newParty, abilityOf } from './progress.js';
 export const spec = (unit) => SPECIES[unit.species];
 
 // 유닛 = 종족 + 레벨에서 계산한 능력치 + 기술
-export function makeUnit({ species, side, x, y, level, moves, id, boss, ability, types, base, ivs, gender, weight, memberKey, held = null }) {
+export function makeUnit({ species, side, x, y, level, moves, id, boss, ambush, ability, types, base, ivs, gender, weight, memberKey, held = null }) {
   // 개체값·성별: 아군은 멤버 값, 적은 위치·레벨로 정해지는 무작위 (같은 층이면 같음). 메타몽은 31·성별 없음
   ivs ??= species === 'ditto' ? null : hashIvs(species, x, y, level);
   if (gender === undefined) gender = hashGender(species, x, y, level);
@@ -51,6 +53,7 @@ export function makeUnit({ species, side, x, y, level, moves, id, boss, ability,
     ...newStatus(),
     ...newVolatile(),
     ...(boss ? { boss: true } : {}),
+    ...(ambush ? { ambush: 'hidden' } : {}), // 발전소 찌리리공 기습 (core/ambush.js)
     ...(memberKey !== undefined ? { memberKey } : {}), // 동료: 파티 멤버 열쇠(uid) — 경험치·기절 기록용
   };
 }
@@ -81,6 +84,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     units.push(u);
   });
   for (const e of mapDef.enemies) units.push(makeUnit({ ...e, side: 'enemy', id: uniqueId(units, 'enemy', e.species) }));
+  for (const u of units) if (u.ambush && !u.moves.includes(AMBUSH_MOVE)) u.moves = [...u.moves.slice(0, 3), AMBUSH_MOVE]; // 기습 찌리리공은 자폭을 꼭 앎
   const state = {
     grid: mapDef.tiles.slice(),
     width: mapDef.tiles[0].length,
@@ -93,6 +97,7 @@ export function createBattle(mapDef = MAP, party = newParty(), { hpRatio = {} } 
     log: { exp: {}, fainted: [], loot: [], coins: 0, expired: [], defeated: [] }, // defeated: 캡슐 굴림용 쓰러뜨린 적 // 획득 경험치(동료 열쇠별), 기절한 아군, 연 보물, 격파 코인, 이번 페이즈에 풀린 랭크
     stairs: mapDef.stairs ?? null,
     chests: (mapDef.chests ?? []).map((c) => ({ ...c })),
+    generators: (mapDef.generators ?? []).map((g) => ({ ...g })), // 발전소 발전기 (칸 문자 'G')
     piles: (mapDef.piles ?? []).map((p) => ({ ...p })), // 열리지 않은 낙엽더미 (칸 문자 '*')
     warps: (mapDef.warps ?? []).map((w) => ({ ...w, to: { ...w.to } })), // 시티 워프 타일 (core/warp.js)
     bossFloor: units.some((u) => u.boss),
@@ -163,6 +168,7 @@ export function moveUnit(state, id, x, y, cost = 0, path = null, opts = {}) {
   u.x = x; u.y = y; u.moved = true;
   state.log.warp = opts.warp && !stayed ? useWarp(state, u) : null; // 시티: 걸어서 워프 위에서 멈추면 짝 타일로 (아군만)
   markExplored(state); // 깊은 동굴: 새로 본 칸 기억
+  wakeAmbush(state); // 발전소: 3칸 안에 들어온 기습 찌리리공은 깨어남
   refreshField(state); // 오라는 주인을 따라다니고, 장판 안팎이 바뀐다
   state.log.arriveAbilityEvents = [];
   // 위협: 이동해서 도착했을 때(제자리는 아님) 옆의 상대 공격 −1 (2턴), 직전 자기 차례에 위협한 상대는 제외
@@ -858,7 +864,7 @@ export const SPEED_BONUS_RATIO = 2;
 export const speedOf = (u) => effectiveStat(u.status === 'paralysis' ? { ...u, status: null } : u, 'spe'); // 랭크·순풍 반영, 마비는 뺌 (마비가 이득을 두 번 보지 않게)
 export function speedBonusUnit(state, side) {
   if (state.bonusGiven) return null;
-  const live = (s) => state.units.filter((u) => u.side === s && u.hp > 0 && !u.bot);
+  const live = (s) => state.units.filter((u) => u.side === s && u.hp > 0 && !u.bot && u.ambush !== 'hidden'); // 숨은 기습 찌리리공은 빼고
   const mine = live(side), foes = live(side === 'ally' ? 'enemy' : 'ally');
   if (!mine.length || !foes.length) return null;
   const slow = (list) => Math.min(...list.map(speedOf));
@@ -877,6 +883,26 @@ export function quickClawUnit(state, side, rng) {
     if (rng() < itemOf(u).quickClaw) return u;
   }
   return null;
+}
+
+// 발전기 방출: 범위 안 유닛 모두 (양쪽). 축전 회복 · 전기엔진/피뢰침 능력치 +1
+function pulseGenerators(state, events, abilityLog) {
+  state.log.pulsed = [];
+  const hit = new Set();
+  for (const g of state.generators ?? []) if (firesAt(g, state.turn)) for (const p of genRange(state, g)) hit.add(`${p.x},${p.y}`);
+  if (!hit.size) return;
+  state.log.pulsed = (state.generators ?? []).filter((g) => firesAt(g, state.turn)).map((g) => ({ x: g.x, y: g.y }));
+  for (const u of [...state.units]) {
+    if (u.hp <= 0 || !hit.has(`${u.x},${u.y}`)) continue;
+    const r = shockDamage(u);
+    if (!r) continue;
+    if (r.heal) { if (canHeal(u) && u.hp < u.maxHp) { u.hp = Math.min(u.maxHp, u.hp + r.heal); abilityLog.push({ unitId: u.id, ability: r.ability }); } continue; }
+    if (r.boost) { applyStageChange(u, r.boost, 1); abilityLog.push({ unitId: u.id, ability: r.ability }); continue; }
+    const hpBefore = u.hp;
+    u.hp = Math.max(0, u.hp - r.damage);
+    events.push({ unitId: u.id, kind: r.kind, damage: r.damage, hpBefore, maxHp: u.maxHp, x: u.x, y: u.y });
+    if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); }
+  }
 }
 
 export function endPhase(state, rng = Math.random) {
@@ -952,6 +978,7 @@ export function endPhase(state, rng = Math.random) {
       if (f.hp === 0) { knockOut(state, f, null); events.push({ unitId: f.id, kind: 'fainted' }); }
     }
   }
+  if (ending === 'enemy') pulseGenerators(state, events, abilityLog); // 발전소: 이번 라운드 차례인 발전기 방출
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
   for (const u of state.units) if (u.burrow && u.side !== ending) u.burrow = null; // 숨기: 상대 페이즈가 끝나면 나옴
   tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
@@ -1007,7 +1034,7 @@ export function endPhase(state, rng = Math.random) {
 export function checkResult(state) {
   if (state.result === 'stairs') return state.result; // 계단 클리어는 덮어쓰지 않음
   if (state.bossFloor && !state.units.some((u) => u.boss)) { state.result = 'win'; return state.result; }
-  const enemies = state.units.some((u) => u.side === 'enemy');
+  const enemies = state.units.some((u) => u.side === 'enemy' && u.ambush !== 'hidden'); // 발전소: 숨은 기습 찌리리공은 승리 조건 밖
   const allies = state.units.some((u) => u.side === 'ally' && !u.bot); // 갸라도스 봇만 남으면 패배
   state.result = !enemies ? 'win' : !allies ? 'lose' : null;
   return state.result;

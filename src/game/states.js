@@ -12,6 +12,7 @@ import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims }
 import { hiddenFrom, seenOnly } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { huntPlan } from '../core/hunt.js';
+import { ambushPlan } from '../core/ambush.js';
 import { canSee, seenCells } from '../core/vision.js';
 import { isHidden, WEATHER_KO, effectiveWeather } from '../core/weather.js';
 import { calcDamage, hitChance, terrainCtx } from '../core/damage.js';
@@ -21,6 +22,8 @@ import { bakeAutumnGround, drawAutumnMap } from '../render/autumnTiles.js';
 import { bakeBeachGround, drawBeachMap } from '../render/beachTiles.js';
 import { bakeCityGround, drawCityMap } from '../render/cityTiles.js';
 import { bakeSewerGround, drawSewerMap } from '../render/sewerTiles.js';
+import { bakePowerGround, drawPowerMap, drawPulseWarn } from '../render/powerTiles.js';
+import { pulsePreview, firesAt } from '../core/generator.js';
 import { drawDarkness } from '../render/darkness.js';
 import { tideFor, tidePreview } from '../core/tide.js';
 const SAND_BURST = ['#7a5a2a', '#c8a868', '#dcc084', '#f6e4b4', '#ffffff']; // 모래더미가 터질 때
@@ -96,7 +99,7 @@ export function ailmentNote(target, mv, attacker = null) {
 const STATUS_LINE = {
   poison: '독의 데미지를 입었다!', toxic: '독의 데미지를 입었다!', burn: '화상 데미지를 입었다!', fainted: '쓰러졌다!',
   asleep: '쿨쿨 잠들어 있다', woke: '눈을 떴다!', frozen: '얼어 버려서 움직일 수 없다!',
-  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!', poisonPool: '독 웅덩이에 몸이 상했다!',
+  sand: '모래바람에 휘말렸다!', hail: '싸라기눈을 맞았다!', poisonPool: '독 웅덩이에 몸이 상했다!', shock: '발전기 방출에 감전됐다!',
 };
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
@@ -165,6 +168,7 @@ export function phaseNotices(events, expired, get) {
 
 const TRASH_BURST = ['#20382a', '#3e7050', '#7a8a70', '#b8b8a0', '#e8e8d8']; // 쓰레기통 열림
 const BAG_BURST = ['#141418', '#2a2a34', '#4a4a56', '#8a8a96', '#d0d0d8']; // 쓰레기봉투 열림
+const SCRAP_BURST = ['#16181c', '#7a3e20', '#a8582c', '#8a919a', '#c0c6cc']; // 고철더미 열림
 const WARP_BLUE = ['#102040', '#2050c0', '#50a0ff', '#b0e0ff', '#ffffff'], WARP_ORANGE = ['#402010', '#c05010', '#ff9030', '#ffd090', '#ffffff']; // 워프 반짝임
 const CHAIN_SPARK = ['#1a2050', '#2c58c8', '#4a9cff', '#8ad8ff', '#e8f870', '#fffbc0', '#ffffff'], CHAIN_FIRE = ['#4a1712', '#c9281f', '#f2561d', '#ff8a2a', '#ffe26b', '#fff3a6', '#ffffff']; // 연쇄 번쩍임
 const unitLabel = (u) => (u.side === 'enemy' ? '상대 ' : '') + spec(u).name;
@@ -239,10 +243,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null;
+  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
   function reset() {
     st = createBattle(map, party, { hpRatio });
-    st.grid.trees = !['cave', 'deep-cave', 'sewer'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
+    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
@@ -253,6 +257,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
     if (theme === 'sewer' && typeof document !== 'undefined') { try { sewerGround = bakeSewerGround(map.tiles); } catch { sewerGround = null; } } // 하수도: 벽·바닥·물길 (물결·거품·타이어·봉투는 매 프레임)
+    if (theme === 'power-plant' && typeof document !== 'undefined') { try { powerGround = bakePowerGround(map.tiles); } catch { powerGround = null; } } // 발전소: 철판·기계 벽 (발전기·가벽·고철더미·예고는 매 프레임)
     if (theme === 'beach' && typeof document !== 'undefined') { try { beachGround = bakeBeachGround(map.tiles); } catch { beachGround = null; } } // 해변: 모래 바닥 (물은 매 프레임)
     mode = 'banner';
     const first = st.units.find((u) => u.side === 'ally');
@@ -433,6 +438,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         return;
       }
       endPhase(st, rng);
+      if (st.log.pulsed?.length) { pulseFx = { gens: st.log.pulsed, at: clock }; } // 발전소: 방출 번개
       cursor = { ...(allyUnits()[0] ?? cursor) };
       if (st.result) { noticeChain(phaseLines(), () => { mode = 'result'; }); return; }
       playerPhase(phaseLines());
@@ -442,7 +448,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!u || u.acted) { nextEnemy(); return; } // 기절했거나 잠듦·얼음으로 쉬는 중
     // 깊은 동굴: 아무도 못 보면 순찰·추적·수색 (core/hunt.js), 보이면 그 적이 보는 아군만 노림
     const blind = st.dark ? new Set(allyUnits().filter((a) => !canSee(u, a)).map((a) => a.id)) : new Set();
-    const plan = (st.dark && huntPlan(st, u, rng)) || planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy', { dark: false }), ...blind]) }); // 안개 + 수풀에 숨은 악 타입 아군
+    const plan = (u.ambush && ambushPlan(st, u)) || (st.dark && huntPlan(st, u, rng)) || planEnemyAction(st, u, { unseen: new Set([...enemyUnseen, ...hiddenFrom(st, 'enemy', { dark: false }), ...blind]) }); // 안개 + 수풀에 숨은 악 타입 아군
     if (u.sealed) plan.attack = null; // 풀죽음: 이번 차례 기술 봉인 (이동만)
     // 안개: 이동한 뒤에도 안개 속이면 기술을 쓰지 않는다 (대사로 정체가 드러나지 않게)
     if (st.weather === 'fog' && plan.attack && isHidden(plan.moveTo, allyUnits())) plan.attack = null;
@@ -600,10 +606,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     if (!a.piles?.length) { then(); return; }
     for (const p of a.piles) {
       if (p.unitId) { const e = st.units.find((u) => u.id === p.unitId); if (e) { everyone.set(e.id, e); facing[e.id] = DIR.Left; requestSprites([e.species]); } } // 미리 못 받았어도 여기서
-      try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y, ...(theme === 'beach' ? { palette: SAND_BURST } : theme === 'city' ? { palette: TRASH_BURST } : theme === 'sewer' ? { palette: BAG_BURST } : {}) }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
+      try { fxm.spawn({ id: 'autumn/leaf-burst', opts: { seed: p.x * 7 + p.y, ...(theme === 'beach' ? { palette: SAND_BURST } : theme === 'city' ? { palette: TRASH_BURST } : theme === 'sewer' ? { palette: BAG_BURST } : theme === 'power-plant' ? { palette: SCRAP_BURST } : {}) }, timeScale: 1, layer: 'front' }, { x: p.x * TILE + TILE / 2, y: p.y * TILE + TILE - 2 }); } catch { /* 연출 실패는 무시 */ }
     }
     if (a.piles.some((p) => p.kind === 'chest')) sound.jingle('item');
-    noticeChain(pileNotices(a.piles, unit, (id) => everyone.get(id), theme === 'beach' ? '모래' : theme === 'city' ? '쓰레기통' : theme === 'sewer' ? '쓰레기봉투' : '낙엽'), then);
+    noticeChain(pileNotices(a.piles, unit, (id) => everyone.get(id), theme === 'beach' ? '모래' : theme === 'city' ? '쓰레기통' : theme === 'sewer' ? '쓰레기봉투' : theme === 'power-plant' ? '고철더미' : '낙엽'), then);
   }
 
   // 아군 이동 완료: 낙엽더미 → 상자 열기 → 행동 메뉴, 계단 → 즉시 층 클리어 (취소 불가)
@@ -1123,9 +1129,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     else if (beachGround) drawBeachMap(ctx, st.grid, beachGround, cx, cy, W, H);
     else if (cityGround) drawCityMap(ctx, st.grid, cityGround, cx, cy, W, H, st.warps, time);
     else if (sewerGround) drawSewerMap(ctx, st.grid, sewerGround, cx, cy, W, H, time);
+    else if (powerGround) drawPowerMap(ctx, st.grid, powerGround, cx, cy, W, H, time, st.generators, (g) => firesAt(g, st.turn) && st.result == null, pulseFx && { gens: pulseFx.gens, age: clock - pulseFx.at });
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     const tideWarn = tidePreview(st); // 물때 예고: 바뀔 칸에 물결 깜빡임
     if (tideWarn && Math.floor(time * 2) % 2 === 0) { ctx.fillStyle = tideWarn.next > (st.tide ?? 0) ? 'rgba(40,110,220,0.35)' : 'rgba(250,240,200,0.35)'; for (const p of tideWarn.cells) ctx.fillRect(p.x * TILE + 2, p.y * TILE + 9, TILE - 4, 2), ctx.fillRect(p.x * TILE + 4, p.y * TILE + 15, TILE - 8, 2); }
+    if (st.generators?.length && !st.result) drawPulseWarn(ctx, pulsePreview(st), time); // 발전소: 이번 라운드 방출 칸
     ui.drawZones(ctx, st); // 장판 테두리
     ui.drawAuras(ctx, st); // 오라 (쓴 포켓몬을 따라다님)
     ui.drawTraps(ctx, st, anim?.trapsShown ?? [], anim?.trapsHidden ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)

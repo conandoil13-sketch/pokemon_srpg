@@ -2,6 +2,7 @@
 // 공격기를 쓰거나 공격에 맞으면 revealed — 다음에 자기가 움직일 때까지 숨지 못한다 (battle.js 가 켜고 끔).
 import { typesOf } from './abilities.js';
 import { darkUnseen } from './vision.js';
+import { ambushHidden } from './ambush.js';
 
 export const DARK_SIGHT = 3;
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -15,6 +16,7 @@ export function darkHidden(state, u, viewers = state.units.filter((o) => o.side 
 export const hiddenFrom = (state, side, { dark = true } = {}) => new Set([
   ...state.units.filter((u) => u.side !== side && darkHidden(state, u)).map((u) => u.id),
   ...(dark ? darkUnseen(state, side).map((u) => u.id) : []),
+  ...state.units.filter((u) => u.side !== side && ambushHidden(state, u)).map((u) => u.id), // 발전소 기습 찌리리공
 ]);
 
 // 그 편이 볼 수 있는 유닛만 (공격 예상 창 등 — 어둠·수풀에 숨은 적 이름이 새지 않게)

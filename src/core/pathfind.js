@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1 }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도)
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소)
 
 // 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
 const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
@@ -24,7 +24,7 @@ export function canEnter(tile, who, trees = false, pass = false) {
   if (tile === undefined) return false;
   if (pass && (tile === '#' || tile === '*') && soars(who)) return true;
   if (tile === 'B') return soars(who); // 건물: 지상에선 벽, 비행·드래곤만 옥상으로 (옥상 안 이동은 search 가 따로)
-  if (tile === '*') return false; // 낙엽더미: 누구도 못 들어감
+  if (tile === '*' || tile === 'G') return false; // 낙엽더미·발전기: 누구도 못 들어감 (순간이동·밀치기 포함)
   if (tile === '#') return climbs(who, trees); // 유연·벌레: 나무 통과
   if (tile === '~') {
     const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;
