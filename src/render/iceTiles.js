@@ -6,7 +6,7 @@ import { buffer, outline, h2, hashXY } from './cityTiles.js';
 const TILE = 24;
 const STONE = ['#151c27', '#1c2533', '#242f40', '#2d3a4d', '#38475b', '#46586d', '#5a6e84', '#7488a0'];
 const SNOW = ['#eef6fc', '#d4e4f2', '#b2c8dc', '#8aa2bc', '#647c98'];
-const ICE = { rim: '#1f4466', crack: '#2e6a96', deep: '#4a8cc0', mid: '#72b2dc', light: '#a6d8f2', hi: '#dcf4ff', white: '#ffffff' };
+const ICE = { rim: '#3a5470', crack: '#2e6a96', deep: '#4a8cc0', mid: '#72b2dc', light: '#a6d8f2', hi: '#dcf4ff', white: '#ffffff' };
 const WATER = { d: '#08122a', m: '#0e1c40', l: '#18305e', hi: '#46689c' };
 const WALL = { top: '#2a3648', topL: '#36465c', topHi: '#52677f', edge: '#0a0f17', face: '#1c2636', faceL: '#28364a', band: '#141c28', cr: '#7cc4e8', crHi: '#d8f6ff', crD: '#3a7aa8' };
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
@@ -109,34 +109,50 @@ function stairs(b, tx, ty) {
 
 // ---- 빙판: 지금 격자의 '_' 칸 (얼면 다시 구움) ----
 let iceCache = { key: null, canvas: null };
+// 빙판 경계까지의 부호 거리 (px, 안쪽 +). 바깥 모서리는 크게 둥글게, 안쪽 모서리는 옆 칸으로 살짝 메움
+const RC = 10, RF = 6; // 바깥 모서리 반지름 · 안쪽 모서리 메움 반지름
+function iceDist(ice, tx, ty, x, y) {
+  const fx = x + 0.5, fy = y + 0.5;
+  if (ice(tx, ty)) {
+    const U = !ice(tx, ty - 1), D = !ice(tx, ty + 1), L = !ice(tx - 1, ty), R = !ice(tx + 1, ty);
+    let d = Math.min(U ? fy : 99, D ? TILE - fy : 99, L ? fx : 99, R ? TILE - fx : 99);
+    const cx = L && fx < RC ? RC - fx : R && fx > TILE - RC ? fx - (TILE - RC) : 0, cy = U && fy < RC ? RC - fy : D && fy > TILE - RC ? fy - (TILE - RC) : 0;
+    if (cx > 0 && cy > 0) d = Math.min(d, RC - Math.hypot(cx, cy));
+    return d;
+  }
+  let d = -99; // 바깥: 옆 빙판 칸까지 (음수)
+  if (ice(tx - 1, ty)) d = Math.max(d, -fx); if (ice(tx + 1, ty)) d = Math.max(d, -(TILE - fx));
+  if (ice(tx, ty - 1)) d = Math.max(d, -fy); if (ice(tx, ty + 1)) d = Math.max(d, -(TILE - fy));
+  for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { // 안쪽 모서리: 두 옆 칸이 모두 빙판이면 둥글게 메움
+    if (!ice(tx + sx, ty) || !ice(tx, ty + sy)) continue;
+    const lx = sx < 0 ? fx : TILE - fx, ly = sy < 0 ? fy : TILE - fy;
+    if (lx < RF && ly < RF) d = Math.max(d, Math.hypot(RF - lx, RF - ly) - RF);
+  }
+  return d;
+}
 function iceLayer(grid) {
   const key = grid.join('|');
   if (iceCache.key === key) return iceCache.canvas;
   const h = grid.length, w = grid[0].length, b = buffer(w * TILE, h * TILE);
   const ice = (x, y) => at(grid, x, y) === '_';
   for (let ty = 0; ty < h; ty++) for (let tx = 0; tx < w; tx++) {
-    if (!ice(tx, ty)) continue;
-    const U = !ice(tx, ty - 1), D = !ice(tx, ty + 1), L = !ice(tx - 1, ty), Rt = !ice(tx + 1, ty), RAD = 6;
+    if (grid[ty][tx] === '#') continue;
+    if (!ice(tx, ty) && ![[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ice(tx + dx, ty + dy))) continue;
     for (let y = 0; y < TILE; y++) for (let x = 0; x < TILE; x++) {
       const px = tx * TILE + x, py = ty * TILE + y, dz = dither(px, py);
-      // 둘레까지 거리 (바깥 모서리는 둥글게 깎음)
-      let d = Math.min(U ? y : 99, D ? TILE - 1 - y : 99, L ? x : 99, Rt ? TILE - 1 - x : 99);
-      const cx = L && x < RAD ? RAD - x : Rt && x > TILE - 1 - RAD ? x - (TILE - 1 - RAD) : 0, cy = U && y < RAD ? RAD - y : D && y > TILE - 1 - RAD ? y - (TILE - 1 - RAD) : 0;
-      if (cx && cy) d = Math.min(d, RAD - Math.hypot(cx, cy));
+      const d = iceDist(ice, tx, ty, x, y) + (vnoise(px, py, 7, 77) - 0.5) * 3.2 + (vnoise(px, py, 3, 78) - 0.5) * 1.2; // 울퉁불퉁한 경계
       if (d < 0) continue;
-      const depth = vnoise(px, py, 20, 71) * 0.65 + vnoise(px, py, 7, 72) * 0.35; // 얼음 속 짙고 옅은 결
-      let c = depth > 0.64 ? ICE.light : depth > 0.47 ? ICE.mid : depth > 0.4 && dz < 0.5 ? ICE.mid : ICE.deep;
-      const sheen = (px * 0.8 + py * 0.6 + vnoise(px, py, 12, 73) * 10) % 52; // 비스듬한 윤기 띠
-      if (sheen < 1.6) c = ICE.hi; else if (sheen < 3.4) c = ICE.light;
-      const cr = Math.abs(vnoise(px, py, 15, 74) - 0.5); // 가는 금
+      // 바닥에 깔린 얇은 얼음: 짙고 옅은 결 + 옅은 윤기, 둘레는 서리 (방향 음영 없이 평평하게)
+      const depth = vnoise(px, py, 34, 71) * 0.8 + vnoise(px, py, 11, 72) * 0.2; // 큰 결만 (얼룩덜룩하지 않게)
+      let c = depth > 0.68 ? ICE.light : depth > 0.4 ? ICE.mid : depth > 0.36 && dz < 0.5 ? ICE.mid : ICE.deep;
+      const sheen = (px * 0.8 + py * 0.6 + vnoise(px, py, 12, 73) * 10) % 60;
+      if (sheen < 1.4) c = ICE.hi; else if (sheen < 3 && dz < 0.6) c = ICE.light;
+      const cr = Math.abs(vnoise(px, py, 15, 74) - 0.5);
       if (cr < 0.016 && vnoise(px, py, 33, 75) > 0.5) c = ICE.crack;
-      if ((h2(px, py, 76) & 255) === 0) c = ICE.white; // 갇힌 공기 방울
-      // 둘레: 어두운 테 → 서리 낀 밝은 띠 (빛은 왼쪽 위 — 아래·오른쪽 띠는 어둡게)
-      const lowSide = (D && TILE - 1 - y <= d + 0.5) || (Rt && TILE - 1 - x <= d + 0.5);
-      if (d < 1) c = ICE.rim;
-      else if (d < 2) c = lowSide ? ICE.crack : ICE.white;
-      else if (d < 4 && !lowSide && dz < 0.7 - (d - 2) * 0.25) c = ICE.hi;
-      else if (d < 3 && lowSide) c = ICE.deep;
+      if ((h2(px, py, 76) & 255) === 0) c = ICE.white;
+      if (d < 1.1) c = ICE.rim; // 바닥과 닿는 가는 선
+      else if (d < 2.6) c = dz < 0.75 ? SNOW[1] : ICE.hi; // 서리 낀 가장자리
+      else if (d < 4.2 && dz < 0.6 - (d - 2.6) * 0.3) c = SNOW[2];
       b.set(px, py, c);
     }
   }

@@ -573,7 +573,7 @@ function sewerLayout(g, rng) {
   for (let n = int(4, 7); n > 0 && dry.length; n--) { const p = dry.splice(int(0, dry.length - 1), 1)[0]; set(p.x, p.y, '"'); }
 }
 
-// 얼음동굴: 출발 3열 밖 빈 바닥의 35~45% 를 덩어리진 빙판으로, 고드름 3~6, 빙판 위 바위(멈춤 지점) 2~4.
+// 얼음동굴: 출발 3열 밖 빈 바닥의 50~60% 를 빙판으로 (큰 타원 판 2~3 + 덩어리), 고드름 3~6, 빙판 위 바위(멈춤 지점) 2~4.
 // 얼음 타입이 아닌 지상 포켓몬이 미끄럼 규칙만으로 출발 칸에서 targets(계단·상자)·더미 옆·다른 출발 칸에 멈춰 설 수 있어야 함 — 안 되면 다시 (최대 20번), 끝내 안 되면 빙판 없음
 function iceLayout(g, used, allySlots, targets, piles, rng) {
   const W = g[0].length, H = g.length, int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
@@ -586,9 +586,16 @@ function iceLayout(g, used, allySlots, targets, piles, rng) {
     return targets.every((p) => at(p.x, p.y)) && allySlots.every((p) => at(p.x, p.y)) && piles.every((p) => DIRS.some(([dx, dy]) => at(p.x + dx, p.y + dy)));
   };
   for (let attempt = 0; attempt < 20; attempt++) {
-    const want = Math.round(open * (0.35 + rng() * 0.1)), painted = [];
+    const want = Math.round(open * (0.5 + rng() * 0.1)), painted = [];
     const isFree = (x, y) => x >= SAFE_COLS && y >= 0 && x < W && y < H && g[y][x] === '.' && !used.has(key(x, y));
-    for (let guard = 0; painted.length < want && guard < 400; guard++) { // 무작위 걸음 덩어리
+    for (let n = int(2, 3); n > 0 && painted.length < want; n--) { // 큰 빙판 (타원) 먼저 — 길게 미끄러지는 넓은 판
+      const rx = int(3, 5), ry = int(2, 3), cx = int(SAFE_COLS + rx - 1, W - 2), cy = int(1, H - 2);
+      for (let y = cy - ry; y <= cy + ry; y++) for (let x = cx - rx; x <= cx + rx; x++) {
+        if (painted.length >= want || ((x - cx) / (rx + 0.5)) ** 2 + ((y - cy) / (ry + 0.5)) ** 2 > 1 || !isFree(x, y)) continue;
+        g[y][x] = '_'; painted.push({ x, y });
+      }
+    }
+    for (let guard = 0; painted.length < want && guard < 400; guard++) { // 나머지는 무작위 걸음 덩어리
       const s = free[Math.floor(rng() * free.length)];
       let x = s.x, y = s.y;
       for (let n = int(6, 14); n > 0 && painted.length < want; n--) {

@@ -41,7 +41,7 @@ test('ice cave: saves on the old 8-1 placeholder move to the ice cave', () => {
 });
 
 import { reachable } from '../src/core/pathfind.js';
-test('ice floors: 35-45% of the open floor is ice, 3-6 icicles, start columns clear, everything reachable by sliding, deterministic', () => {
+test('ice floors: 50-60% of the open floor is ice, 3-6 icicles, start columns clear, everything reachable by sliding, deterministic', () => {
   for (let seed = 1; seed <= 40; seed++) {
     const f = 1 + (seed % IC.floors), m = generateFloor(IC, f, seed), T = m.tiles, W = T[0].length, H = T.length;
     let ice = 0, open = 0, ici = 0;
@@ -51,7 +51,7 @@ test('ice floors: 35-45% of the open floor is ice, 3-6 icicles, start columns cl
       if (c === '_') ice++; if (c === 'Y') ici++;
       if (x >= 3 && '._'.includes(c)) open++;
     }
-    assert.ok(ice / open >= 0.3 && ice / open <= 0.5, `seed ${seed}: ice ${ice}/${open}`);
+    assert.ok(ice / open >= 0.45 && ice / open <= 0.65, `seed ${seed}: ice ${ice}/${open}`);
     assert.ok(ici >= 3 && ici <= 6, `seed ${seed}: icicles ${ici}`);
     const s = m.allySlots[0], walker = { id: 'w', species: 'bidoof', side: 'ally', x: s.x, y: s.y, hp: 1 };
     const r = reachable(T, [], walker, Infinity);
