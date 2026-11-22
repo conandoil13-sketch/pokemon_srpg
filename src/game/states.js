@@ -21,6 +21,7 @@ import { bakeAutumnGround, drawAutumnMap } from '../render/autumnTiles.js';
 import { bakeBeachGround, drawBeachMap } from '../render/beachTiles.js';
 import { bakeCityGround, drawCityMap } from '../render/cityTiles.js';
 import { bakeSewerGround, drawSewerMap } from '../render/sewerTiles.js';
+import { drawDarkness } from '../render/darkness.js';
 import { tideFor, tidePreview } from '../core/tide.js';
 const SAND_BURST = ['#7a5a2a', '#c8a868', '#dcc084', '#f6e4b4', '#ffffff']; // 모래더미가 터질 때
 import { leafRoute } from '../core/leafRoute.js';
@@ -1129,6 +1130,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     ui.drawAuras(ctx, st); // 오라 (쓴 포켓몬을 따라다님)
     ui.drawTraps(ctx, st, anim?.trapsShown ?? [], anim?.trapsHidden ?? []); // 압정 (적 것은 깔 때·밟힌 칸만)
     for (const c of st.chests) drawChest(ctx, c.x, c.y);
+    drawDarkness(ctx, st, time, cx, cy, W, H); // 깊은 동굴: 어둠 (이동 범위·유닛은 그 위)
     if (mode === 'selected') {
       ui.drawHighlights(ctx, toPts(reach), BLUE);
       ui.drawHighlights(ctx, atkTiles, RED);
