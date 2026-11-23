@@ -38,6 +38,7 @@ export function moveBlock(unit, moveId) {
   const m = MOVES[moveId];
   if (moveId === 'snore' && unit.status !== 'sleep') return 'awake'; // 코골기: 잠들었을 때만
   if (unit.status === 'sleep' && moveId !== 'snore') return 'asleep'; // 자는 동안엔 코골기만
+  if (unit.uproar > 0 && moveId !== 'uproar') return 'uproar'; // 소란피기: 끝날 때까지 소란만
   if (unit.taunt > 0 && m?.category === 'status') return 'taunt';
   if (unit.encore && moveId !== unit.encore.move) return 'encore';
   if (unit.disable && moveId === unit.disable.move) return 'disable';
@@ -73,6 +74,7 @@ export function applyEffect(state, user, target, move, rng, weather) {
       if (target.hp >= target.maxHp) return out(false, 'full');
       if ((target.healUses ?? 0) <= 0) return out(false, 'uses');
       if (blocksAilment(target, 'sleep', weather)) return out(false, 'immune');
+      if (target.uproarZone) return out(false, 'uproar'); // 소란
       target.hp = target.maxHp; cure(target);
       target.status = 'sleep'; target.statusTurns = 2; // 정확히 2번 쉼
       target.healUses -= 1;

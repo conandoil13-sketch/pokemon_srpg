@@ -53,3 +53,5 @@ const SITUATIONAL = { brine: 'brine', facade: 'facade', eruption: 'hpRatio', 'wa
 for (const [id, varPower] of Object.entries(SITUATIONAL)) if (MOVES[id]) Object.assign(MOVES[id], { varPower, learnable: true });
 if (MOVES['wake-up-slap']) MOVES['wake-up-slap'].wakes = 'sleep';
 if (MOVES['smelling-salts']) MOVES['smelling-salts'].wakes = 'paralysis';
+// 2·3차: 연속 사용 (battle.js STREAK_MAX) · 난동 (rampage)
+for (const id of ['fury-cutter', 'rollout', 'ice-ball']) if (MOVES[id]) Object.assign(MOVES[id], { varPower: 'streak', learnable: true });

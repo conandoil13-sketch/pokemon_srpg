@@ -50,6 +50,7 @@ export function varPower(attacker, defender, move) {
     case 'wake': return defender.status === move.wakes ? move.power * 2 : move.power; // 잠깨움뺨치기(잠)·정신차리기(마비)
     case 'assurance': return defender.hurtThisPhase ? move.power * 1.5 : move.power; // 승부굳히기: 이번 페이즈에 이미 맞았으면
     case 'revenge': return attacker.lastHitBy === defender.id ? move.power * 1.5 : move.power; // 리벤지·눈사태: 마지막으로 나를 때린 상대
+    case 'streak': { const n = attacker.streak?.moveId === move.id ? attacker.streak.n : 0; return move.power * 2 ** n; } // 연속자르기·구르기·아이스볼: 연속 명중마다 2배
     case 'punishment': return Math.min(200, 60 + 20 * Object.values(defender.stages ?? {}).reduce((t, n) => t + Math.max(0, n), 0)); // 혼내기
     default: return move.power;
   }

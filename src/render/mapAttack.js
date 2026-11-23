@@ -76,6 +76,7 @@ export function attackExtraLines(result, attacker) {
 export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = { choice: '구애 도구 때문에 다른 기술을 쓸 수 없다!',
+  uproar: '소란을 피우느라 다른 기술을 쓸 수 없다!',
   awake: '깨어 있어서 코골기를 쓸 수 없다!', asleep: '잠들어 있어서 코골기밖에 쓸 수 없다!',
   taunt: '도발당해서 변화기를 쓸 수 없다!', encore: '앙코르 때문에 다른 기술을 쓸 수 없다!',
   disable: '그 기술은 사슬묶기로 봉인됐다!', torment: '같은 기술을 연달아 쓸 수 없다!', healBlock: '회복봉인으로 회복할 수 없다!',
@@ -99,6 +100,7 @@ function effectLines(result, get, moveId = null) {
     else if (e.ok && EFFECT_TEXT[e.effect]) say(u, EFFECT_TEXT[e.effect](label(u)), e.effect);
     else if (!e.ok && e.effect === 'push' && (e.reason === 'stuck' || e.reason === 'immune')) say(u, `${W_(label(u), '은/는')} 꿈쩍도 하지 않았다!`);
     else if (!e.ok && e.reason === 'splash') say(u, '하지만 아무 일도 일어나지 않았다!');
+    else if (!e.ok && e.reason === 'uproar') say(u, `소란 때문에 ${W_(label(u), '은/는')} 잠들 수 없다!`);
     else if (!e.ok && e.reason === 'safeguard') say(u, `${W_(label(u), '은/는')} 신비의 베일이 지켜 주고 있다!`);
     else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
   }
@@ -139,6 +141,7 @@ export function statusMessages(changes, byId, isStatusMove) {
     const who = label(get(c.unitId));
     if (c.ok) return [`${josa(who, '은/는')} ${INFLICT[c.ailment]}`];
     if (c.reason === 'safeguard') return [`${josa(who, '은/는')} 신비의 베일이 지켜 주고 있다!`];
+    if (c.reason === 'uproar') return [`소란 때문에 ${josa(who, '은/는')} 잠들 수 없다!`];
     return isStatusMove ? [`${who}에게는 효과가 없는 것 같다...`] : [];
   });
 }

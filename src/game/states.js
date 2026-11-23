@@ -559,8 +559,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       if (u.acted && u.status !== 'sleep' && u.status !== 'freeze') { next(); return; } // 게으름 등으로 쉬면 발사도 다음으로 (잠듦·얼음은 불발)
       const route = chargeRoute(st, u);
       if (!route) {
-        u.charging = null;
-        noticeChain([{ lines: [wrapMessage(`${unitLabel(u)}의 모은 힘이 흩어졌다!`)], at: { x: u.x, y: u.y } }], next);
+        const raging = !!u.rampage; u.charging = null; u.rampage = null; // 난동: 쫓아가지 못하면 그냥 멈춤 (혼란 없음)
+        noticeChain([{ lines: [wrapMessage(raging ? `${unitLabel(u)}의 난동이 멈췄다!` : `${unitLabel(u)}의 모은 힘이 흩어졌다!`)], at: { x: u.x, y: u.y } }], next);
         return;
       }
       const mv = MOVES[u.charging.moveId];

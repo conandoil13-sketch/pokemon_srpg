@@ -39,6 +39,7 @@ const types = (unit) => unit.types ?? SPECIES[unit.species].types; // 메타몽 
 export function canInflict(unit, ailment, move, weather = null, { breaker = false } = {}) {
   if (weatherBlocksAilment(weather, ailment)) return { ok: false, reason: 'weather' }; // 쾌청엔 얼지 않는다
   if (unit.field?.safeguard) return { ok: false, reason: 'safeguard' }; // 신비의부적 오라
+  if (ailment === 'sleep' && unit.uproarZone) return { ok: false, reason: 'uproar' }; // 소란 근처에선 못 잠듦
   if (!breaker && blocksAilment(unit, ailment, weather)) return { ok: false, reason: 'ability' }; // 면역·불면·리프가드 …
   if (IMMUNE[ailment]?.some((t) => types(unit).includes(t))) return { ok: false, reason: 'immune' };
   if (move?.id === 'thunder-wave' && typeMultiplier(move.type, types(unit)) === 0) return { ok: false, reason: 'immune' };

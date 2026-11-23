@@ -480,6 +480,13 @@ export const CRASH_MOVES = new Set(['jump-kick', 'high-jump-kick']); // 빗나�
 export const BREAKS_PROTECT = new Set(['feint', 'shadow-force']); // 방어를 뚫고 없앰
 const SCREENS = ['reflect', 'lightScreen'];
 export const CHARGE_MOVES = new Set(['solar-beam', 'razor-wind', 'skull-bash', 'sky-attack', 'focus-punch']); // 힘껏펀치: 한 턴 집중 (그 사이 맞으면 풀림) // 모으고 다음 차례 발사
+export const STREAK_MAX = { 'fury-cutter': [4, false], rollout: [4, true], 'ice-ball': [4, true] }; // [최대 단계, 다섯 번째 뒤 처음으로]
+export const RAMPAGE_MOVES = new Set(['outrage', 'petal-dance', 'thrash']); // 처음 대상을 2~3번 쫓아가 때리고 혼란
+export const UPROAR_TURNS = 3;
+// 소란피기 2칸 안: 못 잠듦 (status.canInflict · 잠자기가 이 표시를 읽음)
+export function markUproar(state) {
+  for (const u of state.units) u.uproarZone = state.units.some((o) => o.uproar > 0 && Math.abs(o.x - u.x) + Math.abs(o.y - u.y) <= 2);
+}
 export const DELAYED_MOVES = new Set(['future-sight', 'doom-desire']); // 두 턴 뒤에 떨어짐
 const RANGED_CHARGE = new Set(['solar-beam', 'razor-wind']); // 원거리: 그 자리에서 쏨 (사거리 밖 1칸마다 위력 −5%), 근접은 돌진
 const RANGE_FALLOFF = 0.05;
@@ -496,7 +503,7 @@ export function chargeRoute(state, unit) {
   if (!target) return null;
   const move = MOVES[c.moveId];
   if (RANGED_CHARGE.has(c.moveId)) return canTarget(move, target) ? { path: [{ x: unit.x, y: unit.y }], aim: { unitId: target.id } } : null; // 숨으면 불발
-  const spots = [...reachable(state.grid, state.units, unit, Infinity)].sort((p, q) => p[1] - q[1]);
+  const spots = [...reachable(state.grid, state.units, unit, unit.rampage ? null : Infinity)].sort((p, q) => p[1] - q[1]); // 난동은 평소 이동력으로 쫓아감
   for (const [k] of spots) {
     const [x, y] = k.split(',').map(Number);
     const ghost = { ...unit, x, y };
@@ -531,6 +538,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
   if (itemOf(a)?.choice && !a.choiceLock) a.choiceLock = moveId; // 구애: 그 층 첫 기술로 고정
   if (itemOf(a)?.metronome) { a.metroStreak = a.metroMove === moveId ? (a.metroStreak ?? 0) + 1 : 0; a.metroMove = moveId; } // 메트로놈: 연속 사용 (막힌 기술은 위에서 돌아가 안 셈)
   a.moved = true;
+  if (a.streak && a.streak.moveId !== moveId) a.streak = null; // 다른 기술을 쓰면 연속이 끊김
+  a.raging = moveId === 'rage'; // 분노: 분노를 쓰는 동안만
+  if (moveId === 'uproar' && !(a.uproar > 0)) a.uproar = UPROAR_TURNS; // 소란피기: 자기 차례 3번
+  markUproar(state);
   if (move.id === 'charge') a.charged = 2; // 충전: 다음 자기 차례까지 전기 공격 한 번 2배
   if (move.kind === 'enemy' || move.kind === 'enemies') a.revealed = true; // 악 수풀 숨기: 상대를 노린 기술(변화기 포함)을 쓰면 드러남
   const stageChanges = [], statusChanges = [], thawed = [];
@@ -696,10 +707,12 @@ export function applyMove(state, userId, moveId, aim, rng) {
       const hpBefore = d.hp;
       const r = presentHeal ? { hit: true, crit: false, typeMult: 1, damage: 0, presentHeal: true } // 프레젠트 회복
         : move.dreamOnly && d.status !== 'sleep' ? { hit: true, crit: false, typeMult: 0, damage: 0, failed: true } // 꿈먹기: 잠든 상대만
-        : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0, ...terrainCtx(state, a, d) });
+        : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : move.id === 'triple-kick' ? { ...dmgMove, power: dmgMove.power * (k + 1) } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0 && move.id !== 'triple-kick', ...terrainCtx(state, a, d) }); // 트리플킥: 10·20·30, 타마다 명중
+      if (move.id === 'triple-kick' && k > 0 && !r.hit) break;
       if (r.absorbed) absorb(d, r.absorbed);
       if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
       if (r.damage > 0) { d.ncTouched = true; d.revealed = true; alertHunt(state, d, a); d.hurtThisPhase = true; if (d !== a) d.lastHitBy = a.id; } // 승부굳히기·리벤지 판정용
+      if (r.damage > 0 && d !== a && d.raging && d.hp > 0) changeStats(d, [{ stat: 'attack', change: 1 }], stageChanges); // 분노: 맞을 때마다 공격 +1
       if (r.damage > 0 && d !== a && d.charging?.moveId === 'focus-punch') { d.charging = null; lostFocus.push(d.id); } // 힘껏펀치: 집중 중 맞으면 풀림 // 자연회복: 맞음 · 악 숨기: 맞으면 드러남 · 깊은 동굴: 어둠 속에서 맞으면 쫓아옴
       if (r.damage > 0 && d.bide && d !== a) d.bide.stored += Math.min(r.damage, d.hp); // 참기: 받은 피해 모음
       d.hp = Math.max(0, d.hp - r.damage);
@@ -821,6 +834,16 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 프레젠트 회복: 맞은 대상 HP 1/4
   const presentHealed = [];
   if (presentHeal) for (const d of targets) if (state.units.includes(d) && d.guard !== 'protect' && canHeal(d) && d.hp < d.maxHp) { const b = d.hp; d.hp = Math.min(d.maxHp, d.hp + Math.max(1, Math.floor(d.maxHp / 4))); presentHealed.push({ unitId: d.id, amount: d.hp - b }); }
+  // 연속자르기·구르기·아이스볼: 맞으면 다음 단계, 빗나가면 처음부터
+  if (STREAK_MAX[move.id]) { const [max, wrap] = STREAK_MAX[move.id], n = a.streak?.moveId === move.id ? a.streak.n : 0; a.streak = anyLanded ? { moveId: move.id, n: n >= max ? (wrap ? 0 : max) : n + 1 } : null; }
+  // 역린·꽃잎댄스·난동부리기: 처음 대상을 2~3번 (다음 차례들은 저절로 쫓아가 발사), 끝나면 혼란
+  if (RAMPAGE_MOVES.has(move.id) && state.units.includes(a)) {
+    if (!a.rampage) { const t0 = targets.find((d) => d.side !== a.side); a.rampage = t0 ? { moveId: move.id, targetId: t0.id, left: 1 + (rng() < 0.5 ? 1 : 0) } : null; }
+    else a.rampage.left--;
+    if (a.rampage && a.rampage.left > 0 && byId(state, a.rampage.targetId)) a.charging = { moveId: move.id, targetId: a.rampage.targetId };
+    else if (a.rampage) { a.rampage = null; a.charging = null; statusChanges.push({ unitId: a.id, ailment: 'confusion', ...inflict(a, 'confusion', rng, null, W) }); }
+  }
+  if (move.id === 'uproar') for (const u of state.units) if (u.uproarZone && u.status === 'sleep') { cure(u); woken.push({ unitId: u.id, ailment: 'sleep' }); } // 소란: 2칸 안 잠든 포켓몬을 깨움
   // 화풀이: 때리고 그쪽으로 한 칸 (상대를 한 칸 밀고 그 자리로) · 은혜갚기: 때리고 한 칸 물러남
   let stepped = null, shoved = null;
   if ((move.id === 'frustration' || move.id === 'return') && anyLanded && state.units.includes(a)) {
@@ -1070,6 +1093,8 @@ export function endPhase(state, rng = Math.random) {
   if (ending === 'enemy') steamVents(state, events); // 화산동굴: 이번 라운드 차례인 분출구 스팀
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
   for (const u of state.units) if (u.burrow && u.side !== ending) u.burrow = null; // 숨기: 상대 페이즈가 끝나면 나옴
+  for (const u of state.units) if (u.side === ending && u.uproar > 0) u.uproar--; // 소란피기 남은 차례
+  markUproar(state);
   tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
   W = effectiveWeather(state); // 날씨 부르기가 방금 끝났을 수 있음 (쾌청 녹이기 등)
   state.log.falls = chasmFalls(state); // 협곡: 낭떠러지 위인데 더는 못 뜨는 포켓몬 (중력·특성 잃음)
@@ -1085,6 +1110,7 @@ export function endPhase(state, rng = Math.random) {
   if (state.phase === 'player') { state.turn++; if (state.tideCells && tideFor(state.turn) !== state.tide) applyTide(state, tideFor(state.turn)); } // 해변: 3라운드마다 물때
   const side = state.phase === 'player' ? 'ally' : 'enemy';
   for (const u of state.units) u.hurtThisPhase = false; // 승부굳히기: 페이즈마다 새로
+  for (const u of state.units) if (u.uproarZone && u.status === 'sleep') { cure(u); events.push({ unitId: u.id, kind: 'woke' }); } // 소란 근처는 깨어남
   for (const fs of [...(state.delayed ?? [])]) { // 미래예지·파멸의소원: 쓴 편 차례가 두 번 돌아오면 떨어짐
     if (fs.side !== side || --fs.turns > 0) continue;
     state.delayed = state.delayed.filter((x) => x !== fs);

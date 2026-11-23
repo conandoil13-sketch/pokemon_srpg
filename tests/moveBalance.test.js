@@ -194,3 +194,74 @@ test('doom desire knocks out and credits the user', () => {
   assert.ok(!s.units.includes(f));
   assert.ok(s.log.defeated.some((d) => d.species === 'rattata'));
 });
+
+// ---- 3차: 연속 사용과 지속 효과 ----
+test('fury cutter doubles on each consecutive hit up to 160; a miss or another move resets it', () => {
+  const { s, a, f } = duel('scyther', 'snorlax');
+  const pw = () => P(a, f, 'fury-cutter');
+  assert.equal(pw(), 10);
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); assert.equal(pw(), 20);
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); assert.equal(pw(), 40);
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'fury-cutter', f.id, hit);
+  assert.equal(pw(), 160, 'capped');
+  applyMove(s, a.id, 'fury-cutter', f.id, () => 0.99); assert.equal(pw(), 10, 'miss resets');
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'tackle', f.id, hit); assert.equal(pw(), 10, 'another move resets');
+});
+
+test('rollout and ice ball grow 30 → 480 over five hits, then start over', () => {
+  const { s, a, f } = duel('geodude', 'snorlax');
+  const seen = [];
+  for (let i = 0; i < 6; i++) { seen.push(P(a, f, 'rollout')); applyMove(s, a.id, 'rollout', f.id, hit); }
+  assert.deepEqual(seen, [30, 60, 120, 240, 480, 30]);
+});
+
+test('triple kick: 10, 20, 30, each hit rolls accuracy and a miss stops it', () => {
+  const { s, a, f } = duel('hitmonlee', 'snorlax');
+  const all = applyMove(s, a.id, 'triple-kick', f.id, () => 0.5).hits.filter((h) => h.unitId === f.id && h.hit);
+  assert.equal(all.length, 3);
+  assert.ok(all[1].damage > all[0].damage && all[2].damage > all[1].damage, all.map((h) => h.damage).join(','));
+  const b = duel('hitmonlee', 'snorlax');
+  let n = 0; const rolls = () => (++n === 1 ? 0.5 : 0.999); // 첫 판정만 명중, 그 뒤 굴림은 다 빗나감 쪽
+  const some = applyMove(b.s, b.a.id, 'triple-kick', b.f.id, rolls).hits.filter((h) => h.unitId === b.f.id && h.hit);
+  assert.equal(some.length, 1);
+});
+
+test('rage: while raging, each attack that hits raises attack by 1; another move ends it', () => {
+  const { s, a, f } = duel('rattata', 'snorlax', { foe: { ability: null } }); // 분노 (특성 영향 없이)
+  applyMove(s, a.id, 'rage', f.id, hit);
+  applyMove(s, f.id, 'tackle', a.id, hit);
+  assert.equal(a.stages.atk, 1);
+  applyMove(s, f.id, 'tackle', a.id, hit);
+  assert.equal(a.stages.atk, 2);
+  applyMove(s, a.id, 'tackle', f.id, hit);
+  applyMove(s, f.id, 'tackle', a.id, hit);
+  assert.equal(a.stages.atk, 2, 'calm again');
+});
+
+test('uproar: locks the user into uproar for three own turns, wakes sleepers within 2 and stops sleep there', () => {
+  const { s, a, f } = duel('exploud', 'snorlax');
+  f.status = 'sleep'; f.statusTurns = 3;
+  const r = applyMove(s, a.id, 'uproar', f.id, hit);
+  assert.equal(f.status, null); assert.ok(r.woken.some((w) => w.unitId === f.id));
+  assert.equal(moveBlock(a, 'tackle'), 'uproar'); assert.equal(moveBlock(a, 'uproar'), null);
+  const sp = applyMove(s, f.id, 'spore', a.id, hit);
+  assert.notEqual(a.status, 'sleep'); assert.equal(sp.statusChanges[0].reason, 'uproar');
+  round2(s); assert.equal(moveBlock(a, 'tackle'), 'uproar');
+  round2(s); assert.equal(moveBlock(a, 'tackle'), 'uproar');
+  round2(s); assert.equal(moveBlock(a, 'tackle'), null, 'over after three own turns');
+});
+
+test('outrage: chases the first target for 2-3 attacks then the user gets confused', () => {
+  const { s, a, f } = duel('dratini', 'snorlax');
+  f.hp = f.maxHp = 9999;
+  let used = 0;
+  applyMove(s, a.id, 'outrage', f.id, hit); used++;
+  while (a.rampage && used < 5) {
+    assert.deepEqual([a.charging?.moveId, a.charging?.targetId], ['outrage', f.id], 'next turn fires on its own at the same target');
+    round2(s);
+    applyMove(s, a.id, 'outrage', f.id, hit); used++;
+  }
+  assert.ok(used >= 2 && used <= 3, `${used}`);
+  assert.ok(a.confusion > 0, 'confused at the end');
+  assert.equal(a.charging, null);
+});
