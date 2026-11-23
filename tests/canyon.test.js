@@ -190,3 +190,31 @@ test('canyon floors: a ridge up top, a creek below, 2+ chasm cells, vines under 
   assert.deepEqual(generateFloor(CY, 4, 9), generateFloor(CY, 4, 9));
   for (const d of DUNGEONS.filter((x) => x.id !== 'canyon')) assert.ok(!/[HX|]/.test(generateFloor(d, 1, 3).tiles.join('')), d.id);
 });
+
+// ---- 최종 리뷰 수정 ----
+test('vine: no climb with a zero move budget (rooted, bound, mean look)', () => {
+  assert.ok(!has(reachable(G, [], U('bidoof', 1, 2), 0), 1, 1));
+});
+test('vine: a retreat after moving onto the vine cannot climb', () => {
+  const u = U('bidoof', 1, 2, { moved: true, spent: 2 });
+  assert.ok(!has(reachable(G, [], u, 2), 1, 1));
+});
+test('vine: with an unlimited budget the climb still ends on the first ridge tile', () => {
+  const r = reachable(G, [], U('bidoof', 1, 2), Infinity);
+  assert.ok(has(r, 1, 1)); assert.ok(!has(r, 1, 0) && !has(r, 2, 1));
+});
+test('frustration: a ground user does not follow its shove onto a chasm or up a ridge', () => {
+  for (const tile of ['X', 'H']) {
+    const { s, a, f } = field(['........', `..${tile}.....`, '........'], [['pidgey', 2, 1], ['rattata', 7, 2]]);
+    a.x = 1; a.y = 1; a.moves = ['frustration'];
+    applyMove(s, a.id, 'frustration', f[0].id, hit);
+    assert.deepEqual([a.x, a.y], [1, 1], tile);
+  }
+});
+test('chasm: a boss grounded over the chasm does not fall', () => {
+  const { s, f } = field(ROW('........').map((r, i) => (i === 2 ? '.....X..' : r)), [['pidgey', 5, 2, { boss: true }], ['rattata', 7, 0]]);
+  const b = f[0]; b.boss = true;
+  s.gravity = { side: 'ally', turns: 5 }; b.grounded = true;
+  endPhase(s, () => 0.5);
+  assert.ok(s.units.includes(b));
+});

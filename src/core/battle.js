@@ -426,10 +426,10 @@ function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out)
 }
 
 // 밀려날 길: 막힌 칸·포켓몬 앞에서 멈춤. 협곡: 고지끼리·고지 → 저지는 밀림, 저지 → 고지는 막힘, 못 뜨는 포켓몬은 낭떠러지 칸으로 떨어짐(fall)
-// 협곡: 낭떠러지 칸 위에 있을 수 없게 된 포켓몬은 떨어져 기절. 반환 = [{unitId, x, y}]
+// 협곡: 낭떠러지 칸 위에 있을 수 없게 된 포켓몬은 떨어져 기절 (보스는 버팀). 반환 = [{unitId, x, y}]
 function chasmFalls(state) {
   const out = [];
-  for (const u of [...state.units]) if (state.grid[u.y]?.[u.x] === 'X' && !canEnter('X', u)) { out.push({ unitId: u.id, x: u.x, y: u.y }); knockOut(state, u, null); }
+  for (const u of [...state.units]) if (state.grid[u.y]?.[u.x] === 'X' && !u.boss && !canEnter('X', u)) { out.push({ unitId: u.id, x: u.x, y: u.y }); knockOut(state, u, null); }
   return out;
 }
 function pushPath(state, a, t) {
@@ -821,7 +821,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (move.id === 'frustration') {
         const from = { x: a.x, y: a.y };
         if (!state.units.includes(d) && free(d.x, d.y)) moveUnit(state, a.id, d.x, d.y, 0); // 쓰러졌으면 그 칸으로
-        else if (state.units.includes(d) && !d.boss && free(d.x + sx, d.y + sy) && canEnter(state.grid[d.y + sy]?.[d.x + sx], d)) { const ox = d.x, oy = d.y; moveUnit(state, d.id, d.x + sx, d.y + sy, 0); shoved = { unitId: d.id, from: { x: ox, y: oy }, to: { x: d.x, y: d.y } }; if (state.units.includes(a)) moveUnit(state, a.id, ox, oy, 0); }
+        else if (state.units.includes(d) && !d.boss && (canEnter(state.grid[d.y][d.x], a) || state.grid[d.y][d.x] === 'H' && state.grid[a.y][a.x] === 'H') && free(d.x + sx, d.y + sy) && canEnter(state.grid[d.y + sy]?.[d.x + sx], d)) { const ox = d.x, oy = d.y; moveUnit(state, d.id, d.x + sx, d.y + sy, 0); shoved = { unitId: d.id, from: { x: ox, y: oy }, to: { x: d.x, y: d.y } }; if (state.units.includes(a)) moveUnit(state, a.id, ox, oy, 0); }
         if (a.x !== from.x || a.y !== from.y) stepped = { unitId: a.id, from, to: { x: a.x, y: a.y } };
       }
     }

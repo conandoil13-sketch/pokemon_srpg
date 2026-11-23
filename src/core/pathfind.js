@@ -113,7 +113,7 @@ function search(grid, units, unit, budgetOverride = null) {
       }
       const tile = grid[y][x], from = grid[cur.y][cur.x], roofWalk = tile === 'B' && from === 'B'; // 옥상 위에서는 누구나 건물 칸끼리 걷는다
       const ridge = tile === 'H' && from === 'H', climb = tile === 'H' && from !== 'H'; // 협곡: 고지끼리는 누구나 · 저지 → 고지는 오르기
-      const vine = climb && !soars(unit) && from === '|' && cur.c === 0 && cur.x === unit.x && cur.y === unit.y && typeof unit === 'object'; // 지상: 덩굴에서 시작한 첫걸음만 (이동력 전부)
+      const vine = climb && !soars(unit) && from === '|' && cur.c === 0 && cur.x === unit.x && cur.y === unit.y && typeof unit === 'object' && budget >= 1 && !unit.moved; // 지상: 덩굴에서 그 차례를 시작한 첫걸음만 (이동력 전부, 못 움직이면 못 오름)
       if (climb ? !soars(unit) && !vine : !roofWalk && !ridge && !canEnter(tile, unit, !!grid.trees, true)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side && !typesOfWho(unit).includes('ghost')) continue; // 고스트: 상대 칸 통과
@@ -123,7 +123,7 @@ function search(grid, units, unit, budgetOverride = null) {
       if (best.has(k) && best.get(k) <= c) continue;
       best.set(k, c);
       parent.set(k, `${cur.x},${cur.y}`); via.delete(k);
-      open.push({ x, y, c });
+      if (!vine) open.push({ x, y, c }); // 덩굴로 오른 칸에서 이동 끝 (이동력이 무한이어도)
     }
   }
   // 멈춘 도착이 이기는 칸: 다른 포켓몬이 있는 칸(밀어내기 — 걸어서는 못 섬)이거나 더 싸거나 같을 때
