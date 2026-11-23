@@ -510,6 +510,14 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     spawnEffectFx(fx, s, get); // 방어·버티기·길동무
     if (!s || !spec) return;
     if (s.k === 'act' && spec.cast) spawnSafe(fx, spec.cast, feet(at(attacker)), { dir });
+    // 돌진기: 달려가는 동안 속도선 (출발 칸 발밑에서), 붙어 있으면 짧은 런지, 돌아올 때는 옅은 꼬리
+    if (spec.dash) {
+      const trail = (from, to, opts) => spawnSafe(fx, { ...spec.dash, opts: { ...spec.dash.opts, ...opts } }, feet(from), { dir: dirName(to.x - from.x, to.y - from.y) });
+      const tiles = (m) => Math.abs(m.to.x - m.from.x) + Math.abs(m.to.y - m.from.y);
+      if (s.k === 'dash' && result.dashed) trail(result.dashed.from, result.dashed.to, { reach: tiles(result.dashed) * TILE, travel: Math.min(1.2, s.d) });
+      if (s.k === 'act' && !result.dashed && dist0 === 1) trail(attacker, focusPt, { reach: 8, travel: 0.12 });
+      if (s.k === 'back' && result.returned) trail(result.returned.from, result.returned.to, { reach: tiles(result.returned) * TILE, travel: Math.min(1.2, s.d), faint: true });
+    }
     if (s.k === 'counter') { // 받은 기술을 반격 색으로, 위력 배수만큼 크게 겹쳐 되돌림
       const c = result.countered, src = get(c.unitId) ?? defenders[0], pal = COUNTER_PAL[c.moveId];
       const base = spec.hit ?? spec.cast ?? { id: 'impacts/blunt-hit', opts: {}, timeScale: 1.5, layer: 'front' };
