@@ -15,7 +15,7 @@ test('ice cave is 8-1 next to the volcano; the power plant opens it', () => {
   assert.deepEqual(IC.baseLevel, s8[1].baseLevel); assert.equal(IC.floors, 9);
   assert.deepEqual(IC.weather, [{ id: 'hail', chance: 0.4 }]);
   assert.deepEqual(IC.piles, [2, 4]);
-  assert.deepEqual(DUNGEONS.find((d) => d.stage === 9).unlock, ['ice-cave', 'volcano']);
+  assert.deepEqual(DUNGEONS.filter((d) => d.stage === 9).map((d) => d.unlock), ['ice-cave', 'volcano']); // 짝: 얼음 → 9-1, 화산 → 9-2
 });
 
 test('ice cave: mostly ice types, water second', () => {
