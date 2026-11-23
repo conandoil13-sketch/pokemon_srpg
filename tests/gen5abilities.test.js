@@ -160,3 +160,33 @@ test('ability notices: cursed body names the disabled foe, regenerator heals', (
   assert.match(abilityNotices([{ unitId: 'a', ability: 'cursed-body', target: 'b' }], get)[0].lines.join(' '), /사슬묶기/);
   assert.match(abilityNotices([{ unitId: 'a', ability: 'regenerator' }], get)[0].lines.join(' '), /회복/);
 });
+
+test('cursed body: the disable lasts 3 of the attacker own turns (its own phase end does not count)', () => {
+  const { s, a, f } = duel('rattata', 'frillish', { foe: { ability: 'cursed-body' } });
+  f.hp = f.maxHp = 999;
+  applyMove(s, a.id, 'bite', f.id, () => 0.01);
+  endPhase(s, () => 0.5); // 공격자 페이즈 끝
+  assert.equal(a.disable?.turns, 3);
+});
+
+test('moxie: a knockout mid spread move boosts only after the move (later targets take normal damage)', () => {
+  const run = (ability) => {
+    const { s, a, f } = duel('sandile', 'rattata', { ally: { ability }, extra: [{ species: 'snorlax', x: 1, y: 2, level: 40 }] });
+    f.hp = 1;
+    const big = s.units.find((u) => u.species === 'snorlax');
+    const r = applyMove(s, a.id, 'earthquake', f.id, () => 0.01);
+    return { dmg: r.hits.find((h) => h.unitId === big.id).damage, atk: a.stages.atk ?? 0 };
+  };
+  const plain = run('intimidate'), moxie = run('moxie');
+  assert.equal(moxie.dmg, plain.dmg);
+  assert.equal(moxie.atk, 1);
+});
+
+test('mummy: an enemy that turned into mummy leaves its original ability in the ditto capsule log', () => {
+  const { s, a, f } = duel('yamask', 'rattata', { ally: { ability: 'mummy' }, foe: { ability: 'guts' } });
+  applyMove(s, f.id, 'bite', a.id, () => 0.5); // 적이 미라에 닿음
+  assert.equal(f.ability, 'mummy');
+  f.hp = 1;
+  applyMove(s, a.id, 'bite', f.id, () => 0.01);
+  assert.equal(s.log.defeated.at(-1).ability, 'guts');
+});
