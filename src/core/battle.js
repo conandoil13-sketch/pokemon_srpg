@@ -425,23 +425,46 @@ function supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out)
   }
 }
 
-function pushAway(state, a, t, out) {
-  const res = (ok, reason) => ({ unitId: t.id, effect: 'push', ok, ...(reason ? { reason } : {}) });
-  if (t.boss || t.rooted || has(t, 'suction-cups')) return res(false, 'immune'); // 흡반: 밀리지 않음
+// 밀려날 길: 막힌 칸·포켓몬 앞에서 멈춤. 협곡: 고지끼리·고지 → 저지는 밀림, 저지 → 고지는 막힘, 못 뜨는 포켓몬은 낭떠러지 칸으로 떨어짐(fall)
+// 협곡: 낭떠러지 칸 위에 있을 수 없게 된 포켓몬은 떨어져 기절. 반환 = [{unitId, x, y}]
+function chasmFalls(state) {
+  const out = [];
+  for (const u of [...state.units]) if (state.grid[u.y]?.[u.x] === 'X' && !canEnter('X', u)) { out.push({ unitId: u.id, x: u.x, y: u.y }); knockOut(state, u, null); }
+  return out;
+}
+function pushPath(state, a, t) {
   const dx = t.x - a.x, dy = t.y - a.y;
   const [sx, sy] = Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx) || 1, 0] : [0, Math.sign(dy)];
   const path = [{ x: t.x, y: t.y }];
   for (let i = 0; i < PUSH_TILES; i++) {
-    const p = path.at(-1), nx = p.x + sx, ny = p.y + sy;
-    if (!canEnter(state.grid[ny]?.[nx], t) || state.units.some((u) => u !== t && u.x === nx && u.y === ny)) break;
+    const p = path.at(-1), nx = p.x + sx, ny = p.y + sy, tile = state.grid[ny]?.[nx];
+    if (state.units.some((u) => u !== t && u.x === nx && u.y === ny)) break;
+    if (tile === 'X' && !canEnter('X', t)) { path.push({ x: nx, y: ny }); return { path, fall: true }; }
+    if (!(tile === 'H' && state.grid[p.y][p.x] === 'H') && !canEnter(tile, t)) break;
     path.push({ x: nx, y: ny });
   }
+  return { path, fall: false };
+}
+const pushImmune = (t) => t.boss || t.rooted || has(t, 'suction-cups');
+// 예상 창용: 밀리면 어디로 가나 · 떨어지나
+export function pushPreview(state, a, t) {
+  if (pushImmune(t)) return { to: null, fall: false };
+  const { path, fall } = pushPath(state, a, t);
+  return { to: path.length > 1 ? path.at(-1) : null, fall };
+}
+
+function pushAway(state, a, t, out) {
+  const res = (ok, reason) => ({ unitId: t.id, effect: 'push', ok, ...(reason ? { reason } : {}) });
+  if (pushImmune(t)) return res(false, 'immune'); // 흡반: 밀리지 않음
+  const { path, fall } = pushPath(state, a, t);
   if (path.length === 1) return res(false, 'stuck');
   const from = path[0], to = path.at(-1);
   Object.assign(t, newStages());
   moveUnit(state, t.id, to.x, to.y, 0, path);
-  const end = { x: t.x, y: t.y }, fainted = !state.units.includes(t); // 압정에 쓰러지면 그 칸에서 멈춤
-  out.pushed = { unitId: t.id, from, to: end, path: path.slice(0, path.findIndex((p) => p.x === end.x && p.y === end.y) + 1), ...(fainted ? { fainted: true } : {}) };
+  const end = { x: t.x, y: t.y }, spiked = !state.units.includes(t); // 압정에 쓰러지면 그 칸에서 멈춤
+  const fell = fall && !spiked && end.x === to.x && end.y === to.y; // 협곡: 낭떠러지로 떨어짐 = 기절 (밀어낸 쪽이 쓰러뜨림)
+  if (fell) { knockOut(state, t, a); checkResult(state); }
+  out.pushed = { unitId: t.id, from, to: end, path: path.slice(0, path.findIndex((p) => p.x === end.x && p.y === end.y) + 1), ...(spiked || fell ? { fainted: true } : {}), ...(fell ? { fell: true } : {}) };
   out.trapEvents = [...(state.log.trapEvents ?? [])];
   // 속박: 밀려난 쪽이 묶은 쪽이거나 묶인 쪽이면 거리를 다시 본다 (사거리 밖이면 바로 풀림)
   const evs = [];
@@ -1038,6 +1061,7 @@ export function endPhase(state, rng = Math.random) {
   for (const u of state.units) if (u.burrow && u.side !== ending) u.burrow = null; // 숨기: 상대 페이즈가 끝나면 나옴
   tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
   W = effectiveWeather(state); // 날씨 부르기가 방금 끝났을 수 있음 (쾌청 녹이기 등)
+  state.log.falls = chasmFalls(state); // 협곡: 낭떠러지 위인데 더는 못 뜨는 포켓몬 (중력·특성 잃음)
   checkResult(state);
   state.log.wisps = ending === 'enemy' ? wispPhase(state, (w, x, y, i) => makeUnit({ species: w.species, side: 'enemy', x, y, level: w.level, id: `enemy-${w.species}-wisp${i + 1}` })) : []; // 묘지: 혼불·고스트 (층이 끝났으면 없음)
   state.log.expired = [];

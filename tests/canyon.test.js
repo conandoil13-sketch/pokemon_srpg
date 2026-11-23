@@ -88,3 +88,72 @@ test('ridge: +10 accuracy shooting down, -10 shooting up', () => {
   assert.equal(hitChance(a, d, mv, 'H', null, { atkTile: '.' }), flat - 10);
   assert.equal(hitChance(a, d, mv, 'H', null, { atkTile: 'H' }), flat);
 });
+
+// ---- 낙사 ----
+import { createBattle, applyMove, endPhase, pushPreview } from '../src/core/battle.js';
+import { newMember } from '../src/core/progress.js';
+import { createRng } from '../src/core/rng.js';
+import { effectMessages } from '../src/render/mapAttack.js';
+
+const hit = () => 0.01;
+const field = (rows, foes) => {
+  const map = { tiles: rows, allySlots: [{ x: 1, y: 1 }], enemies: foes.map(([species, x, y, extra]) => ({ species, x, y, level: 40, ...extra })) };
+  const s = createBattle(map, [newMember('growlithe', 40, createRng(1))]);
+  const a = s.units.find((u) => u.side === 'ally'); a.moves = ['roar', ...a.moves.slice(1)];
+  return { s, a, f: s.units.filter((u) => u.side === 'enemy') };
+};
+const ROW = (r1) => ['........', r1, '........'];
+
+test('chasm fall: a pushed ground pokemon drops in and faints, credited to the pusher', () => {
+  const { s, a, f } = field(ROW('...X....'), [['meowth', 2, 1], ['rattata', 7, 2]]);
+  const r = applyMove(s, a.id, 'roar', f[0].id, hit);
+  assert.ok(!s.units.includes(f[0]));
+  assert.equal(r.pushed.fell, true); assert.equal(r.pushed.fainted, true); assert.deepEqual(r.pushed.to, { x: 3, y: 1 });
+  assert.ok(s.log.defeated.some((d) => d.species === 'meowth'));
+  assert.ok(Object.values(s.log.exp).some((v) => v > 0));
+  assert.deepEqual(effectMessages(r, (id) => (id === f[0].id ? f[0] : a)).slice(0, 2), ['상대 나옹은 날려가 버렸다!', '상대 나옹은 낭떠러지로 떨어졌다!']);
+});
+
+test('chasm fall: the last enemy falling wins the floor; floaters glide over and may stop on the chasm', () => {
+  const one = field(ROW('...X....'), [['meowth', 2, 1]]);
+  applyMove(one.s, one.a.id, 'roar', one.f[0].id, hit);
+  assert.equal(one.s.result, 'win');
+  const fl = field(ROW('...XX...'), [['pidgey', 2, 1]]);
+  applyMove(fl.s, fl.a.id, 'roar', fl.f[0].id, hit);
+  assert.ok(fl.s.units.includes(fl.f[0])); assert.deepEqual([fl.f[0].x, fl.f[0].y], [5, 1]);
+  const fl2 = field(ROW('...XXX..'), [['pidgey', 2, 1]]);
+  applyMove(fl2.s, fl2.a.id, 'roar', fl2.f[0].id, hit);
+  assert.deepEqual([fl2.f[0].x, fl2.f[0].y], [5, 1], 'stops over the chasm');
+});
+
+test('ridge pushes: along the top and off the edge, never up the cliff', () => {
+  const top = field(ROW('..HHHHH.'), [['meowth', 2, 1]]);
+  applyMove(top.s, top.a.id, 'roar', top.f[0].id, hit);
+  assert.deepEqual([top.f[0].x, top.f[0].y], [5, 1]);
+  const off = field(ROW('..HH....'), [['meowth', 2, 1]]);
+  applyMove(off.s, off.a.id, 'roar', off.f[0].id, hit);
+  assert.deepEqual([off.f[0].x, off.f[0].y], [5, 1]);
+  const up = field(ROW('...H....'), [['meowth', 2, 1]]);
+  const r = applyMove(up.s, up.a.id, 'roar', up.f[0].id, hit);
+  assert.equal(r.effects[0].reason, 'stuck');
+});
+
+test('chasm: a floater grounded over the chasm falls at the end of the phase', () => {
+  const { s, f } = field(ROW('........').map((r, i) => (i === 2 ? '.....X..' : r)), [['pidgey', 5, 2], ['rattata', 7, 0]]);
+  s.gravity = { side: 'ally', turns: 5 }; f[0].grounded = true; // 중력
+  endPhase(s, () => 0.5);
+  assert.ok(!s.units.includes(f[0]));
+  assert.deepEqual(s.log.falls, [{ unitId: f[0].id, x: 5, y: 2 }]);
+});
+
+test('push preview marks a fall', () => {
+  const { s, a, f } = field(ROW('...X....'), [['meowth', 2, 1], ['pidgey', 2, 0], ['rattata', 7, 2]]);
+  a.x = 1; a.y = 1;
+  assert.equal(pushPreview(s, a, f[0]).fall, true);
+  assert.equal(pushPreview(s, a, f[1]).fall, false);
+});
+
+import { fallNotices } from '../src/game/states.js';
+test('fall notice at phase end', () => {
+  assert.deepEqual(fallNotices([{ unitId: 'e', x: 5, y: 2 }], () => ({ side: 'enemy', species: 'pidgey' })), [{ lines: ['상대 구구는 낭떠러지로 떨어졌다!'], at: { x: 5, y: 2 }, hp: null }]);
+});
