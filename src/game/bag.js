@@ -6,6 +6,7 @@ import { josa } from '../data/text.js';
 import { STATS, POWDER_KO } from '../core/dittoBuild.js';
 import { equip, unequip } from '../core/heldBag.js';
 import { deployed } from '../core/roster.js';
+import { MAX_LEVEL } from '../core/stats.js';
 import { memberKey } from '../core/members.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -15,7 +16,7 @@ export const BAG_TABS = ['도구', '진화·뽑기', '메타몽'];
 const ROW = 14, LIST_Y = 26, VISIBLE = 9;
 const nameOf = (m) => SPECIES[m.species].name;
 
-export function createBag({ game, onSave = () => {}, onBack }) {
+export function createBag({ game, onSave = () => {}, onBack, onCandy = null, levelCap = Infinity }) {
   let tab = 0, sel = 0, top = 0, mode = 'list', pickFor = null, pickSel = 0, msg = null;
 
   // 지금 탭의 줄: { label, count?, desc, act?, ... }
@@ -29,6 +30,7 @@ export function createBag({ game, onSave = () => {}, onBack }) {
     }
     if (tab === 1) return [
       ...(it.evoStone > 0 ? [{ label: '진화의돌', count: it.evoStone, desc: '박스에서 돌로 진화하는 포켓몬에게 쓴다' }] : []),
+      ...(it.rareCandy > 0 ? [{ label: '이상한사탕', count: it.rareCandy, desc: '출전 포켓몬 하나의 레벨이 1 오른다', act: 'candy' }] : []),
       ...(it.tenVoucher > 0 ? [{ label: '10연속 뽑기 바우처', count: it.tenVoucher, desc: '뽑기에서 10연속 뽑기를 한 번 공짜로' }] : []),
     ];
     return [
@@ -43,15 +45,23 @@ export function createBag({ game, onSave = () => {}, onBack }) {
   function choose(r) {
     if (!r) return;
     if (r.act === 'unequip') { const name = HELD_ITEMS[r.member.held].name; unequip(game, memberKey(r.member)); onSave(); msg = [`${josa(name, '을/를')} 가방에 넣었다.`]; clampSel(); return; }
-    if (r.act === 'equip') { pickFor = r.id; pickSel = 0; mode = 'pick'; }
+    if (r.act === 'equip' || r.act === 'candy') { pickFor = r.act === 'candy' ? 'candy' : r.id; pickSel = 0; mode = 'pick'; }
   }
   function give(m) {
     const id = pickFor; mode = 'list'; pickFor = null;
+    if (id === 'candy') { // 이상한사탕: 상한이면 쓰지 않음, 아니면 하나 줄이고 결산 화면으로 (onCandy)
+      if (!m) return;
+      if (m.level >= Math.min(levelCap, MAX_LEVEL)) { msg = [`${josa(nameOf(m), '은/는')} 지금은`, '더 이상 강해질 수 없다.']; return; }
+      game.items.rareCandy -= 1; onSave(); clampSel();
+      onCandy?.(m);
+      return;
+    }
     if (!m || !equip(game, memberKey(m), id)) return;
     onSave(); msg = [`${josa(nameOf(m), '이/가')} ${josa(HELD_ITEMS[id].name, '을/를')} 지녔다.`]; clampSel();
   }
 
   return {
+    get message() { return msg; },
     get tab() { return tab; }, get rows() { return rows(); }, get mode() { return mode; }, get sel() { return sel; },
     handle(ev) {
       if (msg) { if (['confirm', 'cancel', 'click'].includes(ev.type)) msg = null; return; }
@@ -92,7 +102,7 @@ export function createBag({ game, onSave = () => {}, onBack }) {
       });
       if (top > 0) drawText(ctx, '▲', W - 18, LIST_Y - 3, '#808080', null, 'small');
       if (top + VISIBLE < list.length) drawText(ctx, '▼', W - 18, LIST_Y + VISIBLE * ROW - 9, '#808080', null, 'small');
-      const desc = mode === 'pick' ? `누구에게 ${HELD_ITEMS[pickFor].name}?` : list[sel]?.desc ?? '좌우: 탭 · 취소: 닫기';
+      const desc = mode === 'pick' ? `누구에게 ${pickFor === 'candy' ? '이상한사탕' : HELD_ITEMS[pickFor].name}?` : list[sel]?.desc ?? '좌우: 탭 · 취소: 닫기';
       ui.drawWindow(ctx, 4, H - 30, W - 8, 26);
       drawText(ctx, desc, 12, H - 24, '#383838', null, 'small');
       if (mode === 'pick') { const r = pickRect(); ui.drawMenu(ctx, pickItems(), pickSel, r.x, r.y); }

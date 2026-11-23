@@ -82,3 +82,10 @@ export const GIFT_TREE = { kind: 'tree', x: recruitSign.x, y: recruitSign.y + 2 
 
 // 이스터에그: 4번째 동료 자리(기본 편성이면 꼬링크) 왼쪽 칸에서 아래 물을 보고 말을 걸면 10연속 뽑기 바우처 (저장 파일당 한 번)
 export const WATER_GIFT_SPOT = { x: TOWN.npcSpots[3].x - 1, y: TOWN.npcSpots[3].y, facing: 'down' };
+
+// 이스터에그: 이상한사탕 보물찾기 (2026-11-23). 그 칸에 서서 그 방향의 소품을 조사하면 한 번씩
+export const CANDY_SPOTS = [
+  { id: 'woodpile', x: 2, y: 3, facing: 'right', line: '장작 틈에 무언가 끼어 있다!' }, // 편성소 장작더미
+  { id: 'basket', x: 15, y: 3, facing: 'left', line: '알… 이 아니라 사탕이다!' }, // 모집소 알 바구니
+  { id: 'crates', x: 18, y: 9, facing: 'right', line: '상자 밑에 굴러 들어간 것을 찾았다!' }, // 의뢰소 공사터 상자
+];

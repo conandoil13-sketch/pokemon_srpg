@@ -25,6 +25,7 @@ import { josa } from './data/text.js';
 import { pickupLoot } from './core/abilities.js';
 import { rollCapsules } from './core/dittoBuild.js';
 import { levelCapFor, recommendedLevel } from './core/difficulty.js';
+import { findCandy, candyExp } from './core/candy.js';
 import { createResults } from './game/results.js';
 import { createEvolution } from './game/evolution.js';
 import { createEvolutionChoice } from './game/evolutionChoice.js';
@@ -173,6 +174,11 @@ function onWaterGift() { // 물속의 선물: 10연속 뽑기 바우처 (한 번
   save();
   return true;
 }
+function onCandy(id) { // 이상한사탕 보물찾기 (자리마다 한 번)
+  const n = findCandy(game, id);
+  if (n) save();
+  return n;
+}
 function onTurtwigGift() {
   if (game.eggs?.turtwig) return false;
   game.coins += 200;
@@ -202,7 +208,7 @@ const go = {
     // 마을 NPC: 출전 멤버 먼저, 남는 자리에 대기 동료
     const outM = deployed(game).slice(1), out = outM.map((m) => m.species);
     const rest = game.party.filter((m) => m.species !== 'ditto' && !outM.includes(m)).map((m) => m.species);
-    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onBag: go.bag, onShop: go.shop, onTurtwigGift, onWaterGift, onShakeTree, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
+    scene = createTown({ onSortie: go.select, onParty: go.party, onGacha: go.gacha, onBag: go.bag, onShop: go.shop, onTurtwigGift, onWaterGift, onShakeTree, onCandy, message, spawn, leader: game.party[0].species, companions: [...out, ...rest] });
   },
   select: () => {
     scene = createDungeonSelect({
@@ -224,7 +230,13 @@ const go = {
   },
   bag: (spot) => { // X 메뉴 → 가방 (닫으면 같은 자리로)
     requestSprites(game.party.map((m) => m.species));
-    scene = createBag({ game, onSave: () => save(), onBack: () => go.town(null, spot) });
+    scene = createBag({
+      game, levelCap: levelCapFor(game), onSave: () => save(), onBack: () => go.town(null, spot),
+      onCandy: (m) => { // 이상한사탕: 결산 화면으로 레벨업·기술·진화, 끝나면 가방으로
+        scene = createResults({ game, result: 'candy', log: { exp: { [memberKey(m)]: candyExp(m) } }, firstClear: false, members: [m], cap: levelCapFor(game), onDone: (evos) => evolveChain(evos, () => { save(); go.bag(spot); }) });
+        save();
+      },
+    });
   },
   party: () => {
     requestSprites(game.party.map((m) => m.species));
