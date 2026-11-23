@@ -3,7 +3,7 @@
 import { HELD_ITEMS } from './data/heldItems.js';
 import { createScreen } from './render/screen.js';
 import { requestSprites } from './render/sprites.js';
-import { loadFonts } from './render/font.js';
+import { loadFonts, textProbe } from './render/font.js';
 import { bindInput } from './game/input.js';
 import { watchTouch, mountPad } from './game/touchPad.js';
 import { sound } from './audio/sound.js';
@@ -247,7 +247,7 @@ const testParty = (id) => {
   save(); go.select();
   return level;
 };
-window.__app = { get scene() { return scene; }, get game() { return game; }, go, save, testParty }; // 디버그용
+window.__app = { get scene() { return scene; }, get game() { return game; }, go, save, testParty, textProbe }; // 디버그용
 bindInput(canvas, getScale, (ev) => scene.handle(ev));
 mountPad(document.getElementById('pad'), (ev) => scene.handle(ev)); // 터치 기기가 아니면 CSS 로 숨김
 

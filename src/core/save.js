@@ -55,6 +55,7 @@ function cleanMember(m) {
   const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
   const out = { ...(Number.isInteger(m.uid) && m.uid > 0 ? { uid: m.uid } : {}), species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
   if (m.species === 'ditto') out.build = cleanBuild(m.build, level); // 메타몽만 빌드
+  else if (Array.isArray(m.learned)) out.learned = [...new Set(m.learned.filter((mv) => typeof mv === 'string' && own(MOVES, mv)))]; // 익혔던 기술 (떠올리기)
   if (isHeldItem(m.held)) out.held = m.held; // 지닌 도구 (없으면 칸 없음)
   Object.assign(out, cleanIndividual(m));
   return out;

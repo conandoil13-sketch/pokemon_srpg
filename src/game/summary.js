@@ -15,12 +15,11 @@ import { drawText, textWidth } from '../render/font.js';
 import { drawPortrait } from '../render/sprites.js';
 import { W, H } from '../render/screen.js';
 import { evolutionHint, fitLines } from './memberText.js';
-import { moveEffectTags } from './states.js';
+import { CATEGORY_KO, moveStatLine } from './moveInfo.js';
 import { CHOICE_LOCK } from './learnFlow.js';
 
 export const PAGES = ['정보', '능력치', '기술', '특성'];
 const TAB_W = Math.floor((W - 4) / PAGES.length);
-const CATEGORY_KO = { physical: '물리', special: '특수', status: '변화' };
 const STAT_ROWS = [['hp', 'HP'], ['atk', '공격'], ['def', '방어'], ['spa', '특공'], ['spd', '특방'], ['spe', '스피드']];
 
 export function createSummary({ game, list, index = 0, page = 0, onSave = () => {}, onClose }) {
@@ -118,7 +117,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
           drawText(ctx, mv.name, 10, y);
           ui.drawTypeBadge(ctx, mv.type, 120, y + 1);
           small(CATEGORY_KO[mv.category] ?? '', 158, y + 2);
-          small([mv.weightPower ? '위력 몸무게' : mv.fixedDamage ? '위력 고정' : `위력 ${mv.power ?? '-'}`, `명중 ${mv.accuracy ?? '-'}`, ui.shapeLabel(mv), ...moveEffectTags(mv)].filter(Boolean).join(' · '), 10, y + 13, '#606060'); // 흡수·반동·연속 등
+          small(moveStatLine(mv), 10, y + 13, '#606060'); // 흡수·반동·연속 등
         });
       } else {
         const cur = ABILITIES[abilityOf(m)], slots = s.abilities;

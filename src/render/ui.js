@@ -1,6 +1,6 @@
 // DS풍 UI 위젯 (화면 좌표)
 import { HELD_ITEMS } from '../data/heldItems.js';
-import { drawText, textWidth } from './font.js';
+import { drawText, textWidth, textProbe } from './font.js';
 import { TYPE_COLORS } from '../data/types.js';
 import { TYPE_KO } from '../data/text.js';
 import { SPECIES } from '../data/species.js';
@@ -70,6 +70,7 @@ const BORDER = '#384050', INNER = '#a8c0d8', FILL = '#f8f8f8';
 
 export function drawWindow(ctx, x, y, w, h, fill = FILL) {
   x = Math.round(x); y = Math.round(y);
+  if (textProbe.on) textProbe.boxes.push({ x, y, w, h });
   ctx.fillStyle = BORDER;
   ctx.fillRect(x + 1, y, w - 2, h);
   ctx.fillRect(x, y + 1, w, h - 2);
@@ -137,35 +138,40 @@ export const menuIndexAt = (items, x, y, py) => Math.floor((py - y - 4) / ROW);
 export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false, warn = null } = {}) {
   const s = SPECIES[unit.species];
   if (hidden) { // 안개 속: 정체 숨김
-    const w = 140, h = 52, x = onLeftHalf ? W - w - 2 : 2, y = 2;
-    drawWindow(ctx, x, y, w, h);
+    const w = 140, x = onLeftHalf ? W - w - 2 : 2, y = 2;
+    const lines = wrapWords('안개 속이라 잘 보이지 않는다', w - 58, 'small');
+    drawWindow(ctx, x, y, w, Math.max(52, 34 + lines.length * 11));
     ctx.fillStyle = '#585858'; ctx.fillRect(x + 4, y + 4, 44, 44);
     drawText(ctx, '???', x + 52, y + 4);
-    drawText(ctx, '안개 속이라 잘 보이지 않는다', x + 52, y + 22, '#707070', null, 'small');
-    drawText(ctx, 'HP ???', x + 52, y + 35, '#f8a000', '#d8d8d0', 'small');
+    lines.forEach((l, k) => drawText(ctx, l, x + 52, y + 19 + k * 11, '#707070', null, 'small'));
+    drawText(ctx, 'HP ???', x + 52, y + 21 + lines.length * 11, '#f8a000', '#d8d8d0', 'small');
     return;
   }
-  const stages = stageLine(unit);
-  const w = 140, h = 64 + (stages ? 12 : 0) + (warn ? 12 : 0);
+  const w = 140, inner = w - 12;
+  const ab = ABILITIES[unit.ability], it = unit.held ? HELD_ITEMS[unit.held] : null;
+  const abText = ab ? `특성 ${ab.name}` : '', itText = it?.name ?? '';
+  const itOwnLine = itText && textWidth(abText, 'small') + 8 + textWidth(itText, 'small') > inner; // 특성 줄에 도구가 안 들어가면 다음 줄
+  const stages = wrapWords(stageLine(unit), inner, 'small'), warns = wrapWords(warn ?? '', inner, 'small'); // 버프·디버프·효과가 많으면 여러 줄
+  const extra = (itOwnLine ? 1 : 0) + stages.length + warns.length;
+  const h = 64 + extra * 12;
   const x = onLeftHalf ? W - w - 2 : 2, y = 2;
   drawWindow(ctx, x, y, w, h);
-  const ab = ABILITIES[unit.ability];
-  if (ab) drawText(ctx, `특성 ${ab.name}`, x + 6, y + 51, ab.inactive ? '#909090' : '#305830', null, 'small');
-  const it = unit.held ? HELD_ITEMS[unit.held] : null; // 지닌 도구 (특성 줄 오른쪽)
-  if (it) drawText(ctx, it.name, x + w - 6 - textWidth(it.name, 'small'), y + 51, '#8a5418', null, 'small');
-  if (stages) drawText(ctx, stages, x + 6, y + 63, '#5848a0', null, 'small');
-  if (warn) drawText(ctx, warn, x + 6, y + h - 13, '#e03030', '#f8d0d0', 'small');
+  if (ab) drawText(ctx, abText, x + 6, y + 51, ab.inactive ? '#909090' : '#305830', null, 'small');
+  if (it) drawText(ctx, itText, x + w - 6 - textWidth(itText, 'small'), y + 51 + (itOwnLine ? 12 : 0), '#8a5418', null, 'small'); // 지닌 도구 (오른쪽)
+  let row = y + 63 + (itOwnLine ? 12 : 0);
+  stages.forEach((l) => { drawText(ctx, l, x + 6, row, '#5848a0', null, 'small'); row += 12; });
+  warns.forEach((l) => { drawText(ctx, l, x + 6, row, '#e03030', '#f8d0d0', 'small'); row += 12; });
   ctx.fillStyle = unit.side === 'ally' ? '#3870f8' : '#f83838';
   ctx.fillRect(x + 4, y + 4, 44, 44);
   drawPortrait(ctx, unit.species, 'Normal', x + 6, y + 6);
-  const nameEnd = drawNameWithGender(ctx, unit.species, unit.gender, x + 52, y + 4);
-  if (unit.boss) drawText(ctx, '보스', nameEnd + 4, y + 6, '#e03030', '#f8d0d0', 'small');
-  if (unit.status) drawStatusBadge(ctx, unit.status, x + w - 6 - textWidth(STATUS_KO[unit.status], 'small') - 6, y + 5);
+  if (unit.boss) drawText(ctx, '보스', x + 6, y + 5, '#f8f8f8', '#c02020', 'small'); // 초상화 위 (이름이 길어도 겹치지 않게)
+  if (unit.status) drawStatusBadge(ctx, unit.status, x + 6, y + 34); // 초상화 아래쪽
+  drawNameWithGender(ctx, unit.species, unit.gender, x + 52, y + 4);
   (unit.types ?? s.types).forEach((t, i) => drawTypeBadge(ctx, t, x + 52 + i * 34, y + 20)); // 유닛 타입 (메타몽 빌드)
   drawText(ctx, 'HP', x + 52, y + 35, '#f8a000', '#d8d8d0', 'small');
-  drawHpBar(ctx, x + 66, y + 37, 34, unit.hp, unit.maxHp);
-  const hpTxt = `${unit.hp}/${unit.maxHp}`;
-  drawText(ctx, hpTxt, x + w - 5 - textWidth(hpTxt, 'small'), y + 35, '#383838', '#d8d8d0', 'small');
+  const hpTxt = `${unit.hp}/${unit.maxHp}`, hpX = x + w - 5 - textWidth(hpTxt, 'small');
+  drawHpBar(ctx, x + 66, y + 37, Math.max(16, Math.min(34, hpX - 4 - (x + 66))), unit.hp, unit.maxHp); // 숫자가 길면 막대를 줄임
+  drawText(ctx, hpTxt, hpX, y + 35, '#383838', '#d8d8d0', 'small');
 }
 
 export function bigText(ctx, text, cx, y, color, shadowColor) {
@@ -253,6 +259,31 @@ export function drawCursor(ctx, x, y, time) {
   }
 }
 
+// 단어(띄어쓰기) 단위 줄바꿈. 한 단어가 혼자 넘치면 그 단어만 글자 단위로 자름
+export function wrapWords(text, width, style = 'main') {
+  const out = [];
+  let cur = '';
+  for (const word of String(text ?? '').split(' ').filter(Boolean)) {
+    const next = cur ? `${cur} ${word}` : word;
+    if (textWidth(next, style) <= width) { cur = next; continue; }
+    if (cur) out.push(cur);
+    cur = '';
+    if (textWidth(word, style) <= width) { cur = word; continue; }
+    for (const ch of word) { if (cur && textWidth(cur + ch, style) > width) { out.push(cur); cur = ''; } cur += ch; }
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+// 대사 창 줄 배치: 각 줄을 폭에 맞춰 줄바꿈, 두 줄이 넘으면 작은 글씨로 최대 세 줄
+export const MESSAGE_MAX_LINES = 3;
+export function messageLayout(text, width) {
+  const raw = (Array.isArray(text) ? text : [text]).filter((l) => l !== null && l !== undefined);
+  const main = raw.flatMap((l) => wrapWords(l, width, 'main'));
+  if (main.length <= 2) return { style: 'main', lines: main };
+  return { style: 'small', lines: raw.flatMap((l) => wrapWords(l, width, 'small')).slice(0, MESSAGE_MAX_LINES) };
+}
+
 // 하단 대사 창 (초상화 선택)
 export function drawMessage(ctx, text, portrait, blink) {
   const y = H - 50;
@@ -264,8 +295,9 @@ export function drawMessage(ctx, text, portrait, blink) {
     drawPortrait(ctx, portrait.species, portrait.emotion ?? 'Normal', 6, y + 4);
     tx = 54;
   }
-  const lines = Array.isArray(text) ? text : [text];
-  lines.slice(0, 2).forEach((l, i) => drawText(ctx, l, tx, y + 9 + i * 16));
+  const { style, lines } = messageLayout(text, W - 22 - tx);
+  if (style === 'main') lines.forEach((l, i) => drawText(ctx, l, tx, y + 9 + i * 16));
+  else lines.forEach((l, i) => drawText(ctx, l, tx, y + 5 + i * 13, '#383838', '#d8d8d0', 'small'));
   if (blink) {
     ctx.fillStyle = '#e04040';
     ctx.fillRect(W - 18, y + 38, 5, 1); ctx.fillRect(W - 17, y + 39, 3, 1); ctx.fillRect(W - 16, y + 40, 1, 1);

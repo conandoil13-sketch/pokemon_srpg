@@ -1135,7 +1135,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     const eff = tm === 0 ? ['효과 없음', '#808080'] : tm > 1 ? ['효과 굉장', '#20a020'] : tm < 1 ? ['효과 별로', '#c07020'] : null;
     if (eff) drawText(ctx, eff[0], W - 12 - textWidth(eff[0]), y + 20, eff[1]);
     drawText(ctx, `명중 ${tm === 0 ? '-' : `${hit}%`}`, 10, y + 35);
-    drawText(ctx, `데미지 ${tm === 0 ? 0 : `${min.damage}~${max.damage}`}`, 72, y + 35);
+    const dmg = `데미지 ${tm === 0 ? 0 : `${min.damage}~${max.damage}`}`, dmgSmall = textWidth(dmg) > 96; // 네 자리 데미지는 작은 글씨 (기절 표시와 안 겹치게)
+    drawText(ctx, dmg, 72, y + 35 + (dmgSmall ? 2 : 0), '#383838', '#d8d8d0', dmgSmall ? 'small' : 'main');
     const ko = tm === 0 || moveId === 'false-swipe' ? '' : min.damage >= d.hp && hit === 100 ? '기절!' : max.damage >= d.hp ? '기절?' : '';
     if (ko) drawText(ctx, ko, 172, y + 35, '#e03030');
     ui.drawHpBar(ctx, 206, y + 39, 40, Math.max(0, d.hp - max.damage), d.maxHp);
@@ -1160,22 +1161,24 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function drawMoveInfo(ctx, moveId) {
     const mv = MOVES[moveId];
     const r = ui.menuRect(menu, menuBox.x, menuBox.y);
-    const w = r.w, h = 50;
-    const x = r.x, y = r.y + r.h + 2;
+    const healNote = !sel ? '' : (sel.healUses ?? 0) <= 0 ? '이번 층에서는 더 못 쓴다' : sel.hp >= sel.maxHp ? 'HP 가 가득 차 있다' : `회복 · 남은 ${sel.healUses}번`;
+    const statusLine = mv.heal ? healNote : `효과 ${effectSummary(mv)}`;
+    const extra = [...(mv.ailment ? [`${STATUS_KO[mv.ailment]} ${mv.ailmentChance || 100}%`] : []), ...moveEffectTags(mv)].slice(0, 2).join(' · '); // "화상 10% · 흡수 50%"
+    const need = mv.category === 'status' ? textWidth(statusLine) + 14 : textWidth(ui.shapeLabel(mv)) + (extra ? textWidth(extra, 'small') + 10 : 0) + 16;
+    const w = Math.min(W - 4, Math.max(r.w, need)), h = 50; // 글이 길면 메뉴보다 넓게 (화면 안으로)
+    const x = Math.max(2, Math.min(r.x, W - 2 - w)), y = r.y + r.h + 2;
     ui.drawWindow(ctx, x, y, w, h);
     ui.drawTypeBadge(ctx, mv.type, x + 6, y + 5);
     if (mv.category === 'status') {
       drawText(ctx, '변화', x + 44, y + 4);
       drawText(ctx, `대상 ${TARGET_LABEL[mv.kind]}`, x + 6, y + 19);
-      const healNote = !sel ? '' : (sel.healUses ?? 0) <= 0 ? '이번 층에서는 더 못 쓴다' : sel.hp >= sel.maxHp ? 'HP 가 가득 차 있다' : `회복 · 남은 ${sel.healUses}번`;
-      drawText(ctx, mv.heal ? healNote : `효과 ${effectSummary(mv)}`, x + 6, y + 33, '#5848a0');
+      drawText(ctx, statusLine, x + 6, y + 33, '#5848a0');
       return;
     }
     drawText(ctx, mv.category === 'physical' ? '물리' : '특수', x + 44, y + 4);
     drawText(ctx, mv.weightPower ? '위력 몸무게' : mv.fixedDamage ? '위력 고정' : `위력 ${mv.power ?? '-'}`, x + 6, y + 19);
     drawText(ctx, `명중 ${mv.accuracy}`, x + 60, y + 19);
     drawText(ctx, ui.shapeLabel(mv), x + 6, y + 33);
-    const extra = [...(mv.ailment ? [`${STATUS_KO[mv.ailment]} ${mv.ailmentChance || 100}%`] : []), ...moveEffectTags(mv)].slice(0, 2).join(' · '); // "화상 10% · 흡수 50%"
     if (extra) drawText(ctx, extra, x + w - 8 - textWidth(extra, 'small'), y + 35, '#5848a0', null, 'small');
   }
 

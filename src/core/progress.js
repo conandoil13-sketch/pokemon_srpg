@@ -16,6 +16,7 @@ import { MOVES } from '../data/moves.js';
 import { BALANCE } from '../data/balance.js';
 import { expForLevel, levelForExp, statsAt, MAX_LEVEL } from './stats.js';
 import { startingMoves, movesLearnedBetween, learnOutcome } from './learn.js';
+import { remember } from './relearn.js';
 import { levelEvolutionOptions, stoneEvolutionOptions, pickEvolution } from './evolution.js';
 
 export const STARTERS = ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']; // 메타몽 = 주인공 (항상 맨 앞)
@@ -26,7 +27,8 @@ export const defaultSlot = (species) => (SPECIES[species].abilities.length > 1 ?
 export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
   const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
-  return { species, level, exp: expForLevel(s.growth, level), moves: startingMoves(s.learnset, level, MOVES, species), abilitySlot, abilityUnlocked: false, ...individualOf(species, rng), ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
+  const moves = startingMoves(s.learnset, level, MOVES, species);
+  return { species, level, exp: expForLevel(s.growth, level), moves, ...(species === 'ditto' ? {} : { learned: [...moves] }), abilitySlot, abilityUnlocked: false, ...individualOf(species, rng), ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
 }
 
 // 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)
@@ -65,7 +67,7 @@ function learnEvents(member, moves) {
   return moves.map((move) => {
     const outcome = learnOutcome(member.moves, move);
     if (outcome === 'known') return { type: 'skip', species: member.species, move };
-    if (outcome === 'learn') { member.moves.push(move); return { type: 'learned', species: member.species, move }; }
+    if (outcome === 'learn') { member.moves.push(move); remember(member, move); return { type: 'learned', species: member.species, move }; }
     return { type: 'choose', species: member.species, move };
   });
 }
@@ -103,7 +105,9 @@ export function applyExp(party, expByKey, rng = Math.random, cap = MAX_LEVEL) {
 // forgetIndex: 잊을 기술 위치, null 이면 배우지 않음
 export function resolveChoice(member, move, forgetIndex) {
   if (forgetIndex === null || forgetIndex === undefined) return;
+  for (const mv of member.moves) remember(member, mv);
   member.moves[forgetIndex] = move;
+  remember(member, move);
 }
 
 // 진화: 종족 교체 후 새 종족이 '현재 레벨'에 배우는 기술 처리
