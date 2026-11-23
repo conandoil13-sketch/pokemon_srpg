@@ -28,18 +28,18 @@ export function draw(p, t, o) {
 
   // 1) 출발 먼지: 발밑에서 뒤·위로 튀는 덩어리 (타입 색, 밝은 쪽에서 어두운 쪽으로)
   if (!faint && t < 0.4) {
-    for (let i = 0; i < 12; i++) {
-      const life = R.range(0.22, 0.4), k = t / life;
-      const vx = -R.range(4, 18), vy = -R.range(1, 10), big = R.next() > 0.5;
+    for (let i = 0; i < 18; i++) {
+      const life = R.range(0.24, 0.42), k = t / life;
+      const vx = -R.range(5, 22), vy = -R.range(1, 12), big = R.next() > 0.35;
       if (k >= 1) continue;
       const x = vx * ease.outQuad(k), y = -1 + vy * ease.outQuad(k) + 6 * k * k;
-      const c = k < 0.3 ? C[3] : k < 0.6 ? C[2] : C[1];
-      if (big && k < 0.6) p.rect(x - 1, y - 1, 2, 2, c, 1 - k * 0.8); else p.dot(x, y, c, 1 - k);
+      const c = k < 0.2 ? C[4] : k < 0.45 ? C[3] : k < 0.7 ? C[2] : C[1];
+      if (big && k < 0.65) p.rect(x - 1, y - 1, k < 0.25 ? 3 : 2, k < 0.25 ? 3 : 2, c, 1 - k * 0.6); else p.dot(x, y, c, 1 - k * 0.8);
     }
   }
 
   // 2) 속도선: 가운데 굵은 줄기 하나 + 위아래로 들쭉날쭉한 가는 선. 머리는 밝게, 꼬리는 어두운 색으로 디더 페이드
-  const LINES = [[0, 0, 2], [-4, 2, 2], [4, 2, 2], [-8, 6, 1], [7, 5, 1], [-11, 9, 1]]; // [높이, 뒤처짐, 굵기]
+  const LINES = [[0, 0, 3], [-4, 2, 2], [4, 2, 2], [-8, 5, 2], [8, 5, 1], [-12, 9, 1], [11, 8, 1]]; // [높이, 뒤처짐, 굵기]
   LINES.forEach(([off0, lag0, thick], i) => {
     const off = off0 + R.range(-0.7, 0.7), lag = lag0 + R.range(0, 3);
     const tip = head - BODY - lag;
@@ -48,28 +48,31 @@ export function draw(p, t, o) {
     const from = Math.max(-BODY - 14, tip - len);
     for (let x = Math.floor(tip); x >= from; x--) {
       const f = (tip - x) / Math.max(1, tip - from); // 0 머리 → 1 꼬리
-      if (f > 0.5 && (x + i) % 2) continue; // 꼬리는 디더
-      const c = f < 0.06 && i === 0 && !faint ? WHITE : f < 0.25 ? C[4] : f < 0.6 ? C[3] : C[2];
-      const a = A * (1 - f * 0.4) * (1 - after * 0.6);
+      if (f > 0.6 && (x + i) % 2) continue; // 꼬리는 디더
+      const c = f < (i === 0 ? 0.14 : 0.06) && thick > 1 && !faint ? WHITE : f < 0.35 ? C[4] : f < 0.7 ? C[3] : C[2];
+      const a = A * (1 - f * 0.25) * (1 - after * 0.5);
       p.dot(x, Y + off, c, a);
-      if (thick === 2 && f < 0.8) p.dot(x, Y + off + 1, f < 0.3 ? C[3] : C[2], a);
+      if (thick > 1 && f < 0.85) p.dot(x, Y + off + 1, f < 0.4 ? C[4] : C[3], a);
+      if (thick > 2 && f < 0.7) p.dot(x, Y + off + 2, f < 0.3 ? C[3] : C[2], a);
+      if (thick > 1 && !faint && f < 0.75) p.dot(x, Y + off + thick, C[1], a * 0.8); // 아래 어두운 테두리: 풀밭에서도 또렷하게
     }
   });
-  if (!faint && after < 1) p.glow(head - BODY, Y, 8, C[3], 0.3 * L * (1 - after)); // 몸 뒤 빛
+  if (!faint && after < 1) p.glow(head - BODY, Y, 11, C[4], 0.5 * L * (1 - after)); // 몸 뒤 빛
 
   // 3) 도착 섬광: 머리 앞 쐐기(>) + 앞으로 튀는 불똥
   if (!faint && u >= 1) {
-    const k = clamp((t - travel) / 0.2, 0, 1);
+    const k = clamp((t - travel) / 0.24, 0, 1);
     if (k < 1) {
-      const x0 = head + 6 + k * 3, w = 5 + k * 4, h = 6 + k * 5, a = 1 - k;
+      const x0 = head + 6 + k * 3, w = 6 + k * 5, h = 8 + k * 6, a = 1 - k * 0.8;
       const c = k < 0.35 ? WHITE : C[4];
-      p.line(x0, Y - h, x0 + w, Y, c, a); p.line(x0 + w, Y, x0, Y + h, c, a);
+      for (const d of [0, 1]) { p.line(x0 + d, Y - h, x0 + w + d, Y, c, a); p.line(x0 + w + d, Y, x0 + d, Y + h, c, a); } // 2px 굵기
       p.line(x0 - 2, Y - h + 2, x0 + w - 2, Y, C[3], a * 0.8); p.line(x0 + w - 2, Y, x0 - 2, Y + h - 2, C[3], a * 0.8);
-      for (let s = 0; s < 6; s++) {
-        const ang = R.range(-0.9, 0.9), d = 4 + k * R.range(8, 16);
+      for (let s = 0; s < 10; s++) {
+        const ang = R.range(-1.1, 1.1), d = 4 + k * R.range(8, 20);
+        if (s < 4 && k < 0.5) p.rect(x0 + w + Math.cos(ang) * d - 1, Y + Math.sin(ang) * d - 1, 2, 2, C[4], a);
         p.dot(x0 + w + Math.cos(ang) * d, Y + Math.sin(ang) * d, s % 2 ? WHITE : C[4], a);
       }
-      p.glow(x0 + w / 2, Y, 10, C[4], 0.35 * L * a);
+      p.glow(x0 + w / 2, Y, 13, C[4], 0.55 * L * a);
     }
   }
 }
