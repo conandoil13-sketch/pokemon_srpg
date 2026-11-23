@@ -8,7 +8,7 @@ import { CHOICE_LOCK } from './learnFlow.js';
 import { deployed } from '../core/roster.js';
 import { typesOfMember, abilityOf } from '../core/progress.js';
 import { ABILITIES } from '../data/abilities.js';
-import { drawPortrait } from '../render/sprites.js';
+import { drawPortrait, requestSprites } from '../render/sprites.js';
 
 const ROW = 18, LIST_X = 8, LIST_Y = 30, LIST_W = 120;
 const VISIBLE = 7; // 한 번에 보이는 줄 (넘치면 커서를 따라 스크롤)
@@ -44,6 +44,7 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
   // 출전 확인창 내용: 편성 순서대로 지금 타입·특성 (메타몽은 빌드)
   function sortieInfo(d) {
     const members = deployed(game).map((m) => ({ member: m, types: typesOfMember(m), ability: abilityOf(m) }));
+    requestSprites(members.map((c) => c.member.species)); // 초상화
     const lines = [`이 멤버로 ${d.name}에 출전할까?`, ...(run ? ['새로 출전하면 진행 중인 탐험에서', '모은 보물을 잃는다.'] : [])];
     return { dungeon: d.id, members, lines, warn: !!run };
   }
@@ -126,10 +127,10 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
       const x = 6 + (i % 2) * CARD_W, y = gy + 4 + Math.floor(i / 2) * CARD_H;
       drawPortrait(ctx, c.member.species, 'Normal', x, y + 1);
       ui.drawNameWithGender(ctx, c.member.species, c.member.gender, x + 44, y + 1);
-      const lv = `Lv${c.member.level}`;
-      drawText(ctx, lv, x + CARD_W - 6 - textWidth(lv, 'small'), y + 3, '#585858', null, 'small');
       c.types.forEach((ty, k) => ui.drawTypeBadge(ctx, ty, x + 44 + k * 34, y + 15));
       drawText(ctx, ABILITIES[c.ability]?.name ?? '-', x + 44, y + 30, '#506080', null, 'small');
+      const lv = `Lv${c.member.level}`;
+      drawText(ctx, lv, x + CARD_W - 8 - textWidth(lv, 'small'), y + 30, '#585858', null, 'small');
     });
     ui.drawWindow(ctx, 2, MSG_Y, W - 4, 48);
     drawText(ctx, lines[0], 12, MSG_Y + 6);

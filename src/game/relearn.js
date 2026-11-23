@@ -93,8 +93,8 @@ export function createRelearn({ member: m, onSave = () => {}, onClose }) {
         ui.drawTypeBadge(ctx, MOVES[id].type, W - 44, y);
         if (on && Math.floor(time * 3) % 3 !== 2) { ctx.fillStyle = '#e04040'; for (let k = 0; k < 4; k++) ctx.fillRect(7 + k, y + 3 + k, 1, 7 - k * 2); }
       });
-      if (!forgetting && top > 0) drawText(ctx, '▲', W / 2 - 4, LIST_Y - 1, '#f8f8f8', '#384868', 'small');
-      if (!forgetting && top + ROWS < list.length) drawText(ctx, '▼', W / 2 - 4, LIST_Y + ROWS * ROW + 1, '#f8f8f8', '#384868', 'small');
+      if (!forgetting && top > 0) drawText(ctx, '▲', W - 58, LIST_Y + 5, '#7080a0', null, 'small'); // 위·아래에 더 있음
+      if (!forgetting && top + ROWS < list.length) drawText(ctx, '▼', W - 58, LIST_Y + 5 + (ROWS - 1) * ROW, '#7080a0', null, 'small');
       if (forgetting) drawText(ctx, '잊을 기술을 고르자', W - 12 - 44 - textWidth('잊을 기술을 고르자', 'small') - 6, LIST_Y + 5 + 4 * ROW + 2, '#c06010', null, 'small');
       ui.drawWindow(ctx, 2, DETAIL_Y, W - 4, H - DETAIL_Y - 2);
       if (forgetting) { // 옛 기술 | 새 기술

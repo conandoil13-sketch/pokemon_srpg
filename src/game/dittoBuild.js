@@ -125,7 +125,7 @@ export function createDittoBuild({ game, onSave = () => {}, onClose }) {
       return;
     }
     if (c.kind === 'move') drawMoveCard(ctx, c.value, 8, y0 + 5, W - 18, { label: `${KIND_KO[c.kind]} 캡슐`, maxLines: 4 });
-    else if (c.kind === 'ability') { abilityBlock(c.value, '새 특성', y0 + 5, '#c06010'); abilityBlock(d.build.ability, '지금 특성', y0 + 38, '#305830'); }
+    else if (c.kind === 'ability') { abilityBlock(c.value, '새 특성', y0 + 4, '#c06010'); abilityBlock(d.build.ability, '지금 특성', y0 + 34, '#305830'); }
     else {
       drawText(ctx, '새 타입', 8, y0 + 7, '#c06010', null, 'small'); ui.drawTypeBadge(ctx, c.value, 50, y0 + 6);
       drawText(ctx, '지금 타입', 8, y0 + 25, '#305830', null, 'small');
