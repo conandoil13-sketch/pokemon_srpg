@@ -8,7 +8,7 @@ import { shakeGiftTree } from '../src/core/shards.js';
 import { newGame, loadGame, saveGame } from '../src/core/save.js';
 import { startRun } from '../src/core/run.js';
 import { createGame } from '../src/game/states.js';
-import { TOWN } from '../src/data/town.js';
+import { TOWN, GIFT_TREE } from '../src/data/town.js';
 import { MAP } from '../src/data/map.js';
 import { createRng } from '../src/core/rng.js';
 
@@ -702,5 +702,62 @@ test('recruitment tree counts only confirmed shakes, persists progress and pays 
     assert.equal(game.eggs.treeShakes, Math.min(5, i));
     assert.equal(game.shards.shinx ?? 0, i < 5 ? 0 : 3);
     town = enter();
+  }
+});
+
+// ---- 마을 건물 (2026-11-23) ----
+const inB = (b, x, y) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+test('town buildings: stump, tent, stall and three lots stand where the old rock piles were', () => {
+  const kinds = Object.fromEntries(TOWN.buildings.map((b) => [b.id, b.kind]));
+  assert.deepEqual(kinds, { team: 'stump', gacha: 'tent', shop: 'stall', 'lot-achieve': 'lot', 'lot-request': 'lot', 'lot-gate': 'lot' });
+  assert.ok(!TOWN.tiles.join('').includes('^'), 'no placeholder rocks left');
+  for (const id of ['team', 'gacha', 'shop']) {
+    const b = TOWN.buildings.find((x) => x.id === id), door = TOWN.objects.find((o) => o.id === id);
+    assert.equal(door.kind, 'door');
+    assert.deepEqual([door.x, door.y], [b.x + Math.floor(b.w / 2), b.y + b.h - 1], `${id} door at the bottom middle`);
+  }
+  assert.equal(TOWN.paths.length, TOWN.tiles.length);
+  for (const row of TOWN.paths) assert.equal(row.length, TOWN.tiles[0].length);
+});
+
+test('town buildings never cover the spots people stand on', () => {
+  const spots = [...TOWN.npcSpots, TOWN.start, TOWN.returnSpot, TOWN.partySpot, TOWN.gachaSpot, TOWN.shopSpot, GIFT_TREE, WATER_GIFT_SPOT, ...TOWN.objects.filter((o) => o.kind !== 'door')];
+  for (const b of TOWN.buildings) for (const s of spots) assert.ok(!inB(b, s.x, s.y), `${b.id} covers ${s.x},${s.y}`);
+});
+
+test('walking into a building or a lot is blocked; the lot sign says it is under construction', () => {
+  const town = createTown({ onSortie() {} });
+  const lot = TOWN.buildings.find((b) => b.id === 'lot-request');
+  town.player.x = lot.x - 1; town.player.y = lot.y;
+  town.handle({ type: 'dir', dx: 1, dy: 0 }); town.handle({ type: 'release', dx: 1, dy: 0 });
+  tick(town, 0.5);
+  assert.deepEqual([town.player.x, town.player.y], [lot.x - 1, lot.y]);
+  const sign = TOWN.objects.find((o) => o.id === 'sign-request');
+  town.player.x = sign.x; town.player.y = sign.y + 1; town.player.facing = 'up';
+  town.handle({ type: 'confirm' });
+  assert.equal(town.message.lines[0], '공사 중이다.');
+});
+
+test('the party office door still opens the party screen from its front step', () => {
+  let opened = 0;
+  const town = createTown({ onSortie() {}, onParty() { opened++; } });
+  town.player.x = TOWN.partySpot.x; town.player.y = TOWN.partySpot.y; town.player.facing = 'up';
+  town.handle({ type: 'confirm' }); town.handle({ type: 'confirm' });
+  assert.equal(opened, 1);
+});
+test('clicking the body or roof of a building walks to its door and opens it; clicking a lot does nothing', () => {
+  for (const [tx, ty] of [[22, 2], [24, 0]]) {
+    let shop = 0;
+    const town = createTown({ onSortie() {}, onShop() { shop++; } });
+    town.player.x = 20; town.player.y = 4;
+    town.update(0.02);
+    const pw = town.playerWorld();
+    const cam = { x: Math.max(0, Math.min(28 * 24 - 256, pw.x + 12 - 128)), y: Math.max(0, Math.min(14 * 24 - 192, pw.y + 12 - 96)) };
+    town.handle({ type: 'click', px: tx * 24 + 12 - Math.round(cam.x), py: ty * 24 + 12 - Math.round(cam.y) });
+    tick(town, 3);
+    assert.ok(town.message, `click at ${tx},${ty} reached the shop door`);
+    assert.deepEqual([town.player.x, town.player.y], [TOWN.shopSpot.x, TOWN.shopSpot.y]);
+    town.handle({ type: 'confirm' }); town.handle({ type: 'confirm' });
+    assert.equal(shop, 1);
   }
 });

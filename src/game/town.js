@@ -2,6 +2,7 @@
 import { TOWN, WATER_GIFT_SPOT, GIFT_TREE } from '../data/town.js';
 import { SPECIES } from '../data/species.js';
 import { drawMap, TILE } from '../render/tiles.js';
+import { drawTownPaths, drawBuilding, drawBoard } from '../render/townTiles.js';
 import { drawUnitSprite, drawShadow, DIR } from '../render/sprites.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -37,7 +38,8 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
   let clock = 0;
 
   const objectAt = (x, y) => onShakeTree && x === GIFT_TREE.x && y === GIFT_TREE.y ? GIFT_TREE : objects.find((o) => o.x === x && o.y === y);
-  const walkable = (x, y) => x >= 0 && y >= 0 && x < width && y < height && !'#^~'.includes(map.tiles[y][x]) && !objectAt(x, y);
+  const inBuilding = (x, y) => (map.buildings || []).some((b) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h);
+  const walkable = (x, y) => x >= 0 && y >= 0 && x < width && y < height && !'#^~'.includes(map.tiles[y][x]) && !objectAt(x, y) && !inBuilding(x, y);
 
   function tryStep(dx, dy) {
     player.facing = nameOf(dx, dy);
@@ -107,6 +109,10 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
 
   // BFS: 클릭한 칸(또는 클릭한 오브젝트 옆 칸)까지의 경로
   function routeTo(tx, ty) {
+    // 건물 몸통·지붕(발판 위 한 칸)을 누르면 그 건물 문으로
+    const bld = (map.buildings || []).find((b) => b.kind !== 'lot' && tx >= b.x && tx < b.x + b.w && ty >= b.y - 1 && ty < b.y + b.h);
+    const door = bld && objects.find((o) => o.kind === 'door' && o.id === bld.id);
+    if (door) { tx = door.x; ty = door.y; }
     const target = objectAt(tx, ty);
     const goals = target
       ? Object.values(DIRS).map(([dx, dy]) => ({ x: tx + dx, y: ty + dy })).filter((p) => walkable(p.x, p.y) || (p.x === player.x && p.y === player.y))
@@ -237,11 +243,14 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
       ctx.save();
       ctx.translate(-cx, -cy);
       drawMap(ctx, map.tiles, time, cx, cy, W, H);
+      if (map.paths) drawTownPaths(ctx, map.paths, map.flowers);
+      for (const b of map.buildings || []) if (b.kind === 'lot') drawBuilding(ctx, b, time); // 공사터는 바닥처럼 먼저
       fxm.draw(ctx, 'back', { x: cx, y: cy }); // 목적지 표시
       // 그릴 것: 표지판, NPC, 플레이어 — y 순서
       const p = this.playerWorld();
       const items = [
-        ...objects.map((o) => ({ y: o.y * TILE, draw: () => (o.kind === 'sign' ? drawSign(ctx, o) : drawPokemon(ctx, o.species, 'Idle', TO_DIR[npcFacing[o.id]], clock, o.x * TILE, o.y * TILE)) })),
+        ...(map.buildings || []).filter((b) => b.kind !== 'lot').map((b) => ({ y: (b.y + b.h - 1) * TILE, draw: () => drawBuilding(ctx, b, time) })),
+        ...objects.filter((o) => o.kind !== 'door').map((o) => ({ y: o.y * TILE, draw: () => (o.action === 'sortie' ? drawBoard(ctx, o.x, o.y) : o.kind === 'sign' ? drawSign(ctx, o) : drawPokemon(ctx, o.species, 'Idle', TO_DIR[npcFacing[o.id]], clock, o.x * TILE, o.y * TILE)) })),
         { y: p.y, draw: () => drawPokemon(ctx, leader, walk ? 'Walk' : 'Idle', TO_DIR[player.facing], clock, p.x, p.y) },
       ].sort((a, b) => a.y - b.y);
       for (const it of items) it.draw();
