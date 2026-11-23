@@ -58,7 +58,7 @@ export function layTraps(state, user, effect, aim) {
   const tiles = [];
   for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const x = aim.x + dx, y = aim.y + dy, tile = state.grid[y]?.[x];
-    if (tile === undefined || tile === '#') continue;
+    if (tile === undefined || tile === '#' || tile === 'T') continue;
     if (state.spikes.some((t) => t.x === x && t.y === y && t.kind === effect)) continue;
     state.spikes.push({ x, y, kind: effect, side: user.side, by: user.id, revealed: false });
     tiles.push({ x, y });
