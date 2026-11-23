@@ -4,7 +4,7 @@ import { typeMultiplier } from '../data/types.js';
 import { itemAttackMult, itemDefMult, itemCritBonus, itemAcc } from './items.js';
 
 export const PUNCH = ['ice-punch', 'fire-punch', 'thunder-punch', 'mach-punch', 'mega-punch', 'comet-punch', 'dizzy-punch', 'dynamic-punch', 'focus-punch', 'hammer-arm', 'meteor-mash', 'drain-punch', 'bullet-punch', 'shadow-punch', 'sky-uppercut'];
-export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell'];
+export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell', 'echoed-voice', 'round', 'relic-song', 'snarl'];
 const PINCH = { overgrow: 'grass', blaze: 'fire', torrent: 'water', swarm: 'bug' };
 
 export const has = (u, id) => u?.ability === id && !u.abilityOff; // 위액: 특성 꺼짐

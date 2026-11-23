@@ -5,6 +5,10 @@ import { SPECIES } from '../data/species.js';
 export function weightPower(kg) {
   return kg < 10 ? 20 : kg < 25 ? 40 : kg < 50 ? 60 : kg < 100 ? 80 : kg < 200 ? 100 : 120;
 }
+// 헤비봄버·히트스탬프: 내 몸무게 ÷ 상대 몸무게
+export function heavyPower(ratio) {
+  return ratio >= 5 ? 120 : ratio >= 4 ? 100 : ratio >= 3 ? 80 : ratio >= 2 ? 60 : 40;
+}
 export const weightOf = (unit) => unit.weight ?? SPECIES[unit.species]?.weight ?? 50;
 
 import { hash } from '../render/pixels.js';

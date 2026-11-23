@@ -42,3 +42,24 @@ test('gen 5 moves arrive, gen 6 moves still wait', () => {
 test('gen 5 moves really reach learnsets (snivy learns leaf tornado at 16)', () => {
   assert.ok(SPECIES.snivy.learnset.some(([lv, m]) => m === 'leaf-tornado' && lv === 16));
 });
+
+// 2단계 리뷰 (2026-11-24)
+import { SOUND } from '../src/core/abilities.js';
+import { heavyPower } from '../src/core/individual.js';
+
+test('darumaka evolves at level 35 (a level rule wins over a later stone detail)', () => {
+  assert.deepEqual(SPECIES.darumaka.evolutions.map((e) => [e.to, e.rule.kind, e.rule.level]), [['darmanitan', 'level', 35]]);
+  assert.equal(SPECIES.eevee.evolutions.find((e) => e.to === 'vaporeon').rule.kind, 'stone');
+});
+
+test('heavy slam and heat crash: power from user ÷ target weight', () => {
+  for (const id of ['heavy-slam', 'heat-crash']) {
+    assert.equal(MOVES[id].weightPower, 'ratio', id);
+    assert.equal(MOVES[id].learnable, true, id);
+  }
+  assert.deepEqual([1, 1.99, 2, 3, 4, 5, 10].map(heavyPower), [40, 40, 60, 80, 100, 120, 120]);
+});
+
+test('soundproof covers the gen 5 sound moves', () => {
+  for (const id of ['echoed-voice', 'round', 'relic-song', 'snarl']) assert.ok(SOUND.includes(id), id);
+});

@@ -225,7 +225,8 @@ test('regenerated data keeps every existing value (only new fields added) — go
   const strip = (evos) => evos.map((e) => ({ ...e, rule: Object.fromEntries(Object.entries(e.rule).filter(([k]) => k !== 'gender')) }));
   const keep = Object.fromEntries(Object.entries(POKEDEX.species).map(([k, s]) => [k, { base: s.base, types: s.types, learnset: s.learnset, evolutions: strip(s.evolutions), abilities: s.abilities, stage: s.stage, bst: s.bst, dex: s.dex, name: s.name, growth: s.growth, baseExp: s.baseExp, legendary: s.legendary }]));
   const sha = (o) => createHash('sha1').update(JSON.stringify(o)).digest('hex');
-  assert.equal(sha(keep), 'b344e0d5c81a26ea3fa8c9deb6a325a83704f72a');
+  // 2단계 리뷰: 모래두지·찌리리공·야돈→야도란·달막화가 돌 → 원작 레벨 (다른 값은 그대로)
+  assert.equal(sha(keep), 'd9d051b14d92b434a6cc2de7250827116cf40c16');
   const NEW = ['drain', 'healing', 'minHits', 'maxHits', 'critRate', 'flinchChance', 'priority']; // 기술 효과 메타 (2026-11-15 추가)
   const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
   const oldOnly = Object.fromEntries(Object.entries(oldMoves).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).filter(([f]) => !NEW.includes(f)))]));

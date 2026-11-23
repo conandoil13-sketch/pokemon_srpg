@@ -1,5 +1,5 @@
 // 데미지 / 명중 계산 (순수 함수, spec §4.4)
-import { weightPower, weightOf } from './individual.js';
+import { weightPower, heavyPower, weightOf } from './individual.js';
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
@@ -58,7 +58,8 @@ export function varPower(attacker, defender, move) {
 
 function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {}) {
   if (move.varPower) move = { ...move, power: varPower(attacker, defender, move) };
-  if (move.weightPower) move = { ...move, power: weightPower(weightOf(defender)) }; // 안다리걸기·풀묶기: 상대 몸무게
+  if (move.weightPower === 'ratio') move = { ...move, power: heavyPower(weightOf(attacker) / weightOf(defender)) }; // 헤비봄버·히트스탬프: 몸무게 비
+  else if (move.weightPower) move = { ...move, power: weightPower(weightOf(defender)) }; // 안다리걸기·풀묶기: 상대 몸무게
   const physical = move.category === 'physical';
   // 천진: 상대 랭크를 무시 (틀깨기면 천진도 무시)
   const aKey = physical ? 'atk' : 'spa', dKey = physical ? 'def' : 'spd';
