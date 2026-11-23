@@ -101,6 +101,7 @@ function effectLines(result, get, moveId = null) {
     else if (!e.ok && e.reason === 'safeguard') say(u, `${W_(label(u), '은/는')} 신비의 베일이 지켜 주고 있다!`);
     else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
   }
+  if (result.pushed?.fell) { const u = get(result.pushed.unitId); if (u) out.push({ text: `${W_(label(u), '은/는')} 낭떠러지로 떨어졌다!`, who: u, effect: null, pushFaint: true }); } // 협곡 낙사
   for (const e of result.trapEvents ?? []) { // 밀려나며 밟은 압정
     const u = get(e.unitId);
     if (!u) continue;

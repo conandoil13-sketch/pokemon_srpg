@@ -30,7 +30,7 @@ export function hitChance(attacker, defender, move, defTile, weather = null, ctx
   const bush = defTile === '"' ? (isType(defender, 'grass') ? 20 : 15) : defTile === '#' ? 8 : defTile === ':' && !airborne(defender) && !defender.burrow ? 15 : 0; // 풀: 수풀 회피 +5 · 나무 위(벌레) +8 · 사막 깊은 모래 +15 (지상)
   const evasion = Math.min(30, bush + Math.max(0, speGap));
   const rockAim = ctx.atkTile === '^' && isType(attacker, 'fighting') ? 5 : 0; // 격투: 바위 위에서 명중 +5
-  const height = ctx.atkTile === 'B' && defTile !== 'B' ? 10 : ctx.atkTile !== 'B' && defTile === 'B' ? -10 : 0; // 시티: 옥상 → 지상 +10, 지상 → 옥상 −10
+  const high = (t) => t === 'B' || t === 'H', height = high(ctx.atkTile) && !high(defTile) ? 10 : !high(ctx.atkTile) && high(defTile) ? -10 : 0; // 시티 옥상·협곡 고지: 위 → 아래 +10, 아래 → 위 −10
   return Math.max(0, Math.min(100, acc.value + rockAim + height - evasion + accuracyShift(attacker, defender)));
 }
 

@@ -201,6 +201,8 @@ export function generateFloor(dungeon, floor, seed) {
   const vents = dungeon.volcano ? volcanoExtras(g, used, enemies, createRng(hashSeed(seed, 7400))) : null;
   // 13. 얼음동굴: 빙판·고드름·빙판 위 바위 (별도 난수, 맨 끝). 미끄럼 규칙으로 계단·상자·더미에 멈춰 닿을 때까지 다시
   if (dungeon.ice) iceLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests], piles, createRng(hashSeed(seed, 7500)));
+  // 15. 협곡: 능선·개울·낭떠러지·덩굴 (별도 난수, 맨 끝). 지상 포켓몬이 차례를 이어 가며 계단·상자·적·출발 칸에 닿을 때까지 다시
+  if (dungeon.canyon) canyonLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests, ...enemies], createRng(hashSeed(seed, 7700)));
   // 14. 묘지: 세로 묘비 줄·추모 정원 + 혼불 예정표 (별도 난수, 맨 끝). 지상 포켓몬이 계단·상자·적에 닿을 때까지 다시
   const ghosts = dungeon.graveyard ? encounterPool(dungeon, floor).filter((id) => SPECIES[id].types.includes('ghost')) : [];
   const wisps = dungeon.graveyard ? graveyardLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests, ...enemies], floor >= dungeon.floors - 1 ? 3 : 2, createRng(hashSeed(seed, 7600)))
@@ -675,4 +677,62 @@ function graveyardLayout(g, used, allySlots, targets, count, rng) {
     for (const p of painted.reverse()) g[p.y][p.x] = p.was; // 되돌리고 다시
   }
   return [];
+}
+
+// 협곡: 위쪽 능선 H (열마다 높이 ±1), 그 아래 덩굴 | 2~4, 맨 아래 개울 ~ (물가 나무·풀숲), 능선 아래로 내려오는 낭떠러지 X 틈 2~3 + 들판 구덩이 0~1.
+// 모두 출발 3열 밖. 낭떠러지·개울은 빈칸(사람·상자·계단 없음)에만. 검증: 지상 포켓몬이 여러 차례에 걸쳐(덩굴 오르기 포함) 모든 목표에 닿음
+function canyonLayout(g, used, allySlots, targets, rng) {
+  const W = g[0].length, H = g.length, int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+  const free = (x, y) => x >= SAFE_COLS && y >= 0 && y < H && x < W && '."^#'.includes(g[y][x]) && !used.has(key(x, y));
+  const ok = () => { // 차례 이어 가기 BFS: 지상 걷기 + 고지끼리 + 뛰어내리기 + 덩굴 → 위 고지
+    const walk = (t) => t !== undefined && t !== 'H' && t !== 'X' && WALK.includes(t) || t === '|' || t === '>';
+    const start = allySlots[0], seen = new Set([key(start.x, start.y)]), q = [start];
+    while (q.length) {
+      const p = q.shift(), from = g[p.y][p.x];
+      for (const [dx, dy] of DIRS) {
+        const x = p.x + dx, y = p.y + dy, t = g[y]?.[x];
+        const can = t === 'H' ? from === 'H' || from === '|' : walk(t);
+        if (!can || seen.has(key(x, y))) continue;
+        seen.add(key(x, y)); q.push({ x, y });
+      }
+    }
+    return [...targets, ...allySlots].every((p) => seen.has(key(p.x, p.y)));
+  };
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const painted = [], paint = (x, y, ch) => { painted.push({ x, y, was: g[y][x] }); g[y][x] = ch; };
+    // 능선: 열마다 바닥 행 (2~5, 이웃 열과 ±1)
+    const edge = [];
+    let r = int(3, 4);
+    for (let x = SAFE_COLS; x < W; x++) {
+      if (x > SAFE_COLS && rng() < 0.45) r = Math.max(2, Math.min(5, r + (rng() < 0.5 ? -1 : 1)));
+      edge[x] = r;
+      for (let y = 0; y <= r; y++) if (g[y][x] !== '>') paint(x, y, 'H');
+    }
+    // 덩굴: 능선 바로 아래 빈 바닥
+    const vineSpots = [];
+    for (let x = SAFE_COLS; x < W; x++) if (free(x, edge[x] + 1) && g[edge[x] + 1][x] === '.') vineSpots.push(x);
+    for (let n = int(2, 4); n > 0 && vineSpots.length; n--) { const x = vineSpots.splice(Math.floor(rng() * vineSpots.length), 1)[0]; paint(x, edge[x] + 1, '|'); }
+    // 개울: 맨 아래 줄 (군데군데 한 줄 더), 물가에 나무·풀숲
+    for (let x = SAFE_COLS; x < W; x++) {
+      if (free(x, H - 1)) paint(x, H - 1, '~');
+      if (rng() < 0.35 && free(x, H - 2)) paint(x, H - 2, '~');
+    }
+    for (let n = int(3, 5); n > 0; n--) { const x = int(SAFE_COLS, W - 1), y = g[H - 2][x] === '~' ? H - 3 : H - 2; if (free(x, y) && g[y][x] === '.') paint(x, y, rng() < 0.4 ? '#' : '"'); }
+    // 낭떠러지: 능선 가장자리에서 개울 앞까지 내려오는 협곡 2~3줄기 (폭 2~3, 줄마다 조금씩 굽음), 줄기마다 폭 1 줄짜리 다리 하나 + 들판 구덩이
+    const starts = [];
+    for (let n = int(2, 3), tries = 0; starts.length < n && tries < 30; tries++) { const x = int(SAFE_COLS + 2, W - 3); if (starts.every((s) => Math.abs(s - x) >= 5)) starts.push(x); }
+    for (const x0 of starts) {
+      const w = int(2, 3), top = edge[x0] + 1, bridge = int(top + 2, H - 4);
+      let x = x0;
+      for (let y = top; y <= H - 3; y++) {
+        if (y > top && rng() < 0.3) x = Math.max(SAFE_COLS + 1, Math.min(W - w, x + (rng() < 0.5 ? -1 : 1)));
+        if (y === bridge) continue; // 건너는 다리 (밀어 떨어뜨리기 좋은 자리)
+        for (let dx = 0; dx < w; dx++) if (free(x + dx, y)) paint(x + dx, y, 'X');
+      }
+    }
+    if (rng() < 0.6) { const x = int(SAFE_COLS + 2, W - 4), y = int(Math.floor(H / 2), H - 4); for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < int(2, 3); dx++) if (free(x + dx, y + dy)) paint(x + dx, y + dy, 'X'); }
+    for (let x = SAFE_COLS; x < W; x++) { const y = edge[x] + 1; if (g[y]?.[x] === '|' && g[y - 1][x] !== 'H') { g[y][x] = '.'; } } // 덩굴 위는 늘 고지
+    if (painted.some((p) => g[p.y][p.x] === 'X') && painted.some((p) => g[p.y][p.x] === '|') && ok()) return;
+    for (const p of painted.reverse()) g[p.y][p.x] = p.was; // 되돌리고 다시
+  }
 }

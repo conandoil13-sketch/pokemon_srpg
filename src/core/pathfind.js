@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity, ':': 2, '=': 1, o: 1, '@': 1, L: 1, v: 1, V: Infinity, _: 1, Y: Infinity, T: Infinity }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소) · ':' 깊은 모래 '=' 흐르는 모래 'o'/'@' 모래지옥(사막) · 'L' 용암 'v' 현무암 'V' 분출구(화산동굴) · '_' 빙판 'Y' 고드름(얼음동굴) · 'T' 묘비(묘지)
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity, ':': 2, '=': 1, o: 1, '@': 1, L: 1, v: 1, V: Infinity, _: 1, Y: Infinity, T: Infinity, H: 1, '|': 1, X: 1 }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소) · ':' 깊은 모래 '=' 흐르는 모래 'o'/'@' 모래지옥(사막) · 'L' 용암 'v' 현무암 'V' 분출구(화산동굴) · '_' 빙판 'Y' 고드름(얼음동굴) · 'T' 묘비(묘지) · 'H' 고지 '|' 덩굴 'X' 낭떠러지(협곡)
 
 // 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
 const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
@@ -38,6 +38,8 @@ export function canEnter(tile, who, trees = false, pass = false) {
   if (pass && (tile === '#' || tile === '*') && soars(who)) return true;
   if (tile === 'T') return pass && (soars(who) || typed(who, 'ghost')); // 묘비: 지나가기만 (아무도 멈추거나 내려앉지 못함)
   if (tile === 'B') return soars(who); // 건물: 지상에선 벽, 비행·드래곤만 옥상으로 (옥상 안 이동은 search 가 따로)
+  if (tile === 'H') return soars(who); // 고지: 아래에선 절벽 — 비행·드래곤만 (고지끼리·덩굴 오르기는 search 가 따로)
+  if (tile === 'X') return floats(who) || (typesOfWho(who).includes('dragon') && !(typeof who === 'object' && who.grounded)); // 낭떠러지: 뜨는 포켓몬·드래곤만 (멈출 수도 있음)
   if (tile === '*' || tile === 'G' || tile === 'V' || tile === 'Y') return false; // 낙엽더미·발전기·분출구: 누구도 못 들어감 (순간이동·밀치기 포함)
   if (tile === 'L') { // 용암: 떠 있음·드래곤·마그마그 계열만 (물 타입은 못 감)
     if (typeof who === 'object' && ['slugma', 'magcargo'].includes(who.species)) return true;
@@ -109,17 +111,19 @@ function search(grid, units, unit, budgetOverride = null) {
         open.push({ x: s.x, y: s.y, c });
         continue;
       }
-      const tile = grid[y][x], roofWalk = tile === 'B' && grid[cur.y][cur.x] === 'B'; // 옥상 위에서는 누구나 건물 칸끼리 걷는다
-      if (!roofWalk && !canEnter(tile, unit, !!grid.trees, true)) continue;
+      const tile = grid[y][x], from = grid[cur.y][cur.x], roofWalk = tile === 'B' && from === 'B'; // 옥상 위에서는 누구나 건물 칸끼리 걷는다
+      const ridge = tile === 'H' && from === 'H', climb = tile === 'H' && from !== 'H'; // 협곡: 고지끼리는 누구나 · 저지 → 고지는 오르기
+      const vine = climb && !soars(unit) && from === '|' && cur.c === 0 && cur.x === unit.x && cur.y === unit.y && typeof unit === 'object' && budget >= 1 && !unit.moved; // 지상: 덩굴에서 그 차례를 시작한 첫걸음만 (이동력 전부, 못 움직이면 못 오름)
+      if (climb ? !soars(unit) && !vine : !roofWalk && !ridge && !canEnter(tile, unit, !!grid.trees, true)) continue;
       const side = occ.get(`${x},${y}`);
       if (side && side !== unit.side && !typesOfWho(unit).includes('ghost')) continue; // 고스트: 상대 칸 통과
-      const c = pit && cur.c === 0 && cur.x === unit.x && cur.y === unit.y ? budget : cur.c + (tile === 'B' && !roofWalk ? 2 : tileCost(tile, unit, !!grid.trees)); // 비행·드래곤 옥상 오르기 2
+      const c = vine || (pit && cur.c === 0 && cur.x === unit.x && cur.y === unit.y) ? budget : cur.c + ((tile === 'B' && !roofWalk) || climb ? 2 : tileCost(tile, unit, !!grid.trees)); // 비행·드래곤 옥상·고지 오르기 2
       if (c > budget) continue;
       const k = `${x},${y}`;
       if (best.has(k) && best.get(k) <= c) continue;
       best.set(k, c);
       parent.set(k, `${cur.x},${cur.y}`); via.delete(k);
-      open.push({ x, y, c });
+      if (!vine) open.push({ x, y, c }); // 덩굴로 오른 칸에서 이동 끝 (이동력이 무한이어도)
     }
   }
   // 멈춘 도착이 이기는 칸: 다른 포켓몬이 있는 칸(밀어내기 — 걸어서는 못 섬)이거나 더 싸거나 같을 때
@@ -164,6 +168,7 @@ export function pathCost(grid, unit, path) {
   for (let i = 1; i < path.length; i++) {
     const a = path[i - 1], b = path[i], t = grid[b.y][b.x];
     if (i > 1 && slides(unit) && grid[a.y][a.x] === '_' && b.x - a.x === a.x - path[i - 2].x && b.y - a.y === a.y - path[i - 2].y) continue;
+    if (t === 'H' && grid[a.y][a.x] !== 'H') { c += soars(unit) ? 2 : 99; continue; } // 협곡: 덩굴 오르기는 이동력 전부
     c += t === 'T' ? tileCost('T', unit) : t === '#' ? 1 : t === 'B' && grid[a.y][a.x] !== 'B' ? 2 : t === ':' ? tileCost(':', unit) : TILE_COST[t] ?? 1;
   }
   return c;
