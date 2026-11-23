@@ -157,3 +157,36 @@ import { fallNotices } from '../src/game/states.js';
 test('fall notice at phase end', () => {
   assert.deepEqual(fallNotices([{ unitId: 'e', x: 5, y: 2 }], () => ({ side: 'enemy', species: 'pidgey' })), [{ lines: ['상대 구구는 낭떠러지로 떨어졌다!'], at: { x: 5, y: 2 }, hp: null }]);
 });
+
+// ---- 층 생성 ----
+import { floats } from '../src/core/pathfind.js';
+// 지상 포켓몬이 여러 차례에 걸쳐 닿는 칸 (차례마다 reachable, 덩굴 오르기 포함)
+const overTurns = (tiles, start) => {
+  const seen = new Set([`${start.x},${start.y}`]), q = [start];
+  while (q.length) {
+    const p = q.shift(), u = U('bidoof', p.x, p.y);
+    for (const k of reachable(tiles, [], u, 4).keys()) if (!seen.has(k)) { seen.add(k); const [x, y] = k.split(',').map(Number); q.push({ x, y }); }
+  }
+  return seen;
+};
+
+test('canyon floors: a ridge up top, a creek below, 2+ chasm cells, vines under the ridge, start columns clean, everything reachable on foot over turns', () => {
+  for (let seed = 1; seed <= 25; seed++) {
+    const f = 1 + (seed % CY.floors), m = generateFloor(CY, f, seed), T = m.tiles, H = T.length;
+    const count = (ch) => T.join('').split(ch).length - 1;
+    assert.ok(count('H') >= 20, `seed ${seed}: ridge ${count('H')}`);
+    assert.ok(count('X') >= 2, `seed ${seed}: chasm`);
+    assert.ok(count('|') >= 1, `seed ${seed}: vines`);
+    assert.ok(T.slice(H - 2).join('').includes('~'), `seed ${seed}: creek`);
+    T.forEach((row, y) => [...row].forEach((c, x) => {
+      if (x < 3) assert.ok(!'HX|'.includes(c), `seed ${seed}: start column ${x},${y}`);
+      if (c === '|') assert.equal(T[y - 1]?.[x], 'H', `seed ${seed}: vine ${x},${y}`);
+      if (c === 'H') assert.ok(y < H / 2, `seed ${seed}: ridge stays up top`);
+    }));
+    for (const e of m.enemies) if (T[e.y][e.x] === 'X') assert.ok(floats(e.species) || SPECIES[e.species].types.includes('dragon'), `seed ${seed}: ${e.species} on a chasm`);
+    const r = overTurns(T, m.allySlots[0]);
+    for (const p of [...(m.stairs ? [m.stairs] : []), ...m.chests]) assert.ok(r.has(`${p.x},${p.y}`), `seed ${seed}: ${JSON.stringify(p)}`);
+  }
+  assert.deepEqual(generateFloor(CY, 4, 9), generateFloor(CY, 4, 9));
+  for (const d of DUNGEONS.filter((x) => x.id !== 'canyon')) assert.ok(!/[HX|]/.test(generateFloor(d, 1, 3).tiles.join('')), d.id);
+});
