@@ -12,7 +12,8 @@ import { CITY } from './city.js';
 import { SEWER } from './sewer.js';
 import { DEEP_CAVE } from './deepCave.js';
 import { GRAVEYARD } from './graveyard.js';
+import { CANYON } from './canyon.js';
 
-export const DUNGEONS = [...SINNOH_DUNGEONS.map((d, i) => ({ ...d, stage: i + 1 })), ...stageSlots({ 1: AUTUMN_FOREST, 2: BEACH, 3: CITY, 4: [SEWER, DEEP_CAVE], 5: [POWER_PLANT, DESERT], 6: [ICE_CAVE, VOLCANO], 7: [fillerStage(7), GRAVEYARD] })]; // 진짜 맵이 생긴 자리
+export const DUNGEONS = [...SINNOH_DUNGEONS.map((d, i) => ({ ...d, stage: i + 1 })), ...stageSlots({ 1: AUTUMN_FOREST, 2: BEACH, 3: CITY, 4: [SEWER, DEEP_CAVE], 5: [POWER_PLANT, DESERT], 6: [ICE_CAVE, VOLCANO], 7: [CANYON, GRAVEYARD] })]; // 진짜 맵이 생긴 자리
 
 export const dungeonById = (id) => DUNGEONS.find((d) => d.id === id);

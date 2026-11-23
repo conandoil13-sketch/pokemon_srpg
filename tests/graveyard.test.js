@@ -8,14 +8,14 @@ import { fillerStage } from '../src/data/fillerStages.js';
 
 const GY = DUNGEONS.find((d) => d.id === 'graveyard');
 
-test('graveyard is 9-2 on the stage 9 curve; the volcano opens it, 9-1 stays a placeholder', () => {
+test('graveyard is 9-2 on the stage 9 curve; the volcano opens it, 9-1 is the canyon', () => {
   const s9 = DUNGEONS.filter((d) => d.stage === 9);
-  assert.deepEqual(s9.map((d) => [d.id, d.branch, d.unlock]), [['trial-7', 1, 'ice-cave'], ['graveyard', 2, 'volcano']]);
+  assert.deepEqual(s9.map((d) => [d.id, d.branch, d.unlock]), [['canyon', 1, 'ice-cave'], ['graveyard', 2, 'volcano']]);
   assert.equal(GY.name, '묘지'); assert.equal(GY.theme, 'graveyard'); assert.ok(GY.graveyard);
   const c = fillerStage(7);
   assert.deepEqual(GY.baseLevel, c.baseLevel); assert.equal(GY.floors, 9); assert.equal(GY.levelCap, 73);
   assert.deepEqual(GY.weather, [{ id: 'fog', chance: 0.6 }]);
-  assert.deepEqual(DUNGEONS.find((d) => d.stage === 10).unlock, ['trial-7', 'graveyard']);
+  assert.deepEqual(DUNGEONS.find((d) => d.stage === 10).unlock, ['canyon', 'graveyard']);
 });
 
 test('graveyard: ghost types lead and ghost + psychic make most of the pool; spiritomb always in the pool', () => {

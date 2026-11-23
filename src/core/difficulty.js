@@ -59,7 +59,11 @@ export function rollEnemies(dungeon, floor, seed) {
     const level = Math.max(2, base + shape.dl[0] + Math.floor(rng() * (shape.dl[1] - shape.dl[0] + 1)));
     let species = pool[Math.floor(rng() * pool.length)];
     if (dungeon.minorTypes && SPECIES[species].types.every((t) => dungeon.minorTypes.includes(t)) && rng() < 0.7) species = pool[Math.floor(rng() * pool.length)]; // 해변: 소수 타입은 드물게
-    if (dungeon.favored && !SPECIES[species].types.includes(dungeon.favored.type) && rng() < dungeon.favored.chance) { const fav = pool.filter((s) => SPECIES[s].types.includes(dungeon.favored.type)); if (fav.length) species = fav[Math.floor(rng() * fav.length)]; } // 얼음동굴: 주 타입을 더 자주
+    const favs = dungeon.favored ? [dungeon.favored].flat() : []; // 얼음동굴: 주 타입을 더 자주 · 협곡: 드래곤 다음 비행 (이미 어느 주 타입이면 그대로)
+    for (const fv of favs) {
+      if (favs.some((f) => SPECIES[species].types.includes(f.type)) || rng() >= fv.chance) continue;
+      const fav = pool.filter((s) => SPECIES[s].types.includes(fv.type)); if (fav.length) species = fav[Math.floor(rng() * fav.length)];
+    }
     let lv = level;
     if (sum + threat(lv, species) > budget) { // 더 약한 종·낮은 레벨로 다시 맞춰 본다
       lv = Math.max(2, base + shape.dl[0]);
