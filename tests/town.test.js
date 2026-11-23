@@ -488,6 +488,7 @@ test('ditto build: move capsule → slot → confirm applies, consumes and saves
   const { b, game, d, calls, pass } = await buildScene((g) => { g.items.capsules = [{ kind: 'move', value: 'ember', from: 'charmander' }]; });
   assert.equal(b.mode, 'list');
   b.handle({ type: 'confirm' });
+  assert.equal(b.mode, 'preview'); b.handle({ type: 'confirm' }); // 캡슐 설명
   assert.equal(b.mode, 'slot');
   b.handle({ type: 'confirm' }); // 첫 칸 (몸통박치기)
   assert.equal(b.mode, 'confirm');
@@ -501,9 +502,9 @@ test('ditto build: move capsule → slot → confirm applies, consumes and saves
 
 test('ditto build: cancelling at slot or confirm keeps everything', async () => {
   const { b, game, d, calls } = await buildScene((g) => { g.items.capsules = [{ kind: 'move', value: 'ember', from: 'charmander' }]; });
-  b.handle({ type: 'confirm' }); b.handle({ type: 'cancel' });
+  b.handle({ type: 'confirm' }); b.handle({ type: 'confirm' }); b.handle({ type: 'cancel' }); // 칸 고르기에서 취소
   assert.equal(b.mode, 'list');
-  b.handle({ type: 'confirm' }); b.handle({ type: 'confirm' }); b.handle({ type: 'cancel' }); // 확인에서 아니오
+  b.handle({ type: 'confirm' }); b.handle({ type: 'confirm' }); b.handle({ type: 'confirm' }); b.handle({ type: 'cancel' }); // 확인에서 아니오
   assert.equal(b.mode, 'list');
   assert.deepEqual(d.moves, ['tackle']);
   assert.equal(game.items.capsules.length, 1);
@@ -518,8 +519,8 @@ test('ditto build: powder over the cap is refused; Lv.9 type capsule has one slo
     g.items.powders.atk = 2;
     g.items.capsules = [{ kind: 'type', value: 'fire', from: 'charmander' }];
   });
-  // 목록: [타입 캡슐, 공격파우더]
-  b.handle({ type: 'confirm' });
+  // 목록: [타입 캡슐, 공격파우더, 살펴보기]
+  b.handle({ type: 'confirm' }); b.handle({ type: 'confirm' }); // 설명 → 확인
   assert.equal(b.mode, 'confirm'); // 칸이 하나뿐이면 바로 확인
   b.handle({ type: 'confirm' });
   assert.deepEqual(d.build.types, ['fire']);
