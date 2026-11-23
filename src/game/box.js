@@ -17,6 +17,8 @@ import { drawPortrait } from '../render/sprites.js';
 import { W, H } from '../render/screen.js';
 import { createSummary } from './summary.js';
 import { createDittoBuild } from './dittoBuild.js';
+import { createRelearn } from './relearn.js';
+import { relearnCandidates } from '../core/relearn.js';
 import { fitLines } from './memberText.js';
 
 const COLS = 6, CELL = 24, GX = 108, GY = 16, PANEL_W = 104, DY = 140, SLOT_X = 38, SLOT_W = 43;
@@ -84,7 +86,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
       { label: isOut(m) ? '출전에서 빼기' : '출전에 넣기', enabled: true, act: 'sortie' },
       { label: '자세히 보기', enabled: true, act: 'summary' },
       { label: `진화의돌 (${game.items.evoStone}개)`, enabled: canStone, act: 'stone' },
-      ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }, copyItem(m)]),
+      ...(m.species === 'ditto' ? [{ label: '메타몽 빌드', enabled: true, act: 'build' }] : [{ label: '특성', enabled: true, act: 'ability' }, { label: '기술 떠올리기', enabled: relearnCandidates(m).length > 0, act: 'relearn', why: ['떠올릴 기술이 없다.'] }, copyItem(m)]),
       heldMenuItem(m), // 지니는 도구
       { label: '그만둔다', enabled: true, act: 'close' },
     ];
@@ -115,6 +117,11 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
     if (item.act === 'close') { back(); return; }
     if (item.act === 'summary') { openSummary(0); return; }
     if (item.act === 'ability') { openSummary(3); return; }
+    if (item.act === 'relearn') { // 기술 떠올리기 (닫으면 박스로)
+      summary = createRelearn({ member: m, onSave, onClose: () => { summary = null; mode = area; } });
+      mode = 'summary';
+      return;
+    }
     if (item.act === 'build') { // 메타몽 빌드 화면 (닫으면 박스로)
       summary = createDittoBuild({ game, onSave, onClose: () => { summary = null; mode = area; } });
       mode = 'summary';
