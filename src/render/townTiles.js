@@ -56,10 +56,15 @@ function flowerPx(fx, fy, x, y) {
   }
   return null;
 }
+const pathKeys = new WeakMap(); // 같은 배열이면 매 프레임 키를 다시 만들지 않음
 export function drawTownPaths(ctx, paths, flowers = []) {
+  const hit = pathKeys.get(paths);
+  if (hit && hit.flowers === flowers) { ctx.drawImage(cache.get(hit.key), 0, 0); return; }
   const rows = paths.length, cols = paths[0].length;
   const fset = new Set(flowers.map((f) => `${f.x},${f.y}`));
-  const img = bake(`paths:${paths.join('/')}:${[...fset].join(';')}`, cols * TILE, rows * TILE, (x, y) => {
+  const key = `paths:${paths.join('/')}:${[...fset].join(';')}`;
+  pathKeys.set(paths, { flowers, key });
+  const img = bake(key, cols * TILE, rows * TILE, (x, y) => {
     const tx = Math.floor(x / TILE), ty = Math.floor(y / TILE);
     const isP = (cx, cy) => cy >= 0 && cx >= 0 && cy < rows && cx < cols && paths[cy][cx] === '=';
     if (fset.has(`${tx},${ty}`)) return flowerPx(tx, ty, x % TILE, y % TILE);
@@ -268,19 +273,19 @@ function stall(W, H) {
 }
 
 // 공사터: 흙바닥 + 말뚝·밧줄 + 무엇이 들어설지 보이는 재료
-function lot(W, H, future) {
+function lot(W, H, future, top = true) {
   const OY = 10, gw = W, gh = H - OY;
   const stakes = [];
-  for (let sx = 2; sx < gw - 2; sx += 12) stakes.push([sx, OY + 2], [sx, OY + gh - 6]);
-  stakes.push([gw - 4, OY + 2], [gw - 4, OY + gh - 6]);
+  for (let sx = 2; sx < gw - 2; sx += 12) stakes.push(...(top ? [[sx, OY + 2]] : []), [sx, OY + gh - 6]);
+  stakes.push(...(top ? [[gw - 4, OY + 2]] : []), [gw - 4, OY + gh - 6]);
   for (let sy = OY + 2 + 12; sy < OY + gh - 8; sy += 12) stakes.push([2, sy], [gw - 4, sy]);
   return (x, y) => {
     // 말뚝 (2px 폭, 8px 높이, 끝이 위로 튀어나옴)
     for (const [sx, sy] of stakes) if (x >= sx && x <= sx + 1 && y >= sy - 8 && y <= sy) return y === sy - 8 ? '#e8c088' : x === sx ? '#a87040' : '#6a4020';
     // 밧줄 (위·아래 변, 양 옆)
     const ropeY = (base, xx) => base - 6 + Math.round(Math.sin(((xx - 2) % 12) / 12 * Math.PI) * 1.5);
-    if (x >= 2 && x <= gw - 3 && (y === ropeY(OY + 2, x) || y === ropeY(OY + gh - 6, x))) return (x >> 1) % 2 ? '#f0e0b0' : '#d8c088';
-    if ((x === 3 || x === gw - 3) && y >= OY - 4 && y <= OY + gh - 12) return (y >> 1) % 2 ? '#f0e0b0' : '#d8c088';
+    if (x >= 2 && x <= gw - 3 && ((top && y === ropeY(OY + 2, x)) || y === ropeY(OY + gh - 6, x))) return (x >> 1) % 2 ? '#f0e0b0' : '#d8c088';
+    if ((x === 3 || x === gw - 3) && y >= (top ? OY - 4 : OY + 4) && y <= OY + gh - 12) return (y >> 1) % 2 ? '#f0e0b0' : '#d8c088';
     // 재료
     if (future === 'achieve') {
       // 판자 더미 + 기둥 하나
@@ -312,14 +317,14 @@ function lot(W, H, future) {
   };
 }
 
-const KINDS = { stump, tent, stall };
+const KINDS = { stump, tent, stall }; // 그림은 3×3 발판 기준 (다른 크기는 다시 그려야 함)
 
 // b: { id, kind, x, y, w, h, future? } — 발판 칸 좌표
 export function drawBuilding(ctx, b, time = 0) {
   const W = b.w * TILE;
   if (b.kind === 'lot') {
     const H = b.h * TILE + 10;
-    const img = bake(`lot:${b.id}:${b.w}x${b.h}`, W, H, lot(W, H, b.future), null);
+    const img = bake(`lot:${b.id}:${b.w}x${b.h}`, W, H, lot(W, H, b.future, b.topFence !== false), null);
     ctx.drawImage(img, b.x * TILE, b.y * TILE - 10);
     return;
   }
@@ -332,7 +337,7 @@ export function drawBuilding(ctx, b, time = 0) {
     // 창문 불빛 깜빡임
     const a = 0.12 + Math.sin(time * 2.3) * 0.06;
     ctx.fillStyle = `rgba(255,230,140,${a})`;
-    ctx.fillRect(ox + 49, oy + 47, 11, 11);
+    ctx.beginPath(); ctx.arc(ox + 54, oy + 52, 5, 0, Math.PI * 2); ctx.fill();
   }
 }
 

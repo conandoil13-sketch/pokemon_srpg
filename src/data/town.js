@@ -43,7 +43,7 @@ export const TOWN = {
     { id: 'shop', kind: 'stall', x: 22, y: 1, w: 3, h: 3 }, // 상점: 잎 차양 노점
     { id: 'lot-achieve', kind: 'lot', x: 2, y: 8, w: 2, h: 2, future: 'achieve' }, // 업적 게시판 자리
     { id: 'lot-request', kind: 'lot', x: 19, y: 8, w: 3, h: 2, future: 'request' }, // 의뢰소 자리
-    { id: 'lot-gate', kind: 'lot', x: 24, y: 11, w: 3, h: 2, future: 'gate' }, // 도전의 문 자리
+    { id: 'lot-gate', kind: 'lot', x: 24, y: 11, w: 3, h: 2, future: 'gate', topFence: false }, // 위쪽 나무에 말뚝이 겹치지 않게 // 도전의 문 자리
   ],
   // 상호작용 오브젝트 (지나갈 수 없음). kind: sign(표지판) | door(건물 문, 그리지 않음) | npc(포켓몬)
   objects: [

@@ -109,6 +109,10 @@ export function createTown({ onSortie, onParty, onGacha, onBag = null, onShop = 
 
   // BFS: 클릭한 칸(또는 클릭한 오브젝트 옆 칸)까지의 경로
   function routeTo(tx, ty) {
+    // 건물 몸통·지붕(발판 위 한 칸)을 누르면 그 건물 문으로
+    const bld = (map.buildings || []).find((b) => b.kind !== 'lot' && tx >= b.x && tx < b.x + b.w && ty >= b.y - 1 && ty < b.y + b.h);
+    const door = bld && objects.find((o) => o.kind === 'door' && o.id === bld.id);
+    if (door) { tx = door.x; ty = door.y; }
     const target = objectAt(tx, ty);
     const goals = target
       ? Object.values(DIRS).map(([dx, dy]) => ({ x: tx + dx, y: ty + dy })).filter((p) => walkable(p.x, p.y) || (p.x === player.x && p.y === player.y))

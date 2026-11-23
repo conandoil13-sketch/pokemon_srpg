@@ -745,3 +745,19 @@ test('the party office door still opens the party screen from its front step', (
   town.handle({ type: 'confirm' }); town.handle({ type: 'confirm' });
   assert.equal(opened, 1);
 });
+test('clicking the body or roof of a building walks to its door and opens it; clicking a lot does nothing', () => {
+  for (const [tx, ty] of [[22, 2], [24, 0]]) {
+    let shop = 0;
+    const town = createTown({ onSortie() {}, onShop() { shop++; } });
+    town.player.x = 20; town.player.y = 4;
+    town.update(0.02);
+    const pw = town.playerWorld();
+    const cam = { x: Math.max(0, Math.min(28 * 24 - 256, pw.x + 12 - 128)), y: Math.max(0, Math.min(14 * 24 - 192, pw.y + 12 - 96)) };
+    town.handle({ type: 'click', px: tx * 24 + 12 - Math.round(cam.x), py: ty * 24 + 12 - Math.round(cam.y) });
+    tick(town, 3);
+    assert.ok(town.message, `click at ${tx},${ty} reached the shop door`);
+    assert.deepEqual([town.player.x, town.player.y], [TOWN.shopSpot.x, TOWN.shopSpot.y]);
+    town.handle({ type: 'confirm' }); town.handle({ type: 'confirm' });
+    assert.equal(shop, 1);
+  }
+});

@@ -71,6 +71,7 @@ test('town is 28 wide and keeps every old spot', () => {
 test('every sign, npc spot and the shop can be reached on foot from the start', () => {
   const T = TOWN.tiles, H = T.length, W = T[0].length;
   const blocked = new Set([...TOWN.objects, ...TOWN.npcSpots].map((o) => `${o.x},${o.y}`));
+  for (const b of TOWN.buildings) for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) blocked.add(`${x},${y}`); // 건물·공사터
   const ok = (x, y) => x >= 0 && y >= 0 && x < W && y < H && !'#^~'.includes(T[y][x]) && !blocked.has(`${x},${y}`);
   const seen = new Set([`${TOWN.start.x},${TOWN.start.y}`]), q = [[TOWN.start.x, TOWN.start.y]];
   while (q.length) { const [x, y] = q.shift(); for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const k = `${x + dx},${y + dy}`; if (ok(x + dx, y + dy) && !seen.has(k)) { seen.add(k); q.push([x + dx, y + dy]); } } }
