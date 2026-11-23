@@ -1,6 +1,7 @@
 // 기술 범위 모양 (순수). 전투·AI·화면이 모두 이 계산만 쓴다.
 // aim: { unitId } (단일) | { dir } (직선·부채꼴) | { self: true } (주변) | { x, y } (착탄·단일 칸)
 import { hiddenFrom } from './stealth.js';
+import { DASH, dashPath } from './dash.js';
 export const DIRS = ['up', 'down', 'left', 'right'];
 const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
@@ -79,7 +80,7 @@ export function aimsOf(state, user, move) {
     }
     return out;
   }
-  return state.units.filter((u) => u.side !== user.side && u.hp > 0 && dist(u, user) >= lo && dist(u, user) <= hi).map((u) => ({ unitId: u.id }));
+  return state.units.filter((u) => u.side !== user.side && u.hp > 0 && ((dist(u, user) >= lo && dist(u, user) <= hi) || (DASH[move.id] && dashPath(state, user, move, u)))).map((u) => ({ unitId: u.id })); // 대시: 곧게 달려가 닿는 상대도
 }
 
 // 기억으로 겨냥 (악 수풀 숨기): 쓰는 쪽에게 숨은 상대가 하나라도 있으면, 비어 보이는 수풀 칸(숨은 상대 칸 포함)을 덮는 조준

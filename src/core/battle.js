@@ -8,6 +8,7 @@ import { SPECIES } from '../data/species.js';
 import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
+import { DASH, dashPath } from './dash.js';
 import { calcDamage, hitChance, confusionDamage, rollHits, terrainCtx } from './damage.js';
 import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
@@ -487,6 +488,19 @@ export const UPROAR_TURNS = 3;
 export function markUproar(state) {
   for (const u of state.units) u.uproarZone = state.units.some((o) => o.uproar > 0 && Math.abs(o.x - u.x) + Math.abs(o.y - u.y) <= 2);
 }
+// 따라가때리기: 맞은 포켓몬이 자기 차례에 쫓는 쪽에서 멀어지는 칸으로 걸으려 하면, 걷기 전에 같은 위력으로 한 번 (한 번만)
+export function pursuitStrike(state, unit, to, rng) {
+  const by = unit.pursuedBy && byId(state, unit.pursuedBy);
+  const mine = (state.phase === 'player' ? 'ally' : 'enemy') === unit.side;
+  if (!by || !mine || !state.units.includes(unit)) return null;
+  if (dist(to, by) <= dist(unit, by)) return null;
+  unit.pursuedBy = null;
+  const keep = { acted: by.acted, moved: by.moved, spent: by.spent, raging: by.raging, streak: by.streak, retreatReady: by.retreatReady };
+  const r = applyMove(state, by.id, 'pursuit', unit.id, rng);
+  Object.assign(by, keep); // 쫓는 쪽 차례 상태는 그대로
+  unit.pursuedBy = null;
+  return r;
+}
 export const DELAYED_MOVES = new Set(['future-sight', 'doom-desire']); // 두 턴 뒤에 떨어짐
 const RANGED_CHARGE = new Set(['solar-beam', 'razor-wind']); // 원거리: 그 자리에서 쏨 (사거리 밖 1칸마다 위력 −5%), 근접은 돌진
 const RANGE_FALLOFF = 0.05;
@@ -665,6 +679,16 @@ export function applyMove(state, userId, moveId, aim, rng) {
     return { kind: 'attack', charged: { ...a.charging }, hits: [], expGained: {}, stageChanges, statusChanges, thawed, selfKO: false, abilityEvents, drained: 0, recoil: 0, crash: 0, screensBroken: [], spun: null, flinched: [], bound: [], retreat: false, bond: [] };
   }
   if (a.charging?.moveId === move.id) a.charging = null;
+  // 대시: 곧게 달려가 대상 앞 칸에서 때림 (이동력은 안 씀, 지나는 압정은 밟음)
+  let dashed = null;
+  const dashTo = DASH[move.id] ? targets.find((d) => d.side !== a.side) : null;
+  const dp = dashTo && dist(a, dashTo) > 1 ? dashPath(state, a, move, dashTo) : null;
+  if (dp) {
+    const from = { x: a.x, y: a.y }, end = dp.at(-1);
+    moveUnit(state, a.id, end.x, end.y, 0, dp);
+    dashed = { unitId: a.id, from, to: { x: a.x, y: a.y } };
+    if (!state.units.includes(a)) return { kind: 'attack', dashed, hits: [], expGained: {}, stageChanges, statusChanges, thawed, selfKO: false, abilityEvents, drained: 0, recoil: 0, crash: 0, screensBroken: [], spun: null, flinched: [], bound: [], retreat: false, bond: [], trapEvents: [...(state.log.trapEvents ?? [])] }; // 압정에 쓰러짐
+  }
   let dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
   if (a.charged && move.power) { if (moveTypeOf(a, move) === 'electric') dmgMove = { ...dmgMove, power: dmgMove.power * 2 }; a.charged = 0; } // 충전: 다음 공격 하나 (전기면 2배)
   a.allMovesUsed = state.units.filter((u) => u.side === a.side).every((u) => (u.moves ?? []).every((m) => u.usedMoves?.has(m))); // 마지막수단
@@ -834,6 +858,15 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 프레젠트 회복: 맞은 대상 HP 1/4
   const presentHealed = [];
   if (presentHeal) for (const d of targets) if (state.units.includes(d) && d.guard !== 'protect' && canHeal(d) && d.hp < d.maxHp) { const b = d.hp; d.hp = Math.min(d.maxHp, d.hp + Math.max(1, Math.floor(d.maxHp / 4))); presentHealed.push({ unitId: d.id, amount: d.hp - b }); }
+  // 회전부리·유턴: 때린 뒤 처음 칸으로 돌아옴
+  let returned = null;
+  if (DASH[move.id]?.back && dashed && state.units.includes(a) && !state.units.some((u) => u !== a && u.x === dashed.from.x && u.y === dashed.from.y)) {
+    const from = { x: a.x, y: a.y };
+    moveUnit(state, a.id, dashed.from.x, dashed.from.y, 0, [...dp].reverse());
+    returned = { unitId: a.id, from, to: { x: a.x, y: a.y } };
+  }
+  // 따라가때리기: 맞은 상대가 다음 자기 차례에 멀어지려 하면 한 번 더
+  if (move.id === 'pursuit') for (const d of targets) if (state.units.includes(d) && hits.some((h) => h.unitId === d.id && h.hit && h.damage > 0)) d.pursuedBy = a.id;
   // 연속자르기·구르기·아이스볼: 맞으면 다음 단계, 빗나가면 처음부터
   if (STREAK_MAX[move.id]) { const [max, wrap] = STREAK_MAX[move.id], n = a.streak?.moveId === move.id ? a.streak.n : 0; a.streak = anyLanded ? { moveId: move.id, n: n >= max ? (wrap ? 0 : max) : n + 1 } : null; }
   // 역린·꽃잎댄스·난동부리기: 처음 대상을 2~3번 (다음 차례들은 저절로 쫓아가 발사), 끝나면 혼란
@@ -881,7 +914,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, woken, lostFocus, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
+  const out = { kind, dashed, returned, hits, expGained, stageChanges, statusChanges, thawed, woken, lostFocus, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];
@@ -1094,6 +1127,7 @@ export function endPhase(state, rng = Math.random) {
   for (const u of state.units) if (u.side === ending && u.sealed) u.sealed = false; // 봉인은 그 편 차례 끝에 풀림
   for (const u of state.units) if (u.burrow && u.side !== ending) u.burrow = null; // 숨기: 상대 페이즈가 끝나면 나옴
   for (const u of state.units) if (u.side === ending && u.uproar > 0) u.uproar--; // 소란피기 남은 차례
+  for (const u of state.units) if (u.side === ending && u.pursuedBy) u.pursuedBy = null; // 따라가때리기: 맞은 쪽 다음 차례까지만
   markUproar(state);
   tickField(state, ending, events); // 그 편이 놓은 오라·장판·날씨
   W = effectiveWeather(state); // 날씨 부르기가 방금 끝났을 수 있음 (쾌청 녹이기 등)

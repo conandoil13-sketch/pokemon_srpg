@@ -1,6 +1,6 @@
 // 게임 상태 머신: core(규칙) 와 render(그리기) 를 잇는다
 import { HELD_ITEMS } from '../data/heldItems.js';
-import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute, teleportSpots, speedBonusUnit, quickClawUnit, basaltHeat, pushPreview } from '../core/battle.js';
+import { createBattle, unitAt, moveUnit, applyMove, targetsOf, endPhase, spec, arrive, redirectTarget, canRetreat, chargeRoute, teleportSpots, speedBonusUnit, quickClawUnit, basaltHeat, pushPreview, pursuitStrike } from '../core/battle.js';
 import { STAT_KO, API_STAT } from '../core/stages.js';
 import { STATUS_KO, canInflict, canInfatuate } from '../core/status.js';
 import { wrapMessage, blockedText, TRAP_LINE } from '../render/mapAttack.js';
@@ -603,6 +603,17 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function startWalk(unit, path, onDone, onDead = null, warp = false) { // warp: 플레이어가 고른 아군 이동만 워프를 탄다 (모으기 돌진·봇은 안 탐)
+    if (path.length > 1 && unit.pursuedBy && !walk) { // 따라가때리기: 멀어지려 하면 걷기 전에 한 번 맞음
+      const by = st.units.find((o) => o.id === unit.pursuedBy);
+      const r = by && pursuitStrike(st, unit, path.at(-1), rng);
+      if (r) {
+        facing[by.id] = dirFromDelta(unit.x - by.x, unit.y - by.y);
+        anim = createAttackAnim({ attacker: by, defenders: r.blocked ? [] : [unit], move: MOVES.pursuit, result: r, lookup: (id) => st.units.find((u) => u.id === id) ?? [by, unit].find((u) => u.id === id), aim: { unitId: unit.id }, endPt: null, fx: fxm });
+        animThen = () => (st.units.includes(unit) ? startWalk(unit, path, onDone, onDead, warp) : (onDead ?? afterTrapFaint)(unit));
+        animAbility = r.abilityEvents; animResult = r; focus = unit; mode = 'anim';
+        return;
+      }
+    }
     path = lethalTrapCut(st, unit, path); // 압정에 쓰러질 칸에서 걷기를 멈춘다
     const ts = [0]; // 칸마다 도착 시각: 빙판 미끄럼 칸은 빠르게
     for (let i = 1; i < path.length; i++) ts.push(ts[i - 1] + (sliding(st.grid, unit, path, i) ? SLIDE_STEP : STEP));

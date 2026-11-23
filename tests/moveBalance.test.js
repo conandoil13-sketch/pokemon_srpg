@@ -265,3 +265,89 @@ test('outrage: chases the first target for 2-3 attacks then the user gets confus
   assert.ok(a.confusion > 0, 'confused at the end');
   assert.equal(a.charging, null);
 });
+
+// ---- 4차: 대시 ----
+import { aimsOf } from '../src/core/shapes.js';
+import { dashPath } from '../src/core/dash.js';
+import { pursuitStrike } from '../src/core/battle.js';
+const lane = (allySp, foeSp, row, fx, { foeExtra = {} } = {}) => {
+  const tiles = ['......', row, '......'];
+  const map = { tiles, allySlots: [{ x: 0, y: 1 }], enemies: [{ species: foeSp, x: fx, y: 1, level: 40, ...foeExtra }, { species: 'rattata', x: 5, y: 2, level: 40 }] };
+  const s = createBattle(map, [newMember(allySp, 40, createRng(1))]);
+  return { s, a: s.units[0], f: s.units[1] };
+};
+const canAim = (s, a, id, f) => aimsOf(s, a, MOVES[id]).some((x) => x.unitId === f.id);
+
+test('dash 1 (take down, flare blitz, spark, brave bird) reaches 2 tiles in a straight line and lands next to the target', () => {
+  const { s, a, f } = lane('tauros', 'snorlax', '......', 2);
+  for (const id of ['take-down', 'flare-blitz', 'spark', 'brave-bird']) assert.ok(canAim(s, a, id, f), id);
+  assert.ok(!canAim(s, a, 'tackle', f));
+  const r = applyMove(s, a.id, 'take-down', f.id, hit);
+  assert.deepEqual([a.x, a.y], [1, 1]);
+  assert.deepEqual(r.dashed, { unitId: a.id, from: { x: 0, y: 1 }, to: { x: 1, y: 1 } });
+  assert.ok(r.hits[0].damage > 0);
+  const far = lane('tauros', 'snorlax', '......', 3);
+  assert.ok(!canAim(far.s, far.a, 'take-down', far.f), 'dash 1 is not enough for 3');
+  assert.ok(canAim(far.s, far.a, 'double-edge', far.f) && canAim(far.s, far.a, 'flame-wheel', far.f) && canAim(far.s, far.a, 'head-smash', far.f), 'dash 2');
+});
+
+test('dash needs a clear straight lane and does not spend movement', () => {
+  const blocked = lane('tauros', 'snorlax', '.#....', 2);
+  assert.ok(!canAim(blocked.s, blocked.a, 'take-down', blocked.f), 'tree in the way');
+  assert.equal(dashPath(blocked.s, blocked.a, MOVES['take-down'], blocked.f), null);
+  const diag = lane('tauros', 'snorlax', '......', 2); diag.f.y = 2; diag.f.x = 1;
+  assert.ok(!canAim(diag.s, diag.a, 'take-down', diag.f), 'not diagonal');
+  const { s, a, f } = lane('tauros', 'snorlax', '......', 3);
+  applyMove(s, a.id, 'double-edge', f.id, hit);
+  assert.equal(a.spent ?? 0, 0);
+});
+
+test('quick attack / aqua jet dash 1, extreme speed dash 2, and they can still retreat after', () => {
+  const { s, a, f } = lane('rattata', 'snorlax', '......', 2);
+  assert.ok(canAim(s, a, 'quick-attack', f));
+  const r = applyMove(s, a.id, 'quick-attack', f.id, hit);
+  assert.equal(r.retreat, true);
+  const es = lane('rattata', 'snorlax', '......', 3);
+  assert.ok(canAim(es.s, es.a, 'extreme-speed', es.f));
+  assert.ok(!canAim(es.s, es.a, 'quick-attack', es.f));
+});
+
+test('waterfall: water tiles in the lane are free', () => {
+  const { s, a, f } = lane('goldeen', 'snorlax', '.~~...', 4);
+  assert.ok(canAim(s, a, 'waterfall', f), 'two water + one land');
+  const dry = lane('goldeen', 'snorlax', '......', 3);
+  assert.ok(!canAim(dry.s, dry.a, 'waterfall', dry.f), 'two land tiles is too far');
+});
+
+test('jump kick hops over one tile (water, rock, a pokemon) and lands to strike', () => {
+  const { s, a, f } = lane('hitmonlee', 'snorlax', '.~....', 3);
+  assert.ok(canAim(s, a, 'jump-kick', f));
+  applyMove(s, a.id, 'jump-kick', f.id, hit);
+  assert.deepEqual([a.x, a.y], [2, 1]);
+  const tall = lane('hitmonlee', 'snorlax', '.#....', 3);
+  assert.ok(!canAim(tall.s, tall.a, 'jump-kick', tall.f), 'not over a tree');
+  const land = lane('hitmonlee', 'snorlax', '..~...', 3);
+  assert.ok(!canAim(land.s, land.a, 'jump-kick', land.f), 'cannot land in water');
+});
+
+test('drill peck (dash 1) and u-turn (dash 2) hit and come back to where they started', () => {
+  const { s, a, f } = lane('fearow', 'snorlax', '......', 2);
+  const r = applyMove(s, a.id, 'drill-peck', f.id, hit);
+  assert.deepEqual([a.x, a.y], [0, 1]);
+  assert.deepEqual(r.returned, { unitId: a.id, from: { x: 1, y: 1 }, to: { x: 0, y: 1 } });
+  const u = lane('scyther', 'snorlax', '......', 3);
+  applyMove(u.s, u.a.id, 'u-turn', u.f.id, hit);
+  assert.deepEqual([u.a.x, u.a.y], [0, 1]);
+});
+
+test('pursuit: a target it hit that walks away in its own phase takes one more hit first', () => {
+  const { s, a, f } = lane('houndour', 'rattata', '......', 1);
+  applyMove(s, a.id, 'pursuit', f.id, hit);
+  endPhase(s, () => 0.9);
+  assert.equal(pursuitStrike(s, f, { x: 0, y: 2 }, hit), null, 'not moving away');
+  const before = f.hp, acted = a.acted;
+  const r = pursuitStrike(s, f, { x: 3, y: 1 }, hit);
+  assert.ok(r && r.hits[0].damage > 0 && f.hp < before);
+  assert.equal(pursuitStrike(s, f, { x: 4, y: 1 }, hit), null, 'only once');
+  assert.equal(a.acted, acted, 'the pursuer keeps its own turn state');
+});
