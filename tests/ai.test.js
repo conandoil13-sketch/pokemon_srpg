@@ -302,7 +302,8 @@ test('a water enemy calls rain only when it is not already raining', () => {
 
 test('enemy roars an adjacent foe', () => {
   const u = en('growlithe', 3, 2, ['roar']);
-  const plan = planEnemyAction(state(9, 5, [u, mk('luxray', 'ally', 2, 2)]), u);
+  const foe = makeUnit({ species: 'luxray', side: 'ally', x: 2, y: 2, level: 30, moves: ['tackle'] }); // 같은 레벨 (9세대 몸통박치기 40)
+  const plan = planEnemyAction(state(9, 5, [u, foe]), u);
   assert.equal(plan.attack?.moveId, 'roar');
 });
 

@@ -1,4 +1,4 @@
-// PokeAPI → src/data/generated/pokedex.js (전국도감 1~493, 4세대 기준)
+// PokeAPI → src/data/generated/pokedex.js (전국도감 1~493, 9세대 값 · 기술·특성은 GEN_LIMIT 세대까지 — 2026-11-24)
 // 실행: node tools/fetch-pokeapi.js   (첫 실행 수 분, 응답은 tools/.cache/ 에 저장되어 다음엔 빠름)
 // 게임 실행 중에는 API 를 호출하지 않는다.
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
@@ -9,8 +9,11 @@ import { TARGET_KIND } from '../src/data/moveTargets.js';
 
 const MAX_DEX = 493;
 const EXTRA_MOVES = ['tackle', 'grass-knot']; // tackle: 기술이 없을 때 대체 / grass-knot: 몸무게 기술(기술머신 전용, 나중 획득)
-const VERSION_GROUPS = ['platinum', 'heartgold-soulsilver', 'diamond-pearl']; // 습득표 우선순위
-const GENERATION = 4;
+const OLD_GROUPS = ['platinum', 'heartgold-soulsilver', 'diamond-pearl']; // 예전(4세대) 습득표 — 그 기술은 기술 데이터에 남김 (저장 호환)
+const GEN_LIMIT = 4; // 이 세대까지 나온 기술·특성만 (세대를 넣을 때 올림)
+// 습득표 첫·마지막을 고를 본편 버전 그룹 (화이트리스트 — 외전·DLC·새 그룹이 끼지 않게)
+const MAIN_GROUPS = ['red-green-japan', 'red-blue', 'yellow', 'gold-silver', 'crystal', 'ruby-sapphire', 'emerald', 'firered-leafgreen', 'diamond-pearl', 'platinum', 'heartgold-soulsilver',
+  'black-white', 'black-2-white-2', 'x-y', 'omega-ruby-alpha-sapphire', 'sun-moon', 'ultra-sun-ultra-moon', 'sword-shield', 'brilliant-diamond-shining-pearl', 'scarlet-violet'];
 const CONCURRENCY = 8;
 const API = 'https://pokeapi.co/api/v2';
 const AILMENTS = ['paralysis', 'burn', 'poison', 'sleep', 'freeze', 'confusion'];
@@ -54,23 +57,19 @@ const idFromUrl = (u) => Number(u.match(/\/(\d+)\/?$/)[1]);
 const ko = (names) => names.find((n) => n.language.name === 'ko')?.name;
 const genNum = (name) => ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix'].indexOf(name.replace('generation-', '')) + 1;
 
-// past_types: "이 세대까지는 이 타입" → 4세대 이상인 항목 중 가장 이른 것
-function gen4Types(pokemon) {
-  const past = (pokemon.past_types ?? []).filter((p) => genNum(p.generation.name) >= GENERATION).sort((a, b) => genNum(a.generation.name) - genNum(b.generation.name));
-  const types = past.length ? past[0].types : pokemon.types;
-  return [...types].sort((a, b) => a.slot - b.slot).map((t) => t.type.name);
-}
+const typesOf = (pokemon) => [...pokemon.types].sort((a, b) => a.slot - b.slot).map((t) => t.type.name); // 9세대 (페어리 포함)
 
-// 특성 후보 (4세대 기준): past_abilities 중 4세대 이상인 가장 이른 기록으로 슬롯을 되돌리고, 숨겨진 특성은 뺀다
-function gen4AbilityCandidates(pokemon) {
-  let list = pokemon.abilities.filter((a) => !a.is_hidden);
-  const past = (pokemon.past_abilities ?? []).filter((p) => genNum(p.generation.name) >= GENERATION).sort((a, b) => genNum(a.generation.name) - genNum(b.generation.name));
-  if (past.length) for (const pa of past[0].abilities) {
-    if (pa.is_hidden) continue;
-    list = list.filter((a) => a.slot !== pa.slot);
-    if (pa.ability) list.push(pa);
+// 특성 후보: 지금(9세대) 일반 특성 슬롯. 그 특성이 GEN_LIMIT 이후 것이면 past_abilities 중 그 슬롯의 가장 최근 허용 특성으로, 없으면 슬롯을 뺀다
+function abilityCandidates(pokemon, genOf) {
+  const out = [];
+  for (const a of pokemon.abilities.filter((x) => !x.is_hidden).sort((x, y) => x.slot - y.slot)) {
+    if (genOf[a.ability.name] <= GEN_LIMIT) { out.push(a.ability.name); continue; }
+    const past = (pokemon.past_abilities ?? []).sort((x, y) => genNum(y.generation.name) - genNum(x.generation.name))
+      .map((p) => p.abilities.find((pa) => pa.slot === a.slot && !pa.is_hidden && pa.ability))
+      .find((pa) => pa && genOf[pa.ability.name] <= GEN_LIMIT);
+    if (past) out.push(past.ability.name);
   }
-  return list.sort((a, b) => a.slot - b.slot).map((a) => a.ability.name);
+  return out;
 }
 
 const EXTRA_KEYS = ['held_item', 'known_move', 'known_move_type', 'location', 'min_affection', 'min_beauty', 'party_species', 'party_type', 'relative_physical_stats', 'trade_species', 'gender'];
@@ -115,50 +114,50 @@ async function main() {
   await mkdir(CACHE, { recursive: true });
   const vgList = (await get('version-group?limit=100')).results;
   const vgOrder = new Map(await Promise.all(vgList.map(async (vg) => [vg.name, (await get(vg.url)).order])));
-  const ptOrder = vgOrder.get('platinum');
+  for (const g of MAIN_GROUPS) if (!vgOrder.has(g)) throw new Error(`unknown version group ${g}`);
 
   const dexes = Array.from({ length: MAX_DEX }, (_, i) => i + 1);
   const species = {};
   const moveNames = new Set(EXTRA_MOVES);
+  const oldMoves = new Set();
   const chains = new Map();
   await Promise.all(dexes.map(async (n) => {
     const [sp, pk] = await Promise.all([get(`pokemon-species/${n}`), get(`pokemon/${n}`)]);
     if (!chains.has(sp.evolution_chain.url)) chains.set(sp.evolution_chain.url, get(sp.evolution_chain.url).then((c) => walkChain(c.chain)));
     const evo = (await chains.get(sp.evolution_chain.url))[sp.name] ?? { stage: 0, evolutions: [] };
-    let learnset = [];
-    for (const vgName of VERSION_GROUPS) {
-      learnset = [];
-      for (const m of pk.moves) for (const v of m.version_group_details) {
-        if (v.version_group.name === vgName && v.move_learn_method.name === 'level-up') learnset.push([v.level_learned_at, m.move.name]);
-      }
-      if (learnset.length) break;
+    // 습득표: 본편 버전 그룹 중 레벨업 목록이 있는 첫·마지막 그룹의 합집합, 겹치면 낮은 레벨, 레벨 0(진화 때) → 1
+    const byGroup = new Map();
+    for (const m of pk.moves) for (const v of m.version_group_details) {
+      if (v.move_learn_method.name !== 'level-up' || !MAIN_GROUPS.includes(v.version_group.name)) continue;
+      if (!byGroup.has(v.version_group.name)) byGroup.set(v.version_group.name, []);
+      byGroup.get(v.version_group.name).push([Math.max(1, v.level_learned_at), m.move.name]);
     }
-    learnset.sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1]));
-    learnset.forEach(([, m]) => moveNames.add(m));
+    const groups = [...byGroup.keys()].sort((a, b) => vgOrder.get(a) - vgOrder.get(b));
+    const lowest = new Map();
+    for (const g of new Set([groups[0], groups.at(-1)])) for (const [lv, mv] of byGroup.get(g) ?? []) lowest.set(mv, Math.min(lv, lowest.get(mv) ?? 99));
+    const learnset = [...lowest].map(([mv, lv]) => [lv, mv]).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1])); // 레벨 오름차순 (learn.js 가 기대)
+    for (const g of OLD_GROUPS) for (const [, mv] of byGroup.get(g) ?? []) oldMoves.add(mv);
     const st = Object.fromEntries(pk.stats.map((s) => [s.stat.name, s.base_stat]));
     const base = { hp: st.hp, atk: st.attack, def: st.defense, spa: st['special-attack'], spd: st['special-defense'], spe: st.speed };
     species[sp.name] = {
-      api: sp.name, dex: sp.id, name: ko(sp.names) ?? sp.name, types: gen4Types(pk), base,
+      api: sp.name, dex: sp.id, name: ko(sp.names) ?? sp.name, types: typesOf(pk), base,
       baseExp: pk.base_experience ?? 50, growth: sp.growth_rate.name, learnset,
       stage: evo.stage, bst: Object.values(base).reduce((a, b) => a + b, 0),
       legendary: !!(sp.is_legendary || sp.is_mythical), evolutions: evo.evolutions,
-      abilities: gen4AbilityCandidates(pk), // 아래에서 4세대 이하 특성만 남긴다
+      pk, // 특성은 아래에서 (특성 세대를 알아야 함)
       genderRate: sp.gender_rate, weight: pk.weight / 10, // 성별 비율(-1 없음, ♀ = rate/8), 몸무게 kg
     };
   }));
 
+  for (const m of oldMoves) moveNames.add(m);
   const moves = {};
+  const moveGen = {};
   await Promise.all([...moveNames].map(async (name) => {
     const mv = await get(`move/${name}`);
-    // past_values: 그 버전 그룹에서 바뀌기 전 값 → Pt 이후 변경 중 가장 이른 것을 적용
-    const later = (mv.past_values ?? []).filter((p) => vgOrder.get(p.version_group.name) > ptOrder).sort((a, b) => vgOrder.get(a.version_group.name) - vgOrder.get(b.version_group.name));
-    let { power, accuracy } = mv;
-    let type = mv.type.name;
-    for (const p of [...later].reverse()) {
-      if (p.power !== null) power = p.power;
-      if (p.accuracy !== null) accuracy = p.accuracy;
-      if (p.type) type = p.type.name;
-    }
+    moveGen[name] = genNum(mv.generation.name);
+    if (moveGen[name] > GEN_LIMIT) return; // 아직 안 넣은 세대
+    const { power, accuracy } = mv; // 9세대 값
+    const type = mv.type.name;
     const category = mv.damage_class.name;
     const statChanges = (mv.stat_changes ?? []).map((c) => ({ stat: c.stat.name, change: c.change }));
     const target = mv.target.name;
@@ -181,11 +180,13 @@ async function main() {
     };
   }));
 
-  // 특성: 4세대까지 나온 것만 (나중 세대 특성은 버림, 다 버려지면 첫 후보 유지)
+  for (const sp of Object.values(species)) sp.learnset = sp.learnset.filter(([, m]) => moves[m]);
+
+  // 특성: GEN_LIMIT 세대까지 나온 것만 (슬롯별로 되돌림, abilityCandidates)
   const abilities = {};
-  const abilityNames = new Set(Object.values(species).flatMap((s) => s.abilities));
   const abilityGen = {};
-  await Promise.all([...abilityNames].map(async (name) => {
+  const allNames = new Set(Object.values(species).flatMap((s) => [...s.pk.abilities, ...(s.pk.past_abilities ?? []).flatMap((p) => p.abilities)].filter((a) => a.ability).map((a) => a.ability.name)));
+  await Promise.all([...allNames].map(async (name) => {
     const ab = await get(`ability/${name}`);
     abilityGen[name] = genNum(ab.generation.name);
     const flavor = ab.flavor_text_entries.filter((f) => f.language.name === 'ko').at(-1)?.flavor_text;
@@ -193,14 +194,16 @@ async function main() {
     abilities[name] = { id: name, name: ko(ab.names) ?? name, desc: (flavor ?? en).replace(/\s+/g, ' ').trim() };
   }));
   for (const s of Object.values(species)) {
-    const ok = s.abilities.filter((a) => abilityGen[a] <= GENERATION);
-    s.abilities = ok.length ? ok : s.abilities.slice(0, 1);
+    s.abilities = abilityCandidates(s.pk, abilityGen);
+    if (!s.abilities.length) throw new Error(`${s.api}: no ability within gen ${GEN_LIMIT}`);
+    delete s.pk;
   }
-  for (const name of Object.keys(abilities)) if (abilityGen[name] > GENERATION && !Object.values(species).some((s) => s.abilities.includes(name))) delete abilities[name];
+  const used = new Set(Object.values(species).flatMap((s) => s.abilities));
+  for (const name of Object.keys(abilities)) if (!used.has(name)) delete abilities[name];
 
   // 결정적 출력 (키 정렬)
   const sorted = (o) => Object.fromEntries(Object.keys(o).sort().map((k) => [k, o[k]]));
-  const body = `// 자동 생성 — node tools/fetch-pokeapi.js (PokeAPI, 1~${MAX_DEX}, 습득표 ${VERSION_GROUPS.join(' → ')}). 직접 고치지 말 것\nexport default ${JSON.stringify({ species: sorted(species), moves: sorted(moves), abilities: sorted(abilities) })};\n`;
+  const body = `// 자동 생성 — node tools/fetch-pokeapi.js (PokeAPI, 1~${MAX_DEX}, 9세대 값, 기술·특성 ${GEN_LIMIT}세대까지, 습득표 = 첫·마지막 게임 합집합). 직접 고치지 말 것\nexport default ${JSON.stringify({ species: sorted(species), moves: sorted(moves), abilities: sorted(abilities) })};\n`;
   await writeFile(OUT, body);
   console.log(`${Object.keys(species).length} species, ${Object.keys(moves).length} moves → ${OUT}`);
 }

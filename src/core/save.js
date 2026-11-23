@@ -17,7 +17,7 @@ import { memberKey, unifyLines } from './members.js';
 import { lineRoot } from './gacha.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 9;
+const VERSION = 10;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -165,6 +165,7 @@ export function loadGame(storage) {
   if (data?.version === 7) data = { ...data, version: 8 }; // v7 → v8: 개체값·성별은 cleanMember 가 채운다
   let speciesRun = false;
   if (data?.version === 8) { data = { ...data, version: 9 }; speciesRun = true; } // v8 → v9: uid 는 아래서 붙이고, 종 이름 출전·기절 기록은 uid 로
+  if (data?.version === 9) data = { ...data, version: 10 }; // v9 → v10: 9세대 기준 데이터 (2026-11-24) — 타입·종족값·특성은 새 데이터로, 특성 슬롯·해금·배운 기술은 그대로
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   data = renameDungeons(data, RENAMED);
   try {

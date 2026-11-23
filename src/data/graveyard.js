@@ -9,7 +9,7 @@ export const GRAVEYARD = {
   id: 'graveyard',
   name: '묘지',
   theme: 'graveyard',
-  types: ['ghost', 'psychic', 'fire', 'ground'], // 페어리는 데이터에 종이 없어 뺌
+  types: ['ghost', 'psychic', 'fire', 'ground'], // 페어리: 9세대 데이터로 종이 생김 (2026-11-24) — 넣을지는 따로 정함
   minorTypes: ['fire', 'ground'], // 이 타입만 가진 종은 드물게
   favored: { type: 'ghost', chance: 0.4 }, // 에스퍼 종이 훨씬 많아서 고스트를 앞세움
   bossTypes: ['ghost', 'psychic'],
