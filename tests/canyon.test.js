@@ -39,3 +39,52 @@ test('canyon: saves on the old 9-1 placeholder move to the canyon', () => {
   const g = loadGame(store);
   assert.ok(g.unlocked.includes('canyon') && g.cleared.includes('canyon')); assert.equal(g.best.canyon, 4);
 });
+
+// ---- 고지·덩굴·낭떠러지 ----
+import { reachable, pathCost, canEnter } from '../src/core/pathfind.js';
+import { makeUnit } from '../src/core/battle.js';
+import { hitChance } from '../src/core/damage.js';
+import { MOVES } from '../src/data/moves.js';
+
+const G = ['HHHHH', 'HHHHH', '.|...', '.....', '..X..'];
+const U = (species, x, y, extra = {}) => Object.assign(makeUnit({ species, side: 'ally', x, y, level: 50 }), extra);
+const has = (r, x, y) => r.has(`${x},${y}`);
+
+test('ridge: ground walkers cannot climb a bare cliff', () => {
+  const r = reachable(G, [], U('bidoof', 0, 3), 6);
+  assert.ok(!has(r, 0, 1) && !has(r, 2, 1) && !has(r, 1, 1));
+});
+
+test('ridge: a ground walker starting on a vine climbs one step and its move ends', () => {
+  const u = U('bidoof', 1, 2), r = reachable(G, [], u, 4);
+  assert.ok(has(r, 1, 1)); assert.ok(!has(r, 1, 0) && !has(r, 0, 1) && !has(r, 2, 1));
+  assert.equal(pathCost(G, u, [{ x: 1, y: 2 }, { x: 1, y: 1 }]) >= 4, true, 'climbing spends the whole move');
+  const v = U('bidoof', 0, 2), rv = reachable(G, [], v, 6); // 덩굴까지 걸어가서는 못 오름
+  assert.ok(!has(rv, 1, 1));
+});
+
+test('ridge: walk along the top for 1, jump down anywhere for 1', () => {
+  const r = reachable(G, [], U('bidoof', 2, 0), 3);
+  assert.equal(r.get('3,0'), 1); assert.equal(r.get('2,1'), 1); assert.equal(r.get('2,2'), 2); assert.equal(r.get('2,3'), 3);
+});
+
+test('ridge: flyers and dragons climb anywhere for 2', () => {
+  assert.equal(reachable(G, [], U('pidgey', 0, 3), 6).get('0,1'), 3);
+  assert.equal(reachable(G, [], U('bagon', 3, 2), 6).get('3,1'), 2);
+});
+
+test('chasm: only floaters and dragons go in and may stop there', () => {
+  assert.ok(!has(reachable(G, [], U('bidoof', 2, 3), 4), 2, 4));
+  for (const sp of ['pidgey', 'bagon']) assert.ok(has(reachable(G, [], U(sp, 2, 3), 4), 2, 4), sp);
+  assert.ok(has(reachable(G, [], U('gastly', 2, 3, { ability: 'levitate' }), 4), 2, 4));
+  assert.ok(!canEnter('X', U('pidgey', 0, 0, { grounded: true })), 'gravity');
+  assert.ok(!canEnter('H', U('bidoof', 0, 0)) && canEnter('H', U('pidgey', 0, 0)));
+});
+
+test('ridge: +10 accuracy shooting down, -10 shooting up', () => {
+  const a = U('bidoof', 0, 0), d = Object.assign(U('bidoof', 0, 1), { side: 'enemy' }), mv = MOVES['cross-chop'];
+  const flat = hitChance(a, d, mv, '.', null, { atkTile: '.' });
+  assert.equal(hitChance(a, d, mv, '.', null, { atkTile: 'H' }), flat + 10);
+  assert.equal(hitChance(a, d, mv, 'H', null, { atkTile: '.' }), flat - 10);
+  assert.equal(hitChance(a, d, mv, 'H', null, { atkTile: 'H' }), flat);
+});
