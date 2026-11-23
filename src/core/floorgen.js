@@ -201,9 +201,11 @@ export function generateFloor(dungeon, floor, seed) {
   const vents = dungeon.volcano ? volcanoExtras(g, used, enemies, createRng(hashSeed(seed, 7400))) : null;
   // 13. 얼음동굴: 빙판·고드름·빙판 위 바위 (별도 난수, 맨 끝). 미끄럼 규칙으로 계단·상자·더미에 멈춰 닿을 때까지 다시
   if (dungeon.ice) iceLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests], piles, createRng(hashSeed(seed, 7500)));
+  // 14. 묘지: 세로 묘비 줄·추모 정원 + 혼불 예정표 (별도 난수, 맨 끝). 지상 포켓몬이 계단·상자·적에 닿을 때까지 다시
+  const wisps = dungeon.graveyard ? graveyardLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests, ...enemies], floor >= dungeon.floors - 1 ? 3 : 2, createRng(hashSeed(seed, 7600))) : null;
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed), ...(dungeon.dark ? { dark: true } : {}),
-    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}), ...(flows ? { flows } : {}), ...(vents ? { vents } : {}) };
+    ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}), ...(flows ? { flows } : {}), ...(vents ? { vents } : {}), ...(wisps ? { wisps } : {}) };
 }
 
 // 바다 띠: 위 또는 아래 가장자리, 열마다 깊이 D 또는 D+1 (D = H/4 반올림), 출발 3열 제외.
@@ -614,4 +616,61 @@ function iceLayout(g, used, allySlots, targets, piles, rng) {
     if (ok()) return;
     for (const p of painted) g[p.y][p.x] = '.'; // 되돌리고 다시
   }
+}
+
+// 묘지: 출발 3열 밖에 세로 묘비 줄 2~4개 (줄 사이 빈 열 2칸 이상). 줄마다 통로 1~2개(폭 1~2), 이웃 줄과 높이를 어긋나게,
+// 단 한 높이는 모든 줄을 꿰뚫는 곧은 통로. 줄 끝 일부에 추모 정원(풀숲 + 나무 1~2, 20% 작은 연못).
+// 반환 = 혼불 예정표 [{x, y, round}] (옆에 빈칸이 있는 묘비 count 개, 라운드 2~5 서로 다르게). 실패하면 묘비 없이 []
+function graveyardLayout(g, used, allySlots, targets, count, rng) {
+  const W = g[0].length, H = g.length, int = (lo, hi) => lo + Math.floor(rng() * (hi - lo + 1));
+  const start = allySlots[0], walker = { id: 'walker', species: 'bidoof', side: 'ally', x: start.x, y: start.y, hp: 1 };
+  const ok = () => {
+    const r = reachable(g.map((row) => row.join('')), [], walker, Infinity), at = (x, y) => r.has(key(x, y));
+    return targets.every((p) => at(p.x, p.y)) && allySlots.every((p) => at(p.x, p.y));
+  };
+  const free = (x, y) => '."'.includes(g[y][x]) && !used.has(key(x, y));
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const painted = []; // [{x, y, was}]
+    const paint = (x, y, ch) => { painted.push({ x, y, was: g[y][x] }); g[y][x] = ch; };
+    // 줄 열: 왼쪽부터 간격 3 이상, 오른쪽 끝 열은 비움
+    const want = Math.min(4, int(2, W >= 20 ? 4 : 3)), cols = [];
+    let x = SAFE_COLS + int(1, 2);
+    while (cols.length < want && x <= W - 2) { cols.push(x); x += int(3, 4); }
+    if (cols.length < 2) return [];
+    const straight = int(1, H - 2);
+    let prev = [];
+    for (const cx of cols) {
+      const gaps = new Set([straight]);
+      for (let n = int(1, 2); n > 0; n--) {
+        let y = 0;
+        for (let guard = 0; guard < 20; guard++) { y = int(0, H - 1); if (!prev.some((p) => Math.abs(p - y) <= 1)) break; }
+        gaps.add(y); if (rng() < 0.5 && y + 1 < H) gaps.add(y + 1);
+      }
+      prev = [...gaps].filter((y) => y !== straight);
+      for (let y = 0; y < H; y++) if (!gaps.has(y) && free(cx, y)) paint(cx, y, 'T');
+      // 추모 정원: 줄 끝 하나에 (50%) — 끝 묘비 자리에 나무, 양옆에 풀숲, 드물게 연못
+      if (rng() < 0.5) {
+        const top = rng() < 0.5, ends = top ? [0, 1] : [H - 1, H - 2];
+        for (const y of ends.slice(0, int(1, 2))) if (g[y][cx] === 'T') g[y][cx] = '#';
+        for (const y of ends) for (const dx of [-1, 1]) if (free(cx + dx, y) && rng() < 0.7) paint(cx + dx, y, '"');
+        if (rng() < 0.2) {
+          const dx = rng() < 0.5 ? -1 : 1, y0 = ends[0];
+          for (let n = int(1, 3), y = y0; n > 0 && y >= 0 && y < H; n--, y += top ? 1 : -1) if (free(cx + dx, y)) paint(cx + dx, y, '~');
+        }
+      }
+    }
+    const tombs = painted.filter((p) => g[p.y][p.x] === 'T');
+    const lines = cols.filter((cx) => tombs.filter((p) => p.x === cx).length >= 3);
+    if (lines.length === cols.length && ok()) {
+      const side = (p) => DIRS.some(([dx, dy]) => { const t = g[p.y + dy]?.[p.x + dx]; return t !== undefined && '."'.includes(t); });
+      const cand = tombs.filter(side), rounds = [2, 3, 4, 5], out = [];
+      for (let i = 0; i < count && cand.length; i++) {
+        const p = cand.splice(Math.floor(rng() * cand.length), 1)[0];
+        out.push({ x: p.x, y: p.y, round: rounds.splice(Math.floor(rng() * rounds.length), 1)[0] });
+      }
+      return out;
+    }
+    for (const p of painted.reverse()) g[p.y][p.x] = p.was; // 되돌리고 다시
+  }
+  return [];
 }
