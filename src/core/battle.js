@@ -453,8 +453,9 @@ function pushPath(state, a, t) {
 // 드래곤테일: 맞힌 뒤 울부짖기처럼 밀어냄 · 배대뒤치기: 시전자를 넘어 반대편 한 칸 (막혔으면 피해만, 낭떠러지면 떨어짐)
 function dragonTail(state, a, d) {
   const tmp = {};
-  if (!pushAway(state, a, d, tmp).ok || !tmp.pushed) return null;
-  return { unitId: d.id, from: tmp.pushed.from, to: tmp.pushed.to };
+  if (!pushAway(state, a, d, tmp, { deferExp: true }).ok || !tmp.pushed) return null;
+  const p = tmp.pushed;
+  return { unitId: d.id, from: p.from, to: p.to, ...(p.fainted ? { fainted: true } : {}), ...(p.fell ? { fell: true } : {}), trapEvents: tmp.trapEvents ?? [] };
 }
 function circleThrow(state, a, d) {
   if (pushImmune(d)) return null;
@@ -464,8 +465,9 @@ function circleThrow(state, a, d) {
   if (!fall && !canEnter(tile, d)) return null;
   const from = { x: d.x, y: d.y };
   moveUnit(state, d.id, x, y, 0);
-  if (fall && state.units.includes(d)) { knockOut(state, d, a); checkResult(state); }
-  return { unitId: d.id, from, to: { x, y } };
+  const fell = fall && state.units.includes(d);
+  if (fell) { knockOut(state, d, a, { deferExp: true }); checkResult(state); }
+  return { unitId: d.id, from, to: { x, y }, ...(fell || !state.units.includes(d) ? { fainted: true } : {}), ...(fell ? { fell: true } : {}) };
 }
 const pushImmune = (t) => t.boss || t.rooted || has(t, 'suction-cups');
 // 예상 창용: 밀리면 어디로 가나 · 떨어지나
@@ -475,7 +477,7 @@ export function pushPreview(state, a, t) {
   return { to: path.length > 1 ? path.at(-1) : null, fall };
 }
 
-function pushAway(state, a, t, out) {
+function pushAway(state, a, t, out, { deferExp = false } = {}) {
   const res = (ok, reason) => ({ unitId: t.id, effect: 'push', ok, ...(reason ? { reason } : {}) });
   if (pushImmune(t)) return res(false, 'immune'); // 흡반: 밀리지 않음
   const { path, fall } = pushPath(state, a, t);
@@ -485,7 +487,7 @@ function pushAway(state, a, t, out) {
   moveUnit(state, t.id, to.x, to.y, 0, path);
   const end = { x: t.x, y: t.y }, spiked = !state.units.includes(t); // 압정에 쓰러지면 그 칸에서 멈춤
   const fell = fall && !spiked && end.x === to.x && end.y === to.y; // 협곡: 낭떠러지로 떨어짐 = 기절 (밀어낸 쪽이 쓰러뜨림)
-  if (fell) { knockOut(state, t, a); checkResult(state); }
+  if (fell) { knockOut(state, t, a, { deferExp }); checkResult(state); }
   out.pushed = { unitId: t.id, from, to: end, path: path.slice(0, path.findIndex((p) => p.x === end.x && p.y === end.y) + 1), ...(spiked || fell ? { fainted: true } : {}), ...(fell ? { fell: true } : {}) };
   out.trapEvents = [...(state.log.trapEvents ?? [])];
   // 속박: 밀려난 쪽이 묶은 쪽이거나 묶인 쪽이면 거리를 다시 본다 (사거리 밖이면 바로 풀림)
@@ -841,7 +843,15 @@ export function applyMove(state, userId, moveId, aim, rng) {
     if (landed && !fainted && state.units.includes(d)) {
       if (move.id === 'smack-down') { d.smackedDown = true; d.grounded = true; d.magnetRise = 0; }
       if (move.id === 'clear-smog') Object.assign(d, newStages());
-      if ((move.id === 'dragon-tail' || move.id === 'circle-throw') && state.units.includes(a) && !tossed) tossed = move.id === 'dragon-tail' ? dragonTail(state, a, d) : circleThrow(state, a, d);
+      if ((move.id === 'dragon-tail' || move.id === 'circle-throw') && state.units.includes(a) && !tossed) {
+        tossed = move.id === 'dragon-tail' ? dragonTail(state, a, d) : circleThrow(state, a, d);
+        if (tossed?.fainted) { // 낭떠러지·압정: 이 공격으로 쓰러진 것 (낙사만 경험치)
+          fainted = true;
+          const h = hits.findLast((x) => x.unitId === d.id);
+          if (h) h.fainted = true;
+          if (tossed.fell) knocked.push(d);
+        }
+      }
     }
     for (const c of contacts) c();
   }
@@ -964,7 +974,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
   noteChain(state, a, move, anyLanded);
-  const out = { kind, dashed, returned, hits, expGained, stageChanges, statusChanges, thawed, woken, lostFocus, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
+  const out = { ...(tossed?.trapEvents?.length ? { trapEvents: tossed.trapEvents } : {}), kind, dashed, returned, hits, expGained, stageChanges, statusChanges, thawed, woken, lostFocus, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];

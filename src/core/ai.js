@@ -30,7 +30,7 @@ const isStatus = (m) => m.category === 'status';
 let W = null;
 const FRIENDLY_WEIGHT = 1.5;  // 같은 편이 휘말린 데미지 감점 배율
 const HEAL_WEIGHT = 1.2;      // 회복기 점수: 회복량 × 이 값
-const SELF_KO = ['self-destruct', 'explosion'];
+const SELF_KO = ['self-destruct', 'explosion', 'final-gambit']; // 목숨걸기도 쓰면 쓰러짐
 const SELF_TURNS = 3;         // 자폭 감점: 자기 최선 기대 데미지 × 3턴
 const SIG_SELF_KO = 0.3, OTHER_SELF_KO = 2;
 // 변화기 묶음 1차 (포켓몬에 붙는 효과) 점수

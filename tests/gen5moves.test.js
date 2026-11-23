@@ -182,3 +182,18 @@ test('move cards name the gen 5 rules and fixed damage in words', () => {
   assert.ok(moveEffectTags(MOVES['super-fang']).includes('상대 HP 절반'));
   assert.ok(!moveEffectTags(MOVES['frost-breath']).includes('급소↑'));
 });
+
+test('a throw or tail onto a cliff counts as a knockout of the hit (exp, faint, fell)', () => {
+  const { s, a, f } = duel('machop', 'snorlax');
+  s.grid[1] = 'X' + s.grid[1].slice(1); // (0,1) 낭떠러지
+  const r = applyMove(s, a.id, 'circle-throw', f.id, hit);
+  assert.ok(!s.units.includes(f));
+  assert.ok(r.shoved.fell); assert.ok(r.fainted);
+  assert.ok(Object.values(r.expGained).some((n) => n > 0));
+  const b = duel('dratini', 'snorlax');
+  b.s.grid[1] = b.s.grid[1].slice(0, 3) + 'X' + b.s.grid[1].slice(4); // (3,1)
+  const r2 = applyMove(b.s, b.a.id, 'dragon-tail', b.f.id, hit);
+  assert.ok(!b.s.units.includes(b.f));
+  assert.ok(r2.shoved.fell); assert.ok(r2.fainted);
+  assert.ok(Object.values(r2.expGained).some((n) => n > 0));
+});
