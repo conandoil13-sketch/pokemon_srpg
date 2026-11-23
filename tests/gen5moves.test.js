@@ -197,3 +197,17 @@ test('a throw or tail onto a cliff counts as a knockout of the hit (exp, faint, 
   assert.ok(r2.shoved.fell); assert.ok(r2.fainted);
   assert.ok(Object.values(r2.expGained).some((n) => n > 0));
 });
+
+test('a move absorbed by lightning rod or stopped by damp breaks the fusion chain', () => {
+  const map = { tiles: Array.from({ length: 6 }, () => '......'), allySlots: [{ x: 1, y: 1 }], enemies: [{ species: 'pikachu', x: 2, y: 1, level: 40 }, { species: 'psyduck', x: 1, y: 2, level: 40 }] };
+  const s = createBattle(map, [newMember('voltorb', 40, createRng(1))]);
+  const a = s.units[0], [pk, ps] = s.units.filter((u) => u.side === 'enemy');
+  pk.ability = 'lightning-rod'; ps.ability = 'cloud-nine';
+  s.lastLanded = 'fusion-flare';
+  applyMove(s, a.id, 'thunder-shock', pk.id, () => 0.01);
+  assert.equal(s.lastLanded, null);
+  pk.ability = 'static'; ps.ability = 'damp'; a.acted = false; s.lastLanded = 'fusion-flare';
+  const r = applyMove(s, a.id, 'self-destruct', pk.id, () => 0.01);
+  assert.equal(r.blocked, 'damp');
+  assert.equal(s.lastLanded, null);
+});

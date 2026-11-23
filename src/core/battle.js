@@ -239,13 +239,13 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   for (const u of state.units) if (u.infatuatedBy === d.id) { u.infatuation = 0; u.infatuatedBy = null; } // 건 상대가 쓰러지면 헤롱헤롱이 풀린다
   for (const u of state.units) if (u.bound?.by === d.id) { (state.log.unbound ??= []).push({ unitId: u.id, moveId: u.bound.moveId }); u.bound = null; } // 묶은 쪽이 쓰러지면 속박이 바로 풀린다
   if (by && by.side !== d.side) by.felled = { ...by.felled, [d.side]: true }; // 원수갚기: 우리 편을 쓰러뜨린 상대
-  if (by && by.side !== d.side && state.units.includes(by) && has(by, 'moxie')) { applyStageChange(by, 'atk', 1); (state.log.abilityEvents ??= []).push({ unitId: by.id, ability: 'moxie' }); } // 자기과신
+  if (by && by.side !== d.side && state.units.includes(by) && has(by, 'moxie')) { if (moxieQueue) moxieQueue.push(by); else applyStageChange(by, 'atk', 1); (state.log.abilityEvents ??= []).push({ unitId: by.id, ability: 'moxie' }); } // 자기과신
   let expGained = {};
   if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
   else if (reward) awardShare(state, d);
   if (reward && d.side === 'enemy' && (!by || by.side === 'ally')) {
     state.log.coins += 3 + Math.floor(d.level / 3);
-    (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.suppressedAbility ?? d.ability, boss: !!d.boss }); // 메타몽 캡슐 (위액으로 꺼졌으면 원래 특성)
+    (state.log.defeated ??= []).push({ species: d.species, types: [...d.types], moves: [...d.moves], ability: d.mummyFrom ?? d.suppressedAbility ?? d.ability, boss: !!d.boss }); // 메타몽 캡슐 (위액으로 꺼졌거나 미라가 됐으면 원래 특성)
   }
   if (d.side === 'ally' && !d.bot && !state.log.fainted.includes(unitKey(d))) state.log.fainted.push(unitKey(d));
   refreshField(state); // 오라 주인이 쓰러지면 오라도 사라진다
@@ -289,6 +289,7 @@ function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false, br
   }
 }
 let itemLog = null; // 지금 기술의 특성·도구 알림 (applyMove 가 맞춤)
+let moxieQueue = null; // 자기과신: 범위기 도중 쓰러뜨려도 기술이 끝난 뒤 +1 (다음 대상부터 세지지 않게)
 
 // 피뢰침·마중물: 주변 2칸 안의 대상을 노린 단일 전기/물 기술을 끌어온다 (아군·적 모두, 사거리·편 무시).
 // 끌어온 유닛(대상이 원래 그 유닛이면 null)을 돌려준다. 화면도 연출 대상을 정할 때 쓴다
@@ -554,6 +555,16 @@ export function chargeRoute(state, unit) {
 
 // aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
 export function applyMove(state, userId, moveId, aim, rng) {
+  const outer = moxieQueue;
+  moxieQueue = [];
+  try { return runMove(state, userId, moveId, aim, rng); } finally {
+    const q = moxieQueue;
+    moxieQueue = outer;
+    for (const by of q) if (state.units.includes(by)) applyStageChange(by, 'atk', 1);
+  }
+}
+
+function runMove(state, userId, moveId, aim, rng) {
   const W = effectiveWeather(state); // 에어록·날씨부정 반영
   for (const u of state.units) u.fieldWeather = W; // 쓱쓱·엽록소 등 스피드·이동력 특성용
   refreshField(state);
@@ -628,11 +639,13 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 습기: 주변 2칸에 습기가 있으면 자폭·대폭발 불발
   if (SELF_KO.includes(move.id) && !breaker && state.units.some((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2)) {
     abilityEvents.push({ unitId: state.units.find((u) => u !== a && has(u, 'damp') && dist(u, a) <= 2).id, ability: 'damp' });
+    noteChain(state, a, move, false); // 막힌 기술도 크로스 연계는 끊김
     return { kind, blocked: 'damp', stageChanges, statusChanges, thawed, missed: [], abilityEvents };
   }
 
   // 끌어왔으면 그 유닛이 무효로 흡수하고 특공 +1 (명중 판정 없음)
   if (rod) {
+    noteChain(state, a, move, false);
     const hpBefore = rod.hp;
     absorb(rod, { ability: rod.ability, boost: { spa: 1 } });
     if (kind === 'status') return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, redirected: rod.id };
@@ -802,7 +815,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
           if (res.ok) abilityEvents.push({ unitId: d.id, ability: d.ability });
         }
         if (has(a, 'poison-touch') && !fainted && !d.status && rng() * 100 < 30) { const res = inflict(d, 'poison', rng, null, W); statusChanges.push({ unitId: d.id, ailment: 'poison', ...res }); if (res.ok) abilityEvents.push({ unitId: a.id, ability: 'poison-touch' }); } // 독수
-        if (has(d, 'mummy') && a.ability !== 'mummy' && !a.boss) { a.ability = 'mummy'; abilityEvents.push({ unitId: d.id, ability: 'mummy' }); } // 미라: 메인 특성만
+        if (has(d, 'mummy') && a.ability !== 'mummy' && !a.boss) { a.mummyFrom ??= a.ability; a.ability = 'mummy'; abilityEvents.push({ unitId: d.id, ability: 'mummy' }); } // 미라: 메인 특성만
         const recoil = has(d, 'rough-skin') || has(d, 'iron-barbs') ? 1 / 8 : fainted && has(d, 'aftermath') && !state.units.some((u) => has(u, 'damp')) ? 1 / 4 : 0;
         if (recoil && !magicGuard(a)) {
           a.hp = Math.max(0, a.hp - Math.max(1, Math.floor(a.maxHp * recoil)));
@@ -857,7 +870,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
   // 저주받은바디: 한 번에 맞힌 서로 다른 보유자 수로 한 번만 (1마리 30%, 한 마리당 +10%p) → 그 기술 사슬묶기
   const cursed = targets.filter((d) => d !== a && d.side !== a.side && has(d, 'cursed-body') && !breaksDef && hits.some((h) => h.unitId === d.id && h.hit && h.damage > 0));
-  if (cursed.length && state.units.includes(a) && !a.disable && rng() * 100 < 20 + 10 * cursed.length) { a.disable = { move: move.id, turns: LOCK_TURNS }; abilityEvents.push({ unitId: cursed[0].id, ability: 'cursed-body', target: a.id }); }
+  if (cursed.length && state.units.includes(a) && !a.disable && rng() * 100 < 20 + 10 * cursed.length) { a.disable = { move: move.id, turns: LOCK_TURNS + 1 }; abilityEvents.push({ unitId: cursed[0].id, ability: 'cursed-body', target: a.id }); } // 자기 페이즈 끝에 바로 1 줄어드니 +1 (3턴)
   // 불꽃튀기기: 맞은 상대의 상하좌우 같은 편은 각자 최대 HP 1/16
   const splash = [];
   if (move.id === 'flame-burst') for (const d of targets) {
