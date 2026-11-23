@@ -225,7 +225,7 @@ test('regenerated data keeps every existing value (only new fields added) — go
   const strip = (evos) => evos.map((e) => ({ ...e, rule: Object.fromEntries(Object.entries(e.rule).filter(([k]) => k !== 'gender')) }));
   const keep = Object.fromEntries(Object.entries(POKEDEX.species).map(([k, s]) => [k, { base: s.base, types: s.types, learnset: s.learnset, evolutions: strip(s.evolutions), abilities: s.abilities, stage: s.stage, bst: s.bst, dex: s.dex, name: s.name, growth: s.growth, baseExp: s.baseExp, legendary: s.legendary }]));
   const sha = (o) => createHash('sha1').update(JSON.stringify(o)).digest('hex');
-  assert.equal(sha(keep), '6beed84475446ef5d463f1e32139f1aff610057b');
+  assert.equal(sha(keep), '439224fef7fb9e34da42fbd36dd67ea2f1996ace');
   const NEW = ['drain', 'healing', 'minHits', 'maxHits', 'critRate', 'flinchChance', 'priority']; // 기술 효과 메타 (2026-11-15 추가)
   const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
   const oldOnly = Object.fromEntries(Object.entries(oldMoves).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).filter(([f]) => !NEW.includes(f)))]));

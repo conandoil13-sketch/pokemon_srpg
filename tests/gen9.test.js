@@ -60,3 +60,12 @@ test('every move a gen 4 learnset taught is still in the move data, so old saves
   // 플라티나 습득표에 있던 기술 몇 개 (9세대 목록에서 빠진 것 포함)
   for (const id of ['thunderbolt', 'ember', 'scratch', 'leer', 'flame-wheel', 'twister', 'rage']) assert.ok(M[id], id);
 });
+
+test('review: learnsets are in level order (starting moves depend on it)', () => {
+  for (const s of Object.values(SPECIES)) for (let i = 1; i < s.learnset.length; i++) assert.ok(s.learnset[i - 1][0] <= s.learnset[i][0], `${s.key} at ${i}`);
+});
+
+test('review: beat-up and punishment keep a base power so old movesets and power rules still work', () => {
+  assert.ok(MOVES['beat-up'].learnable && MOVES['beat-up'].power > 0, 'beat-up');
+  assert.equal(MOVES.punishment.power, 60);
+});

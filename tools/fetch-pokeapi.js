@@ -11,7 +11,9 @@ const MAX_DEX = 493;
 const EXTRA_MOVES = ['tackle', 'grass-knot']; // tackle: 기술이 없을 때 대체 / grass-knot: 몸무게 기술(기술머신 전용, 나중 획득)
 const OLD_GROUPS = ['platinum', 'heartgold-soulsilver', 'diamond-pearl']; // 예전(4세대) 습득표 — 그 기술은 기술 데이터에 남김 (저장 호환)
 const GEN_LIMIT = 4; // 이 세대까지 나온 기술·특성만 (세대를 넣을 때 올림)
-const SIDE_GROUPS = ['colosseum', 'xd', 'lets-go-pikachu-eevee', 'legends-arceus', 'legends-za']; // 습득표 첫·마지막을 고를 때 빼는 외전
+// 습득표 첫·마지막을 고를 본편 버전 그룹 (화이트리스트 — 외전·DLC·새 그룹이 끼지 않게)
+const MAIN_GROUPS = ['red-green-japan', 'red-blue', 'yellow', 'gold-silver', 'crystal', 'ruby-sapphire', 'emerald', 'firered-leafgreen', 'diamond-pearl', 'platinum', 'heartgold-soulsilver',
+  'black-white', 'black-2-white-2', 'x-y', 'omega-ruby-alpha-sapphire', 'sun-moon', 'ultra-sun-ultra-moon', 'sword-shield', 'brilliant-diamond-shining-pearl', 'scarlet-violet'];
 const CONCURRENCY = 8;
 const API = 'https://pokeapi.co/api/v2';
 const AILMENTS = ['paralysis', 'burn', 'poison', 'sleep', 'freeze', 'confusion'];
@@ -112,6 +114,7 @@ async function main() {
   await mkdir(CACHE, { recursive: true });
   const vgList = (await get('version-group?limit=100')).results;
   const vgOrder = new Map(await Promise.all(vgList.map(async (vg) => [vg.name, (await get(vg.url)).order])));
+  for (const g of MAIN_GROUPS) if (!vgOrder.has(g)) throw new Error(`unknown version group ${g}`);
 
   const dexes = Array.from({ length: MAX_DEX }, (_, i) => i + 1);
   const species = {};
@@ -125,14 +128,14 @@ async function main() {
     // 습득표: 본편 버전 그룹 중 레벨업 목록이 있는 첫·마지막 그룹의 합집합, 겹치면 낮은 레벨, 레벨 0(진화 때) → 1
     const byGroup = new Map();
     for (const m of pk.moves) for (const v of m.version_group_details) {
-      if (v.move_learn_method.name !== 'level-up' || SIDE_GROUPS.includes(v.version_group.name)) continue;
+      if (v.move_learn_method.name !== 'level-up' || !MAIN_GROUPS.includes(v.version_group.name)) continue;
       if (!byGroup.has(v.version_group.name)) byGroup.set(v.version_group.name, []);
       byGroup.get(v.version_group.name).push([Math.max(1, v.level_learned_at), m.move.name]);
     }
     const groups = [...byGroup.keys()].sort((a, b) => vgOrder.get(a) - vgOrder.get(b));
     const lowest = new Map();
     for (const g of new Set([groups[0], groups.at(-1)])) for (const [lv, mv] of byGroup.get(g) ?? []) lowest.set(mv, Math.min(lv, lowest.get(mv) ?? 99));
-    const learnset = [...lowest].map(([mv, lv]) => [lv, mv]);
+    const learnset = [...lowest].map(([mv, lv]) => [lv, mv]).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1])); // 레벨 오름차순 (learn.js 가 기대)
     for (const g of OLD_GROUPS) for (const [, mv] of byGroup.get(g) ?? []) oldMoves.add(mv);
     const st = Object.fromEntries(pk.stats.map((s) => [s.stat.name, s.base_stat]));
     const base = { hp: st.hp, atk: st.attack, def: st.defense, spa: st['special-attack'], spd: st['special-defense'], spe: st.speed };
