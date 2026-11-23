@@ -177,3 +177,33 @@ test('round and ground effects stay upright when aimed up or down', () => {
     }
   }
 });
+
+// 돌진 이펙트 (2026-11-24): 타입 팔레트 한 장으로 모든 돌진기
+import { MOVES as MVD } from '../src/data/moves.js';
+import { fxForMove as fxd, TYPE_PALETTE } from '../src/data/moveFx.js';
+test('dash trail draws in every direction and length, then ends empty', () => {
+  for (const dir of ['right', 'left', 'up', 'down']) for (const [reach, faint] of [[8, false], [16, false], [48, false], [32, true]]) {
+    const m = createFxManager();
+    const e = m.spawn({ id: 'pokemon/dash-trail', opts: { palette: PAL.fire, reach, travel: 0.25, faint } }, { x: 120, y: 100 }, { dir });
+    assert.ok(e, `${dir} ${reach}`); assert.equal(m.failed, 0);
+    let drew = 0;
+    for (let i = 0; i < 20; i++) { m.update(1 / 30); drew += m.draw(null, 'front', { x: 0, y: 0 }).color.some((c) => c) ? 1 : 0; }
+    assert.ok(drew > 3, `${dir} ${reach} drew ${drew}`);
+    for (let i = 0; i < 60; i++) m.update(1 / 30);
+    assert.ok(!m.draw(null, 'front', { x: 0, y: 0 }).color.some((c) => c), `${dir} ${reach} ends empty`);
+  }
+});
+
+test('dash moves get a dash trail in their type palette; others do not', () => {
+  assert.deepEqual(fxd(MVD['flare-blitz'], { distance: 2 }).dash.opts.palette, PAL[TYPE_PALETTE.fire]);
+  assert.deepEqual(fxd(MVD['volt-switch'], { distance: 3 }).dash.opts.palette, PAL[TYPE_PALETTE.electric]);
+  assert.equal(fxd(MVD['brave-bird'], { distance: 1 }).dash.id, 'pokemon/dash-trail');
+  assert.equal(fxd(MVD.tackle, { distance: 1 }).dash, undefined);
+});
+
+test('a long dash (waterfall over water) keeps its arrival flash past the old 0.8 s cut', () => {
+  const m = createFxManager();
+  m.spawn({ id: 'pokemon/dash-trail', opts: { palette: PAL.water, reach: 6 * 16, travel: 0.65 } }, { x: 120, y: 100 }, { dir: 'right' });
+  for (let i = 0; i < 25; i++) m.update(1 / 30); // t ≈ 0.83: 도착 섬광 중
+  assert.ok(m.draw(null, 'front', { x: 0, y: 0 }).color.some((c) => c));
+});

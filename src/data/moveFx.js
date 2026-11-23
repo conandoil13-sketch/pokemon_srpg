@@ -4,6 +4,7 @@ import { PAL } from '../vendor/pixelfx/core/index.js';
 import OVERRIDES from './moveFx.json' with { type: 'json' };
 import { familyOf } from './moveFamilies.js';
 import { MOVES } from './moves.js';
+import { DASH } from '../core/dash.js';
 
 export const TYPE_PALETTE = {
   normal: 'bone', fire: 'fire', water: 'water', electric: 'volt', grass: 'leaf', ice: 'ice', fighting: 'ember',
@@ -45,6 +46,7 @@ function rule(move, distance) {
   const out = rule2(move, distance, p, type, T, spark, thud);
   if (tier === 'strong' && out.hit && !out.noHit2) out.hit2 = spec('impacts/blunt-hit', { palette: p, light: T.light }, 1.5); // 강: 묵직한 충격 겹침
   delete out.noHit2;
+  if (DASH[move.id]) out.dash = spec('pokemon/dash-trail', { palette: p, light: T.light }, 1, 'front'); // 돌진기: 타입 색 속도선 (달려감·런지·돌아오기, mapAttack 이 reach·travel 을 넣음)
   return out;
 }
 
