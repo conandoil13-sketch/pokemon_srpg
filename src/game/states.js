@@ -27,6 +27,7 @@ import { bakeDesertGround, drawDesertMap } from '../render/desertTiles.js';
 import { bakeVolcanoGround, drawVolcanoMap, drawSteamWarn } from '../render/volcanoTiles.js';
 import { bakeIceGround, drawIceMap, drawFrozen } from '../render/iceTiles.js';
 import { bakeGraveyardGround, drawGraveyardMap, drawWisps } from '../render/graveyardTiles.js';
+import { bakeCanyonGround, drawCanyonMap } from '../render/canyonTiles.js';
 import { pulsePreview, firesAt } from '../core/generator.js';
 import { sandShift, markSettled, unsettled } from '../core/sand.js';
 import { steamPreview, ventFires, steamPath } from '../core/vent.js';
@@ -268,7 +269,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, volcanoGround = null, iceGround = null, graveGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
+  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, volcanoGround = null, iceGround = null, graveGround = null, canyonGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
   function reset() {
     st = createBattle(map, party, { hpRatio });
     st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant', 'desert', 'volcano', 'ice', 'graveyard'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
@@ -282,6 +283,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
     if (theme === 'sewer' && typeof document !== 'undefined') { try { sewerGround = bakeSewerGround(map.tiles); } catch { sewerGround = null; } } // 하수도: 벽·바닥·물길 (물결·거품·타이어·봉투는 매 프레임)
+    if (theme === 'canyon' && typeof document !== 'undefined') { try { canyonGround = bakeCanyonGround(map.tiles); } catch { canyonGround = null; } } // 협곡: 풀밭·능선·절벽면·덩굴·낭떠러지·개울 (나무·바위·안개·반짝임은 매 프레임)
     if (theme === 'graveyard' && typeof document !== 'undefined') { try { graveGround = bakeGraveyardGround(map.tiles); } catch { graveGround = null; } } // 묘지: 풀밭 묘역·묘역 띠·돌담·연못·납골당 계단 (묘비·나무·혼불은 매 프레임)
     if (theme === 'ice' && typeof document !== 'undefined') { try { iceGround = bakeIceGround(map.tiles); } catch { iceGround = null; } } // 얼음동굴: 돌판·눈·호수·벽·계단 (빙판·고드름·눈더미는 매 프레임)
     if (theme === 'volcano' && typeof document !== 'undefined') { try { volcanoGround = bakeVolcanoGround(map.tiles); } catch { volcanoGround = null; } } // 화산동굴: 화산암·현무암·벽·물 (용암·분출구·스팀은 매 프레임)
@@ -1225,6 +1227,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     else if (desertGround) drawDesertMap(ctx, st.grid, desertGround, cx, cy, W, H, time, st.flows);
     else if (volcanoGround) drawVolcanoMap(ctx, st.grid, volcanoGround, cx, cy, W, H, time, st.vents, (v) => ventFires(v, st.turn) && st.result == null, steamFx && { vents: steamFx.vents, age: clock - steamFx.at }, (v) => steamPath(st, v));
     else if (iceGround) drawIceMap(ctx, st.grid, iceGround, cx, cy, W, H, time);
+    else if (canyonGround) drawCanyonMap(ctx, st.grid, canyonGround, cx, cy, W, H, time);
     else if (graveGround) drawGraveyardMap(ctx, st.grid, graveGround, cx, cy, W, H, time, litWisps());
     else if (powerGround) drawPowerMap(ctx, st.grid, powerGround, cx, cy, W, H, time, st.generators, (g) => firesAt(g, st.turn) && st.result == null, pulseFx && { gens: pulseFx.gens, age: clock - pulseFx.at });
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
