@@ -219,7 +219,7 @@ export function pileNotices(piles = [], ally, get, word = '낙엽') { // word: �
 
 // 특성 발동 → 대사 (순수). 자주 나오는 가속은 대사 없이 (정보창 랭크로 보임), 습기는 공격 연출이 이미 말함
 const abilityName = (id) => ABILITIES[id]?.name ?? id;
-const HEAL_ABILITIES = ['volt-absorb', 'water-absorb', 'dry-skin', 'rain-dish', 'ice-body', 'poison-heal'];
+const HEAL_ABILITIES = ['volt-absorb', 'water-absorb', 'dry-skin', 'rain-dish', 'ice-body', 'poison-heal', 'regenerator'];
 const WEATHER_START = { drizzle: '비가 내리기 시작했다!', drought: '햇살이 강해졌다!', 'sand-stream': '모래바람이 불기 시작했다!', 'snow-warning': '싸라기눈이 내리기 시작했다!' };
 const QUIET_ABILITIES = ['speed-boost', 'damp'];
 // 지니는 도구 발동 문구
@@ -244,6 +244,9 @@ export function abilityNotices(events = [], get) {
     else if (e.ability === 'truant') text = `${josa(who, '은/는')} 게으름을 피우고 있다!`;
     else if (e.ability === 'trace') text = `${josa(who, '은/는')} 트레이스로 ${josa(abilityName(e.copied), '을/를')} 복사했다!`;
     else if (WEATHER_START[e.ability]) text = `${who}의 ${name}! ${WEATHER_START[e.ability]}`;
+    else if (e.ability === 'cursed-body' && t) text = `${who}의 저주받은바디! ${unitLabel(t)}의 기술이 사슬묶기됐다!`;
+    else if (e.ability === 'mummy') text = `${who}의 미라! 상대의 특성이 미라가 됐다!`;
+    else if (e.ability === 'healer' && t) { text = `${who}의 치유의마음! ${josa(unitLabel(t), '이/가')} 나았다!`; at = { x: t.x, y: t.y }; }
     else if (e.ability === 'synchronize') text = `${who}의 싱크로! 상태이상이 상대에게도 옮았다!`;
     else if (HEAL_ABILITIES.includes(e.ability) && !e.damage) text = `${josa(who, '은/는')} ${josa(name, '으로/로')} HP를 회복했다!`;
     else text = `${who}의 ${name}!`;

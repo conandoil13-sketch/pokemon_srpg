@@ -149,8 +149,9 @@ export function tickField(state, side, events) {
 export function fieldDamageMult(attacker, defender, move, crit = false) {
   let m = 1;
   const df = defender.field, af = attacker.field, type = moveTypeOf(attacker, move);
-  if (!crit && move.category === 'physical' && df?.reflect) m *= 0.5;
-  if (!crit && move.category === 'special' && df?.lightScreen) m *= 0.5;
+  const sneak = has(attacker, 'infiltrator'); // 틈새포착: 상대 리플렉터·빛의장막 무시
+  if (!crit && !sneak && move.category === 'physical' && df?.reflect) m *= 0.5;
+  if (!crit && !sneak && move.category === 'special' && df?.lightScreen) m *= 0.5;
   if (type === 'electric' && (af?.mudSport || df?.mudSport)) m *= 0.5;
   if (type === 'fire' && (af?.waterSport || df?.waterSport)) m *= 0.5;
   return m;

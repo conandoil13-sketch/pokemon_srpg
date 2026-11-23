@@ -5,7 +5,7 @@ import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
 import { weatherDamageMult, weatherAccuracy } from './weather.js';
 import { fieldDamageMult } from './field.js';
-import { typesOf, has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult, moveTypeOf, airborne } from './abilities.js';
+import { moldBreaker, typesOf, has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult, moveTypeOf, airborne } from './abilities.js';
 
 
 const sp = (unit) => SPECIES[unit.species];
@@ -15,7 +15,8 @@ const isType = (u, t) => (u.types ?? SPECIES[u.species].types).includes(t);
 import { charged, CHARGE_MULT } from './generator.js';
 export function terrainCtx(state, a, d) {
   const guards = state.units.filter((o) => o !== d && o.side === d.side && o.hp > 0 && Math.abs(o.x - d.x) + Math.abs(o.y - d.y) === 1).length;
-  return { atkTile: state.grid[a.y]?.[a.x], guards, charged: charged(state, a) }; // 발전소: 발전기에 붙어 섬
+  const victoryStar = state.units.some((u) => u.side === a.side && u.hp > 0 && has(u, 'victory-star') && Math.abs(u.x - a.x) + Math.abs(u.y - a.y) <= 2); // 승리의별: 자신·주변 2칸 아군
+  return { atkTile: state.grid[a.y]?.[a.x], guards, charged: charged(state, a), victoryStar }; // 발전소: 발전기에 붙어 섬
 }
 
 export function hitChance(attacker, defender, move, defTile, weather = null, ctx = {}) {
@@ -31,7 +32,7 @@ export function hitChance(attacker, defender, move, defTile, weather = null, ctx
   const evasion = Math.min(30, bush + Math.max(0, speGap));
   const rockAim = ctx.atkTile === '^' && isType(attacker, 'fighting') ? 5 : 0; // 격투: 바위 위에서 명중 +5
   const high = (t) => t === 'B' || t === 'H', height = high(ctx.atkTile) && !high(defTile) ? 10 : !high(ctx.atkTile) && high(defTile) ? -10 : 0; // 시티 옥상·협곡 고지: 위 → 아래 +10, 아래 → 위 −10
-  return Math.max(0, Math.min(100, acc.value + rockAim + height - evasion + accuracyShift(attacker, defender)));
+  return Math.max(0, Math.min(100, (acc.value + rockAim + height - evasion + accuracyShift(attacker, defender)) * (ctx.victoryStar ? 1.1 : 1))); // 승리의별: 마지막에 ×1.1
 }
 
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)
@@ -70,7 +71,7 @@ function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {})
   const user = move.foulPlay ? defender : attacker; // 속임수: 상대 공격으로
   // 천진: 상대 랭크를 무시 (틀깨기면 천진도 무시)
   const aKey = physical ? 'atk' : 'spa', dKey = physical || move.hitsDef ? 'def' : 'spd'; // 사이코쇼크·사이코브레이크·신비의칼: 방어로 받음
-  const A = defender.ability === 'unaware' && attacker.ability !== 'mold-breaker' ? user.stats[aKey] : effectiveStat(user, aKey);
+  const A = defender.ability === 'unaware' && !moldBreaker(attacker) ? user.stats[aKey] : effectiveStat(user, aKey);
   let D = attacker.ability === 'unaware' || move.ignoreDefStages ? defender.stats[dKey] : effectiveStat(defender, dKey); // 야금야금·성스러운칼: 상대 랭크 무시
   if (defTile === '^') D *= isType(defender, 'steel') ? 1.35 : 1.2; // 강철: 바위 칸 ×1.35
   else if (defTile === '#') D *= 1.1; // 나무 위(벌레)

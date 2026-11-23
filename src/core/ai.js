@@ -13,7 +13,7 @@ import { expectedDamage, hitChance, terrainCtx } from './damage.js';
 import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { canInflict, canInfatuate } from './status.js';
-import { immunity, has } from './abilities.js';
+import { immunity, has, moldBreaker } from './abilities.js';
 import { aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
 import { moveBlock, moveFor, isHealMove, BIND_MOVES } from './volatile.js';
@@ -202,8 +202,8 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
 const SLEEP_LOCK = 2;
 function ailmentValue(state, user, r, move) {
   const a = move.ailment;
-  if (a === 'infatuation') return canInfatuate(r, user, { breaker: has(user, 'mold-breaker') }).ok ? bestDamage(r, [user]) * 0.5 : 0; // 헤롱헤롱: 반대 성별만
-  if (!a || !canInflict(r, a, move, W, { breaker: has(user, 'mold-breaker') }).ok) return 0;
+  if (a === 'infatuation') return canInfatuate(r, user, { breaker: moldBreaker(user) }).ok ? bestDamage(r, [user]) * 0.5 : 0; // 헤롱헤롱: 반대 성별만
+  if (!a || !canInflict(r, a, move, W, { breaker: moldBreaker(user) }).ok) return 0;
   if (a === 'sleep') {
     // 상대 편이 이미 2마리 이상 쉬고 있거나, 깨어 있는 마지막 하나라면 재우지 않는다 (소수 편성 보호)
     const side = state.units.filter((u) => u.side === r.side);
