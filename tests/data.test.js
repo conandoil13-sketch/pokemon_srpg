@@ -25,8 +25,8 @@ test('validateData passes', () => {
   assert.doesNotThrow(() => validateData());
 });
 
-test('generated data: 24 species with base stats, learnsets and starting moves', () => {
-  assert.equal(Object.keys(SPECIES).length, 493);
+test('generated data: species with base stats, learnsets and starting moves', () => {
+  assert.equal(Object.keys(SPECIES).length, 649); // 5세대까지 (2026-11-24)
   assert.deepEqual(SPECIES.infernape.base, { hp: 76, atk: 104, def: 71, spa: 104, spd: 71, spe: 108 });
   for (const s of Object.values(SPECIES)) {
     assert.ok(s.learnset.length > 0, s.key);
@@ -176,8 +176,8 @@ test('move shapes from rules and overrides', () => {
 
 // ---- 특성 데이터 ----
 import { ABILITIES, SRPG_ABILITY_TEXT } from '../src/data/abilities.js';
-test('species carry gen-4 abilities only', () => {
-  assert.deepEqual(SPECIES.gengar.abilities, ['levitate']);
+test('species carry abilities up to the added generation (gen 5) only', () => {
+  assert.deepEqual(SPECIES.gengar.abilities, ['cursed-body']); // 9세대 슬롯 (5세대 특성)
   assert.deepEqual(SPECIES.koffing.abilities, ['levitate']);
   assert.deepEqual(SPECIES.geodude.abilities, ['rock-head', 'sturdy']);
   assert.deepEqual(SPECIES.pikachu.abilities, ['static']);
@@ -221,16 +221,16 @@ test('gendered evolutions keep their gender condition', () => {
   assert.equal(rule('combee', 'vespiquen').gender, 'female');
 });
 
-test('regenerated data keeps every existing value (only new fields added) — golden values re-taken for the gen 9 baseline (2026-11-24)', () => {
+test('regenerated data keeps every existing value (only new fields added) — golden values re-taken for gen 5 (2026-11-24)', () => {
   const strip = (evos) => evos.map((e) => ({ ...e, rule: Object.fromEntries(Object.entries(e.rule).filter(([k]) => k !== 'gender')) }));
   const keep = Object.fromEntries(Object.entries(POKEDEX.species).map(([k, s]) => [k, { base: s.base, types: s.types, learnset: s.learnset, evolutions: strip(s.evolutions), abilities: s.abilities, stage: s.stage, bst: s.bst, dex: s.dex, name: s.name, growth: s.growth, baseExp: s.baseExp, legendary: s.legendary }]));
   const sha = (o) => createHash('sha1').update(JSON.stringify(o)).digest('hex');
-  assert.equal(sha(keep), '439224fef7fb9e34da42fbd36dd67ea2f1996ace');
+  assert.equal(sha(keep), 'b344e0d5c81a26ea3fa8c9deb6a325a83704f72a');
   const NEW = ['drain', 'healing', 'minHits', 'maxHits', 'critRate', 'flinchChance', 'priority']; // 기술 효과 메타 (2026-11-15 추가)
   const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
   const oldOnly = Object.fromEntries(Object.entries(oldMoves).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).filter(([f]) => !NEW.includes(f)))]));
-  assert.equal(sha(oldOnly), '32520a56415601e3ca57783477fb7f247fe4f4d1');
-  assert.equal(sha(POKEDEX.abilities), '4354c097e52659f6d0ee4dbe1193f2e036b37815');
+  assert.equal(sha(oldOnly), '0e8dc7ce099d399f6d7d11fea4fc16dd035d81c6');
+  assert.equal(sha(POKEDEX.abilities), 'bf158da63794184814dcb798d9df2594ae6deacd');
   assert.ok(gk);
 });
 
