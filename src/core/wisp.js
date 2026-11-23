@@ -1,6 +1,6 @@
 // 묘지 혼불 (순수 규칙). 층 예정표 state.wisps = [{ x, y, round, species, level, lit, done }]
 // 등장 라운드 바로 전 라운드의 적 페이즈 끝에 묘비에 혼불이 피고, 다음 적 페이즈 끝에 묘비 옆 빈칸(가장 가까운 아군 쪽)으로
-// 고스트 1마리. 빈칸이 없으면 한 라운드 미룸. 층이 이미 끝났으면(state.result) 아무 일도 없음.
+// 고스트 1마리 (계단·상자·압정 칸 제외). 빈칸이 없으면 한 라운드 미룸. 층이 이미 끝났으면(state.result) 아무 일도 없음.
 import { canEnter } from './pathfind.js';
 
 const SIDES = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -16,7 +16,8 @@ export function wispPhase(state, make) {
     if (state.turn < w.round) return;
     const near = (p) => Math.min(Infinity, ...allies.map((a) => Math.abs(a.x - p.x) + Math.abs(a.y - p.y)));
     const spot = SIDES.map(([dx, dy]) => ({ x: w.x + dx, y: w.y + dy }))
-      .filter((p) => canEnter(state.grid[p.y]?.[p.x], w.species) && !state.units.some((u) => u.x === p.x && u.y === p.y))
+      .filter((p) => canEnter(state.grid[p.y]?.[p.x], w.species) && state.grid[p.y][p.x] !== '>' && !state.units.some((u) => u.x === p.x && u.y === p.y)
+        && !(state.chests ?? []).some((c) => c.x === p.x && c.y === p.y) && !(state.spikes ?? []).some((t) => t.x === p.x && t.y === p.y)) // 계단·상자·압정 칸은 피함
       .sort((a, b) => near(a) - near(b))[0];
     if (!spot) return; // 자리 없음: 혼불은 켜진 채 다음 라운드
     const u = make(w, spot.x, spot.y, i);

@@ -657,7 +657,7 @@ function graveyardLayout(g, used, allySlots, targets, count, rng) {
         for (const y of ends) for (const dx of [-1, 1]) if (free(cx + dx, y) && rng() < 0.7) paint(cx + dx, y, '"');
         if (rng() < 0.2) {
           const dx = rng() < 0.5 ? -1 : 1, y0 = ends[0];
-          for (let n = int(1, 3), y = y0; n > 0 && y >= 0 && y < H; n--, y += top ? 1 : -1) if (free(cx + dx, y)) paint(cx + dx, y, '~');
+          for (let n = int(1, 3), y = y0; n > 0 && y >= 0 && y < H; n--, y += top ? 1 : -1) if (y !== straight && free(cx + dx, y)) paint(cx + dx, y, '~'); // 곧은 통로는 막지 않음
         }
       }
     }

@@ -64,3 +64,16 @@ test('graveyard floor wisps carry a ghost species from the pool and level = floo
     for (const w of m.wisps) { assert.ok(SPECIES[w.species].types.includes('ghost'), w.species); assert.equal(w.level, GY.baseLevel[f - 1] - 2); }
   }
 });
+
+test('wisps: never spawn on the stairs, a chest or spikes', () => {
+  const s = battle(MAP([W(2)], { stairs: { x: 3, y: 2 }, chests: [{ x: 4, y: 1, item: 'candy' }], tiles: ['.........', '.........', '...>T....', '.........', '.........'] }));
+  s.spikes = [{ x: 4, y: 3, side: 'ally' }];
+  round(s); round(s);
+  const g = s.units.find((u) => u.species === 'gastly');
+  assert.deepEqual([g.x, g.y], [5, 2]);
+});
+
+test('wisps: a fog-hidden ghost notice points at the tombstone, not the ghost', () => {
+  const n = wispNotices([{ kind: 'spawn', unitId: 'g', x: 3, y: 2, from: { x: 4, y: 2 } }], () => ({ side: 'enemy', species: 'gastly' }), new Set(['g']));
+  assert.deepEqual(n[0].at, { x: 4, y: 2 });
+});

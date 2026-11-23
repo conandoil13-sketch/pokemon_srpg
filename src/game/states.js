@@ -121,7 +121,7 @@ const HEAL_EVENTS = { wish: (e) => e.unitId, aquaRing: (e) => (e.healed > 0 ? e.
 export function wispNotices(events = [], get, hidden = new Set()) {
   return events.map((e) => e.kind === 'lit'
     ? { lines: ['묘비에 혼불이 피어올랐다…'], at: { x: e.x, y: e.y }, hp: null }
-    : { lines: [`${hidden.has(e.unitId) ? '무언가가' : josa(unitLabel(get(e.unitId)), '이/가')} 묘비에서 나타났다!`], at: { x: e.x, y: e.y }, hp: null });
+    : { lines: [`${hidden.has(e.unitId) ? '무언가가' : josa(unitLabel(get(e.unitId)), '이/가')} 묘비에서 나타났다!`], at: hidden.has(e.unitId) ? { ...e.from } : { x: e.x, y: e.y }, hp: null }); // 가린 고스트: 카메라는 묘비로
 }
 // 압정 밟기 알림 (이동·밀려나기 뒤). fainted 면 쓰러짐 줄을 하나 더
 export function trapNotices(events = [], get) {

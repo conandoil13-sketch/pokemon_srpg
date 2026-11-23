@@ -106,3 +106,13 @@ test('graveyard floors: wisp schedule — 2 tombstones (3 on the last two floors
   assert.equal(generateFloor(DUNGEONS[0], 1, 1).wisps, undefined);
   assert.ok(!generateFloor(DUNGEONS[0], 1, 1).tiles.join('').includes('T'));
 });
+
+test('graveyard floors: the straight passage stays open on foot (no pond across it)', () => {
+  for (let seed = 1; seed <= 200; seed++) {
+    const m = generateFloor(GY, 1 + (seed % GY.floors), seed);
+    if (!m.tiles.join('').includes('T')) continue;
+    const base = generateFloor({ ...GY, graveyard: false }, 1 + (seed % GY.floors), seed).tiles; // 묘지 배치 전 (원래 물은 빼고 정원 연못만 봄)
+    const open = m.tiles.map((row, y) => [row, y]).filter(([row]) => !row.includes('T')); // 곧은 통로 후보
+    assert.ok(open.some(([row, y]) => ![...row].some((c, x) => c === '~' && base[y][x] !== '~')), `seed ${seed}: pond across the passage`);
+  }
+});
