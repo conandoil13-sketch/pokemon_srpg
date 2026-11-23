@@ -481,7 +481,8 @@ export const CRASH_MOVES = new Set(['jump-kick', 'high-jump-kick']); // 빗나�
 export const BREAKS_PROTECT = new Set(['feint', 'shadow-force']); // 방어를 뚫고 없앰
 const SCREENS = ['reflect', 'lightScreen'];
 export const CHARGE_MOVES = new Set(['solar-beam', 'razor-wind', 'skull-bash', 'sky-attack', 'focus-punch']); // 힘껏펀치: 한 턴 집중 (그 사이 맞으면 풀림) // 모으고 다음 차례 발사
-export const STREAK_MAX = { 'fury-cutter': [4, false], rollout: [4, true], 'ice-ball': [4, true] }; // [최대 단계, 다섯 번째 뒤 처음으로]
+export const STREAK_MAX = { 'fury-cutter': [2, false], // 연속자르기: 9세대 40 → 80 → 160 (상한 160)
+  rollout: [4, true], 'ice-ball': [4, true] }; // [최대 단계, 다섯 번째 뒤 처음으로]
 export const RAMPAGE_MOVES = new Set(['outrage', 'petal-dance', 'thrash']); // 처음 대상을 2~3번 쫓아가 때리고 혼란
 export const UPROAR_TURNS = 3;
 // 소란피기 2칸 안: 못 잠듦 (status.canInflict · 잠자기가 이 표시를 읽음)

@@ -40,26 +40,26 @@ test('eruption and water spout: 150 × HP ratio, floored, at least 1', () => {
 
 test('wake-up slap and smelling salts double on sleep / paralysis and cure it', () => {
   const { s, a, f } = duel('machop', 'geodude');
-  assert.equal(P(a, f, 'wake-up-slap'), 60);
+  assert.equal(P(a, f, 'wake-up-slap'), 70); // 9세대 70
   f.status = 'sleep'; f.statusTurns = 3;
-  assert.equal(P(a, f, 'wake-up-slap'), 120);
+  assert.equal(P(a, f, 'wake-up-slap'), 140);
   applyMove(s, a.id, 'wake-up-slap', f.id, hit);
   assert.equal(f.status, null);
   const b = duel('rattata', 'onix');
   b.f.status = 'paralysis';
-  assert.equal(P(b.a, b.f, 'smelling-salts'), 120);
-  assert.equal(P(b.a, b.f, 'wake-up-slap'), 60, 'only its own status');
+  assert.equal(P(b.a, b.f, 'smelling-salts'), 140);
+  assert.equal(P(b.a, b.f, 'wake-up-slap'), 70, 'only its own status');
   applyMove(b.s, b.a.id, 'smelling-salts', b.f.id, hit);
   assert.equal(b.f.status, null);
 });
 
 test('assurance ×1.5 on a target already hurt this phase', () => {
   const { s, a, f } = duel('houndour', 'onix');
-  assert.equal(P(a, f, 'assurance'), 50);
+  assert.equal(P(a, f, 'assurance'), 60); // 9세대 60
   applyMove(s, a.id, 'tackle', f.id, hit);
-  assert.equal(P(a, f, 'assurance'), 75);
+  assert.equal(P(a, f, 'assurance'), 90);
   endPhase(s, () => 0.9); endPhase(s, () => 0.9);
-  assert.equal(P(a, f, 'assurance'), 50, 'next phase forgets');
+  assert.equal(P(a, f, 'assurance'), 60, 'next phase forgets');
 });
 
 test('revenge and avalanche ×1.5 against whoever last hit the user, across turns', () => {
@@ -198,14 +198,14 @@ test('doom desire knocks out and credits the user', () => {
 // ---- 3차: 연속 사용과 지속 효과 ----
 test('fury cutter doubles on each consecutive hit up to 160; a miss or another move resets it', () => {
   const { s, a, f } = duel('scyther', 'snorlax');
-  const pw = () => P(a, f, 'fury-cutter');
-  assert.equal(pw(), 10);
-  applyMove(s, a.id, 'fury-cutter', f.id, hit); assert.equal(pw(), 20);
-  applyMove(s, a.id, 'fury-cutter', f.id, hit); assert.equal(pw(), 40);
-  applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'fury-cutter', f.id, hit);
+  const pw = () => { f.hp = f.maxHp; return P(a, f, 'fury-cutter'); }; // 세진 위력에 쓰러지지 않게 매번 회복
+  assert.equal(pw(), 40); // 9세대 위력 40 → 80 → 160
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); assert.equal(pw(), 80);
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); assert.equal(pw(), 160);
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'fury-cutter', f.id, hit);
   assert.equal(pw(), 160, 'capped');
-  applyMove(s, a.id, 'fury-cutter', f.id, () => 0.99); assert.equal(pw(), 10, 'miss resets');
-  applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'tackle', f.id, hit); assert.equal(pw(), 10, 'another move resets');
+  applyMove(s, a.id, 'fury-cutter', f.id, () => 0.99); assert.equal(pw(), 40, 'miss resets');
+  applyMove(s, a.id, 'fury-cutter', f.id, hit); applyMove(s, a.id, 'tackle', f.id, hit); assert.equal(pw(), 40, 'another move resets');
 });
 
 test('rollout and ice ball grow 30 → 480 over five hits, then start over', () => {

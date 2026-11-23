@@ -89,9 +89,9 @@ test('every move and species is keyed by its PokeAPI identifier', () => {
   for (const [k, s] of Object.entries(SPECIES)) assert.equal(s.api, k);
 });
 
-test('Gen 1-4: ditto, gen-4 types, branching lines', () => {
+test('Gen 1-4: ditto, gen-9 types, branching lines', () => {
   assert.deepEqual(startingMoves(SPECIES.ditto.learnset, 8, MOVES), ['tackle']);
-  assert.deepEqual(SPECIES.clefairy.types, ['normal']);
+  assert.deepEqual(SPECIES.clefairy.types, ['fairy']); // 9세대 기준 (2026-11-24)
   const ev = (k) => Object.fromEntries(SPECIES[k].evolutions.map((e) => [e.to, e.rule]));
   const eevee = ev('eevee');
   assert.deepEqual(Object.keys(eevee).sort(), ['espeon', 'flareon', 'glaceon', 'jolteon', 'leafeon', 'umbreon', 'vaporeon']);
@@ -221,15 +221,15 @@ test('gendered evolutions keep their gender condition', () => {
   assert.equal(rule('combee', 'vespiquen').gender, 'female');
 });
 
-test('regenerated data keeps every existing value (only new fields added)', () => {
+test('regenerated data keeps every existing value (only new fields added) — golden values re-taken for the gen 9 baseline (2026-11-24)', () => {
   const strip = (evos) => evos.map((e) => ({ ...e, rule: Object.fromEntries(Object.entries(e.rule).filter(([k]) => k !== 'gender')) }));
   const keep = Object.fromEntries(Object.entries(POKEDEX.species).map(([k, s]) => [k, { base: s.base, types: s.types, learnset: s.learnset, evolutions: strip(s.evolutions), abilities: s.abilities, stage: s.stage, bst: s.bst, dex: s.dex, name: s.name, growth: s.growth, baseExp: s.baseExp, legendary: s.legendary }]));
   const sha = (o) => createHash('sha1').update(JSON.stringify(o)).digest('hex');
-  assert.equal(sha(keep), '6bbb9325dd6bb975499e89900f09691e551e8a58');
+  assert.equal(sha(keep), '6beed84475446ef5d463f1e32139f1aff610057b');
   const NEW = ['drain', 'healing', 'minHits', 'maxHits', 'critRate', 'flinchChance', 'priority']; // 기술 효과 메타 (2026-11-15 추가)
   const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
   const oldOnly = Object.fromEntries(Object.entries(oldMoves).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).filter(([f]) => !NEW.includes(f)))]));
-  assert.equal(sha(oldOnly), 'd8bfe8cd8abd8d1a6eab82e276ba6203092ea7fb');
+  assert.equal(sha(oldOnly), '32520a56415601e3ca57783477fb7f247fe4f4d1');
   assert.equal(sha(POKEDEX.abilities), '4354c097e52659f6d0ee4dbe1193f2e036b37815');
   assert.ok(gk);
 });
