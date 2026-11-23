@@ -109,6 +109,7 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
 export function critRate(attacker, defender, move = null) {
   if (defender?.field?.luckyChant) return 0; // 주술 오라
   if (def(attacker, defender, 'battle-armor') || def(attacker, defender, 'shell-armor')) return 0;
+  if ((move?.critRate ?? 0) >= 3) return 1; // 얼음숨결·업어후리기: 반드시 급소
   const stage = (move?.critRate ?? 0) + (has(attacker, 'super-luck') ? 1 : 0) + (attacker.focusEnergy ? 2 : 0) + itemCritBonus(attacker); // 기충전 +2 · 초점렌즈 등
   return stage >= 2 ? 1 / 4 : stage === 1 ? 1 / 8 : 1 / 16;
 }

@@ -9,6 +9,7 @@ import { MOVES } from '../data/moves.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { BALANCE } from '../data/balance.js';
 import { DASH, dashPath } from './dash.js';
+import { chainPower, noteChain } from './chainMoves.js';
 import { calcDamage, hitChance, confusionDamage, rollHits, terrainCtx } from './damage.js';
 import { unitsHit, canTarget, hideDouble, aimsOf, sniperBonus } from './shapes.js';
 import { phaseEndWeather, effectiveWeather } from './weather.js';
@@ -237,6 +238,7 @@ function knockOut(state, d, by, { reward = true, deferExp = false } = {}) {
   }
   for (const u of state.units) if (u.infatuatedBy === d.id) { u.infatuation = 0; u.infatuatedBy = null; } // 건 상대가 쓰러지면 헤롱헤롱이 풀린다
   for (const u of state.units) if (u.bound?.by === d.id) { (state.log.unbound ??= []).push({ unitId: u.id, moveId: u.bound.moveId }); u.bound = null; } // 묶은 쪽이 쓰러지면 속박이 바로 풀린다
+  if (by && by.side !== d.side) by.felled = { ...by.felled, [d.side]: true }; // 원수갚기: 우리 편을 쓰러뜨린 상대
   let expGained = {};
   if (by) { if (!deferExp) expGained = awardExp(state, by, d); } // deferExp: 공격이 끝난 뒤 호출 측이 지급
   else if (reward) awardShare(state, d);
@@ -445,6 +447,23 @@ function pushPath(state, a, t) {
     path.push({ x: nx, y: ny });
   }
   return { path, fall: false };
+}
+// 드래곤테일: 맞힌 뒤 울부짖기처럼 밀어냄 · 배대뒤치기: 시전자를 넘어 반대편 한 칸 (막혔으면 피해만, 낭떠러지면 떨어짐)
+function dragonTail(state, a, d) {
+  const tmp = {};
+  if (!pushAway(state, a, d, tmp).ok || !tmp.pushed) return null;
+  return { unitId: d.id, from: tmp.pushed.from, to: tmp.pushed.to };
+}
+function circleThrow(state, a, d) {
+  if (pushImmune(d)) return null;
+  const x = 2 * a.x - d.x, y = 2 * a.y - d.y, tile = state.grid[y]?.[x];
+  if (tile === undefined || state.units.some((u) => u !== d && u.x === x && u.y === y)) return null;
+  const fall = tile === 'X' && !canEnter('X', d);
+  if (!fall && !canEnter(tile, d)) return null;
+  const from = { x: d.x, y: d.y };
+  moveUnit(state, d.id, x, y, 0);
+  if (fall && state.units.includes(d)) { knockOut(state, d, a); checkResult(state); }
+  return { unitId: d.id, from, to: { x, y } };
 }
 const pushImmune = (t) => t.boss || t.rooted || has(t, 'suction-cups');
 // 예상 창용: 밀리면 어디로 가나 · 떨어지나
@@ -658,6 +677,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && moldBreaker);
       ail(t);
     }
+    noteChain(state, a, move, false); // 크로스 연계는 끊김
     let selfFainted = null;
     if (a.hp === 0 && state.units.includes(a)) { knockOut(state, a, null, { reward: false }); checkResult(state); selfFainted = a.id; } // 고스트 저주로 쓰러짐
     return { kind, stageChanges, statusChanges, thawed, missed, abilityEvents, effects, protectedIds, ...out2, ...(selfFainted ? { selfFainted } : {}) };
@@ -683,14 +703,15 @@ export function applyMove(state, userId, moveId, aim, rng) {
   // 대시: 곧게 달려가 대상 앞 칸에서 때림 (이동력은 안 씀, 지나는 압정은 밟음)
   let dashed = null;
   const dashTo = DASH[move.id] ? targets.find((d) => d.side !== a.side) : null;
-  const dp = dashTo && dist(a, dashTo) > 1 ? dashPath(state, a, move, dashTo) : null;
+  const dp = dashTo && dist(a, dashTo) > (DASH[move.id].reach ?? 1) ? dashPath(state, a, move, dashTo) : null;
   if (dp) {
     const from = { x: a.x, y: a.y }, end = dp.at(-1);
     moveUnit(state, a.id, end.x, end.y, 0, dp);
     dashed = { unitId: a.id, from, to: { x: a.x, y: a.y } };
     if (!state.units.includes(a)) return { kind: 'attack', dashed, hits: [], expGained: {}, stageChanges, statusChanges, thawed, selfKO: false, abilityEvents, drained: 0, recoil: 0, crash: 0, screensBroken: [], spun: null, flinched: [], bound: [], retreat: false, bond: [], trapEvents: [...(state.log.trapEvents ?? [])] }; // 압정에 쓰러짐
   }
-  let dmgMove = a.helped && move.power ? { ...move, power: move.power * 1.5 } : move; // 도우미: 다음 공격 한 번
+  const cp = chainPower(state, a, move), base = cp === move.power ? move : { ...move, power: cp }; // 돌림노래·에코보이스·크로스플레임/썬더
+  let dmgMove = a.helped && base.power ? { ...base, power: base.power * 1.5 } : base; // 도우미: 다음 공격 한 번
   if (a.charged && move.power) { if (moveTypeOf(a, move) === 'electric') dmgMove = { ...dmgMove, power: dmgMove.power * 2 }; a.charged = 0; } // 충전: 다음 공격 하나 (전기면 2배)
   a.allMovesUsed = state.units.filter((u) => u.side === a.side).every((u) => (u.moves ?? []).every((m) => u.usedMoves?.has(m))); // 마지막수단
   if (move.varPower === 'magnitude') { const r = rng() * 100; dmgMove = { ...dmgMove, varPower: null, power: r < 5 ? 10 : r < 15 ? 30 : r < 35 ? 50 : r < 65 ? 70 : r < 85 ? 90 : r < 95 ? 110 : 150 }; } // 매그니튜드 4~10
@@ -709,7 +730,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const breaksDef = has(a, 'mold-breaker');
   let dealt = 0; // 실제로 깎인 HP 합 (흡수·반동 기준)
   const flinched = [], bound = [], screensBroken = [], woken = [], lostFocus = [];
-  let countered = null;
+  let countered = null, tossed = null; // 드래곤테일·배대뒤치기
   if (targets.length && move.power) a.ncTouched = true; // 자연회복: 공격함
   const flinchChance = move.flinchChance || (has(a, 'stench') && move.power ? STENCH_FLINCH : 0) || (itemOf(a)?.flinch && move.power ? itemOf(a).flinch : 0); // 악취·왕의징표석: 풀죽음 10%
   if (move.id === 'brick-break') { // 깨뜨리다: 피해 전에 대상을 덮는 상대 편 장벽을 부숨
@@ -809,10 +830,28 @@ export function applyMove(state, userId, moveId, aim, rng) {
       if (has(d, 'color-change') && d.typeOverride !== moveTypeOf(a, move)) { d.typeOverride = moveTypeOf(a, move); abilityEvents.push({ unitId: d.id, ability: 'color-change' }); }
       if (hits.some((h) => h.unitId === d.id && h.crit) && has(d, 'anger-point')) { changeStats(d, [{ stat: 'attack', change: 12 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'anger-point' }); }
     }
+    // 5세대: 원수갚기는 한 번만 · 떨어뜨리기는 땅으로 · 클리어스모그는 랭크 초기화 · 드래곤테일은 밀어냄 · 배대뒤치기는 뒤로 메침
+    if (landed && move.id === 'retaliate' && d.felled?.[a.side]) d.felled = { ...d.felled, [a.side]: false };
+    if (landed && !fainted && state.units.includes(d)) {
+      if (move.id === 'smack-down') { d.smackedDown = true; d.grounded = true; d.magnetRise = 0; }
+      if (move.id === 'clear-smog') Object.assign(d, newStages());
+      if ((move.id === 'dragon-tail' || move.id === 'circle-throw') && state.units.includes(a) && !tossed) tossed = move.id === 'dragon-tail' ? dragonTail(state, a, d) : circleThrow(state, a, d);
+    }
     for (const c of contacts) c();
   }
+  // 불꽃튀기기: 맞은 상대의 상하좌우 같은 편은 각자 최대 HP 1/16
+  const splash = [];
+  if (move.id === 'flame-burst') for (const d of targets) {
+    if (!hits.some((h) => h.unitId === d.id && h.hit && h.damage > 0)) continue;
+    for (const v of state.units.filter((u) => u !== a && u !== d && u.side === d.side && dist(u, d) === 1 && u.guard !== 'protect')) {
+      const damage = Math.min(v.hp, Math.max(1, Math.floor(v.maxHp / 16)));
+      v.hp -= damage; v.ncTouched = true; v.revealed = true; alertHunt(state, v, a);
+      if (v.hp === 0) { knockOut(state, v, a, { deferExp: true }); knocked.push(v); }
+      splash.push({ unitId: v.id, damage, fainted: v.hp === 0, from: d.id, kind: 'fire' });
+    }
+  }
   // 전기·불꽃 연쇄: 맞은 상대가 물(전기)·수풀·단풍길(불꽃) 칸이면 옆 칸 상대에게 10% (흡수·반동 합계엔 안 셈)
-  const chain = [];
+  const chain = [...splash];
   const ck = move.power ? chainKind(moveTypeOf(a, move)) : null;
   if (ck) {
     const starts = targets.filter((d) => d.side !== a.side).map((d) => ({ unit: d, damage: hits.filter((h) => h.unitId === d.id && h.typeMult > 0).reduce((t, h) => t + h.damage, 0) }));
@@ -879,7 +918,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
   if (move.id === 'uproar') for (const u of state.units) if (u.uproarZone && u.status === 'sleep') { cure(u); woken.push({ unitId: u.id, ailment: 'sleep' }); } // 소란: 2칸 안 잠든 포켓몬을 깨움
   // 화풀이: 때리고 그쪽으로 한 칸 (상대를 한 칸 밀고 그 자리로) · 은혜갚기: 때리고 한 칸 물러남
-  let stepped = null, shoved = null;
+  let stepped = null, shoved = tossed;
   if ((move.id === 'frustration' || move.id === 'return') && anyLanded && state.units.includes(a)) {
     const d = targets.find((t) => t.side !== a.side);
     if (d) {
@@ -912,9 +951,10 @@ export function applyMove(state, userId, moveId, aim, rng) {
   }
   if (anyLanded && move.effectKind === 'damage-raise' && move.statChanges?.length && roll(move.statChance)) changeStats(a, move.statChanges, stageChanges);
   // 자폭: 빗나가도 쓴 쪽은 기절, 보상 없음
-  const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
+  const selfKO = (SELF_KO.includes(move.id) || (move.id === 'final-gambit' && anyLanded)) && state.units.includes(a); // 목숨걸기: 맞혔을 때만
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
+  noteChain(state, a, move, anyLanded);
   const out = { kind, dashed, returned, hits, expGained, stageChanges, statusChanges, thawed, woken, lostFocus, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)

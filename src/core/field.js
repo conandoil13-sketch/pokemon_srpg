@@ -34,7 +34,7 @@ export function castField(state, user, effect) {
 
 // 유닛마다 지금 받는 오라·장판 효과
 export function refreshField(state) {
-  for (const u of state.units) u.grounded = !!state.gravity || !!itemOf(u)?.grounded; // 중력 (새로 나온 유닛도) · 검은철구
+  for (const u of state.units) u.grounded = !!state.gravity || !!itemOf(u)?.grounded || !!u.smackedDown; // 중력 (새로 나온 유닛도) · 검은철구
   state.auras = (state.auras ?? []).filter((a) => state.units.some((u) => u.id === a.ownerId)); // 주인이 쓰러지면 사라짐
   for (const u of state.units) {
     const f = blankFlags();
@@ -124,7 +124,7 @@ export function castWeather(state, user, moveId) {
 export function tickField(state, side, events) {
   if (state.gravity?.side === side && --state.gravity.turns <= 0) { // 중력 끝
     state.gravity = null;
-    for (const u of state.units) u.grounded = !!itemOf(u)?.grounded; // 검은철구는 계속 땅에
+    for (const u of state.units) u.grounded = !!itemOf(u)?.grounded || !!u.smackedDown; // 검은철구는 계속 땅에
     events.push({ kind: 'fieldEnd', what: 'gravity', side });
   }
   if (state.weatherTimer?.side === side && --state.weatherTimer.turns <= 0) {

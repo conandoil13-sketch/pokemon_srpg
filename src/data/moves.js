@@ -59,3 +59,14 @@ if (MOVES['wake-up-slap']) MOVES['wake-up-slap'].wakes = 'sleep';
 if (MOVES['smelling-salts']) MOVES['smelling-salts'].wakes = 'paralysis';
 // 2·3차: 연속 사용 (battle.js STREAK_MAX) · 난동 (rampage)
 for (const id of ['fury-cutter', 'rollout', 'ice-ball']) if (MOVES[id]) Object.assign(MOVES[id], { varPower: 'streak', learnable: true });
+
+// 5세대 기술 (세대 추가 3단계, 2026-11-24): 지금 규칙 재활용 + 코덱스 판정 (codex-reviews/2026-11-20-gen5-moves-abilities.md · 2026-11-22-gen5-9-srpg-moves.md)
+const GEN5_VAR = { hex: ['hex'], venoshock: ['venoshock'], 'stored-power': ['storedPower', 20], acrobatics: ['acrobatics'], 'electro-ball': ['electroBall', 60], retaliate: ['retaliate'] };
+for (const [id, [varPower, power]] of Object.entries(GEN5_VAR)) if (MOVES[id]) Object.assign(MOVES[id], { varPower, learnable: true, ...(power ? { power } : {}) });
+for (const id of ['psyshock', 'psystrike', 'secret-sword']) if (MOVES[id]) MOVES[id].hitsDef = true; // 방어로 받음
+if (MOVES['foul-play']) MOVES['foul-play'].foulPlay = true; // 상대 공격으로
+for (const id of ['chip-away', 'sacred-sword']) if (MOVES[id]) MOVES[id].ignoreDefStages = true; // 상대 방어 랭크 무시
+if (MOVES['final-gambit']) Object.assign(MOVES['final-gambit'], { fixedDamage: 'gambit', learnable: true });
+if (MOVES['sky-drop']) MOVES['sky-drop'].learnable = false; // 프리폴: 코덱스 설계안 검토 중 → 아직 안 배움
+if (MOVES['shell-smash']) Object.assign(MOVES['shell-smash'], { kind: 'self', range: [0, 0], area: false, learnable: true }); // 껍질깨기: 랭크 변화만
+if (MOVES['rage-powder']) Object.assign(MOVES['rage-powder'], { effect: 'followMe', kind: 'self', range: [0, 0], area: false, learnable: true }); // 분노가루 = 날따름

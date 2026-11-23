@@ -83,13 +83,22 @@ const DIR_OF = (dx, dy) => (dx > 0 ? 'right' : dx < 0 ? 'left' : dy > 0 ? 'down'
 const pickOne = (mv) => !mv.kind || mv.kind === 'enemy' || mv.kind === 'ally'; // 대상을 직접 고르는 기술
 const helpful = (mv) => mv.kind === 'self' || mv.kind === 'ally' || mv.kind === 'allies';
 // 기술 특수 효과 글자 (기술 정보·자세히 보기)
+const FIXED_TAG = { level: '고정 레벨', psywave: '레벨 0.5~1.5배', half: '상대 HP 절반', endeavor: '내 HP까지 깎음', ohko: '일격필살', gambit: '내 HP만큼' };
+// 5세대 기술 규칙 한마디 (세대 추가 3단계)
+const GEN5_TAG = {
+  hex: '상태이상 2배', venoshock: '독 2배', 'stored-power': '오른 랭크마다 +20', acrobatics: '도구 없으면 2배', 'electro-ball': '스피드 비', retaliate: '원수에게 140',
+  round: '이어 부르면 120', 'echoed-voice': '라운드마다 +40', 'fusion-flare': '크로스썬더 다음 200', 'fusion-bolt': '크로스플레임 다음 200',
+  'smack-down': '땅으로 떨어뜨림', 'dragon-tail': '밀어냄', 'circle-throw': '뒤로 메침', 'volt-switch': '대시 후 복귀', 'flame-burst': '옆에 불똥 1/16', 'clear-smog': '랭크 초기화',
+  psyshock: '방어로 받음', psystrike: '방어로 받음', 'secret-sword': '방어로 받음', 'foul-play': '상대 공격으로', 'chip-away': '방어 랭크 무시', 'sacred-sword': '방어 랭크 무시', synchronoise: '같은 타입만',
+};
 export function moveEffectTags(mv) {
   const tags = [];
   if (mv.drain > 0) tags.push(`흡수 ${mv.drain}%`);
   if (mv.drain < 0) tags.push(`반동 ${-mv.drain === 33 ? '1/3' : -mv.drain === 25 ? '1/4' : -mv.drain === 50 ? '1/2' : `${-mv.drain}%`}`);
   if (mv.minHits && mv.maxHits > 1) tags.push(mv.minHits === mv.maxHits ? `${mv.maxHits}회` : `${mv.minHits}~${mv.maxHits}회`);
-  if (mv.critRate > 0) tags.push('급소↑');
-  if (mv.fixedDamage) tags.push(mv.fixedDamage === 'level' ? '고정 레벨' : `고정 ${mv.fixedDamage}`);
+  if (mv.critRate > 0) tags.push(mv.critRate >= 3 ? '반드시 급소' : '급소↑');
+  if (mv.fixedDamage) tags.push(FIXED_TAG[mv.fixedDamage] ?? `고정 ${mv.fixedDamage}`);
+  if (GEN5_TAG[mv.id]) tags.push(GEN5_TAG[mv.id]);
   if (mv.priority > 0) tags.push('선제');
   if (mv.flinchChance > 0) tags.push(`풀죽음 ${mv.flinchChance}%`);
   if (mv.heal) tags.push('회복 (층 2번)');

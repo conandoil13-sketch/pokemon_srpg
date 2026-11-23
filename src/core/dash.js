@@ -1,5 +1,5 @@
 // 대시 기술 (순수): 곧게 몇 칸 달려가 붙어서 때린다. 기술 밸런스 조정 메모 4차 (codex-reviews/2026-11-20-move-balance-decisions.md)
-// n: 달릴 수 있는 칸 · water: 물 칸은 0칸 (폭포오르기) · jump: 첫 칸 하나는 뛰어넘음 (점프킥) · back: 때린 뒤 처음 칸으로 (회전부리·유턴)
+// n: 달릴 수 있는 칸 · reach: 멈추는 거리 (기본 1 = 붙음) · water: 물 칸은 0칸 (폭포오르기) · jump: 첫 칸 하나는 뛰어넘음 (점프킥) · back: 때린 뒤 처음 칸으로 (회전부리·유턴)
 import { canEnter } from './pathfind.js';
 
 export const DASH = {
@@ -9,6 +9,7 @@ export const DASH = {
   waterfall: { n: 1, water: true },
   'jump-kick': { n: 2, jump: true },
   'drill-peck': { n: 1, back: true }, 'u-turn': { n: 2, back: true },
+  'volt-switch': { n: 2, back: true, reach: 2 }, // 볼트체인지: 2칸 달려가 사거리 2에서 쏘고 돌아옴
 };
 const TALL = '#BHT'; // 뛰어넘지 못하는 칸: 나무·건물·고지·묘비
 
@@ -18,11 +19,11 @@ export function dashPath(state, user, move, target) {
   if (!d || !target) return null;
   const dx = target.x - user.x, dy = target.y - user.y;
   if (dx !== 0 && dy !== 0) return null; // 곧게만
-  const n = Math.abs(dx + dy);
-  if (n <= 1) return null;
+  const n = Math.abs(dx + dy), reach = d.reach ?? 1;
+  if (n <= reach) return null;
   const sx = Math.sign(dx), sy = Math.sign(dy), path = [{ x: user.x, y: user.y }];
   let cost = 0;
-  for (let i = 1; i < n; i++) {
+  for (let i = 1; i <= n - reach; i++) {
     const x = user.x + sx * i, y = user.y + sy * i, t = state.grid[y]?.[x];
     const from = state.grid[path.at(-1).y][path.at(-1).x];
     const taken = state.units.some((u) => u !== user && u.hp > 0 && u.x === x && u.y === y);
