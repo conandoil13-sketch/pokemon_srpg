@@ -9,7 +9,7 @@ import { canEnter } from './pathfind.js';
 export const VENT = 'V', LAVA = 'L', BASALT = 'v';
 export const STEAM_RANGE = 6, STEAM_EVERY = 3;
 export const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
-const STOP = '#^VG*B'; // 스팀·밀림을 막는 칸
+const STOP = '#^VG*BT'; // 스팀·밀림을 막는 칸
 
 export const ventFires = (v, turn) => turn % STEAM_EVERY === v.phase;
 

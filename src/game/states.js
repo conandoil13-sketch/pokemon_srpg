@@ -26,6 +26,7 @@ import { bakePowerGround, drawPowerMap, drawPulseWarn } from '../render/powerTil
 import { bakeDesertGround, drawDesertMap } from '../render/desertTiles.js';
 import { bakeVolcanoGround, drawVolcanoMap, drawSteamWarn } from '../render/volcanoTiles.js';
 import { bakeIceGround, drawIceMap, drawFrozen } from '../render/iceTiles.js';
+import { bakeGraveyardGround, drawGraveyardMap, drawWisps } from '../render/graveyardTiles.js';
 import { pulsePreview, firesAt } from '../core/generator.js';
 import { sandShift, markSettled, unsettled } from '../core/sand.js';
 import { steamPreview, ventFires, steamPath } from '../core/vent.js';
@@ -115,6 +116,13 @@ const STATUS_LINE = {
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
 const HEAL_EVENTS = { wish: (e) => e.unitId, aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
+// 묘지 혼불 알림 (적 페이즈 끝): 혼불이 핀 묘비, 나타난 고스트
+// hidden: 안개에 가려 안 보이는 적 id — 이름 대신 "무언가"
+export function wispNotices(events = [], get, hidden = new Set()) {
+  return events.map((e) => e.kind === 'lit'
+    ? { lines: ['묘비에 혼불이 피어올랐다…'], at: { x: e.x, y: e.y }, hp: null }
+    : { lines: [`${hidden.has(e.unitId) ? '무언가가' : josa(unitLabel(get(e.unitId)), '이/가')} 묘비에서 나타났다!`], at: hidden.has(e.unitId) ? { ...e.from } : { x: e.x, y: e.y }, hp: null }); // 가린 고스트: 카메라는 묘비로
+}
 // 압정 밟기 알림 (이동·밀려나기 뒤). fainted 면 쓰러짐 줄을 하나 더
 export function trapNotices(events = [], get) {
   const out = [];
@@ -256,10 +264,10 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const fxm = createFxManager({ makeCanvas: typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null });
   const facing = {};
 
-  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, volcanoGround = null, iceGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
+  let autumnGround = null, beachGround = null, cityGround = null, sewerGround = null, powerGround = null, desertGround = null, volcanoGround = null, iceGround = null, graveGround = null, pulseFx = null; // pulseFx: 발전기 방출 연출 { gens, at }
   function reset() {
     st = createBattle(map, party, { hpRatio });
-    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant', 'desert', 'volcano', 'ice'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
+    st.grid.trees = !['cave', 'deep-cave', 'sewer', 'power-plant', 'desert', 'volcano', 'ice', 'graveyard'].includes(theme ?? 'field'); // 벽이 나무인 맵: 유연이 지나갈 수 있음 (동굴·하수도 벽은 아님)
     fxm.clear();
     everyone = new Map(st.units.map((u) => [u.id, u])); // 기절해 사라진 유닛 이름도 대사에 쓰도록
     if (theme === 'autumn') { // 단풍 숲: 단풍길(출발 → 계단, 보스 층이면 보스 자리) = 불꽃 연쇄 칸 + 바닥 층을 미리 굽는다
@@ -270,6 +278,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     }
     if (theme === 'city' && typeof document !== 'undefined') { try { cityGround = bakeCityGround(map.tiles); } catch { cityGround = null; } } // 시티: 도로·건물 (워프·가로수는 매 프레임)
     if (theme === 'sewer' && typeof document !== 'undefined') { try { sewerGround = bakeSewerGround(map.tiles); } catch { sewerGround = null; } } // 하수도: 벽·바닥·물길 (물결·거품·타이어·봉투는 매 프레임)
+    if (theme === 'graveyard' && typeof document !== 'undefined') { try { graveGround = bakeGraveyardGround(map.tiles); } catch { graveGround = null; } } // 묘지: 풀밭 묘역·묘역 띠·돌담·연못·납골당 계단 (묘비·나무·혼불은 매 프레임)
     if (theme === 'ice' && typeof document !== 'undefined') { try { iceGround = bakeIceGround(map.tiles); } catch { iceGround = null; } } // 얼음동굴: 돌판·눈·호수·벽·계단 (빙판·고드름·눈더미는 매 프레임)
     if (theme === 'volcano' && typeof document !== 'undefined') { try { volcanoGround = bakeVolcanoGround(map.tiles); } catch { volcanoGround = null; } } // 화산동굴: 화산암·현무암·벽·물 (용암·분출구·스팀은 매 프레임)
     if (theme === 'desert' && typeof document !== 'undefined') { try { desertGround = bakeDesertGround(map.tiles); } catch { desertGround = null; } } // 사막: 모래·사구·모래지옥·절벽·계단 (모래결·소용돌이·바위는 매 프레임)
@@ -316,6 +325,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   // 안개: 지금 아군 누구에게서도 FOG_SIGHT 이상 떨어진 적 (실시간)
+  const litWisps = () => new Set(st.result ? [] : (st.wisps ?? []).filter((w) => w.lit).map((w) => `${w.x},${w.y}`)); // 묘지: 글자가 빛나는 묘비
   const hiddenIds = () => new Set(st.weather === 'fog' ? st.units.filter((u) => u.side === 'enemy' && isHidden(u, allyUnits())).map((u) => u.id) : []);
 
   // 악 수풀 숨기: 아군 누구에게서도 3칸 밖 수풀의 악 타입 적 — 맵에서 아예 안 보임 (안개의 회색 도트와 달리)
@@ -344,9 +354,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   const curAim = () => (aims ? aims[aIdx] : null);
   // 조준의 대표 칸 (커서 위치)
   // 압정(칸 조준): 사거리 1~3 의 벽 아닌 칸 / 덮는 칸 = 그 칸 + 4방
-  const trapAims = (unit) => tilesInRange(unit.x, unit.y, [1, 3], st.width, st.height).filter((t) => st.grid[t.y][t.x] !== '#').map((t) => ({ x: t.x, y: t.y }));
+  const trapAims = (unit) => tilesInRange(unit.x, unit.y, [1, 3], st.width, st.height).filter((t) => !'#T'.includes(st.grid[t.y][t.x])).map((t) => ({ x: t.x, y: t.y }));
   const aimsFor = (unit, mv) => (mv.effect === 'teleport' ? teleportSpots(st, unit) : mv.aimTile ? trapAims(unit) : attackAims(unit, mv)); // 순간이동: 갈 수 있는 빈 칸
-  const coverOf = (unit, mv, aim) => (mv.effect === 'teleport' ? [{ x: aim.x, y: aim.y }] : mv.aimTile ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: aim.x + dx, y: aim.y + dy })).filter((t) => st.grid[t.y]?.[t.x] !== undefined && st.grid[t.y][t.x] !== '#') : tilesOf(st, unit, mv, aim));
+  const coverOf = (unit, mv, aim) => (mv.effect === 'teleport' ? [{ x: aim.x, y: aim.y }] : mv.aimTile ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => ({ x: aim.x + dx, y: aim.y + dy })).filter((t) => st.grid[t.y]?.[t.x] !== undefined && !'#T'.includes(st.grid[t.y][t.x])) : tilesOf(st, unit, mv, aim));
   function aimPoint(aim) {
     if (aim.unitId) { const u = st.units.find((o) => o.id === aim.unitId); return { x: u.x, y: u.y }; }
     if (aim.dir) return tilesOf(st, sel, MV(move), aim)[0] ?? { x: sel.x, y: sel.y };
@@ -459,10 +469,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       endPhase(st, rng);
       if (st.log.pulsed?.length) { pulseFx = { gens: st.log.pulsed, at: clock }; } // 발전소: 방출 번개
       if (st.log.steamed?.length) steamFx = { vents: st.log.steamed, at: clock }; // 화산동굴: 스팀 기둥
+      for (const e of st.log.wisps ?? []) if (e.unitId) { const u = st.units.find((o) => o.id === e.unitId); everyone.set(u.id, u); facing[u.id] = DIR.Left; requestSprites([u.species]); } // 묘지: 혼불에서 나온 고스트
       const go = () => {
         cursor = { ...(allyUnits()[0] ?? cursor) };
         if (st.result) { noticeChain(phaseLines(), () => { mode = 'result'; }); return; }
-        playerPhase(phaseLines());
+        playerPhase([...wispNotices(st.log.wisps, (id) => everyone.get(id), hiddenIds()), ...phaseLines()]);
       };
       const pushes = (st.log.steamPushes ?? []).map((p) => ({ unit: everyone.get(p.unitId), from: p.from, to: p.to })).filter((m) => m.unit && st.units.includes(m.unit));
       if (pushes.length) startSlide(pushes, 0.25 + 0.07 * Math.max(...pushes.map((m) => Math.abs(m.to.x - m.from.x) + Math.abs(m.to.y - m.from.y))), [], go); // 스팀에 밀려나는 포켓몬들 (동시에)
@@ -1209,6 +1220,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     else if (desertGround) drawDesertMap(ctx, st.grid, desertGround, cx, cy, W, H, time, st.flows);
     else if (volcanoGround) drawVolcanoMap(ctx, st.grid, volcanoGround, cx, cy, W, H, time, st.vents, (v) => ventFires(v, st.turn) && st.result == null, steamFx && { vents: steamFx.vents, age: clock - steamFx.at }, (v) => steamPath(st, v));
     else if (iceGround) drawIceMap(ctx, st.grid, iceGround, cx, cy, W, H, time);
+    else if (graveGround) drawGraveyardMap(ctx, st.grid, graveGround, cx, cy, W, H, time, litWisps());
     else if (powerGround) drawPowerMap(ctx, st.grid, powerGround, cx, cy, W, H, time, st.generators, (g) => firesAt(g, st.turn) && st.result == null, pulseFx && { gens: pulseFx.gens, age: clock - pulseFx.at });
     else drawMap(ctx, st.grid, time, cx, cy, W, H, theme);
     if (!iceGround && st.grid.some((r) => r.includes('_'))) drawFrozen(ctx, st.grid, cx, cy, W, H, time); // 얼음 타입이 얼린 물
@@ -1245,6 +1257,7 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
     drawUnits(ctx);
     fxm.draw(ctx, 'front', { x: cx, y: cy });
     ctx.save(); ctx.translate(cx, cy); drawWeather(ctx, anim?.weatherShown !== undefined ? anim.weatherShown : st.weather, time); ctx.restore(); // 날씨: 유닛·이펙트 위, 커서·HP 바·숫자·UI 아래
+    if (st.wisps?.length && !st.result) drawWisps(ctx, st.wisps.filter((w) => w.lit), time); // 묘지 혼불: 안개 위에도 보임
     if (['idle', 'selected', 'target', 'retreat'].includes(mode)) ui.drawCursor(ctx, cursor.x, cursor.y, time);
     if (anim) anim.drawWorld(ctx);
     if (notice?.hp && notice.at) drawNoticeHp(ctx, notice);

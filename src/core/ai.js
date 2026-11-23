@@ -338,7 +338,7 @@ function effectCandidate(state, unit, ghost, move, foes, threat, risk) {
       let best = null;
       for (let y = ghost.y - TRAP_RANGE[1]; y <= ghost.y + TRAP_RANGE[1]; y++) for (let x = ghost.x - TRAP_RANGE[1]; x <= ghost.x + TRAP_RANGE[1]; x++) {
         const d = manhattan(ghost, { x, y });
-        if (d < TRAP_RANGE[0] || d > TRAP_RANGE[1] || state.grid[y]?.[x] === undefined || state.grid[y][x] === '#') continue;
+        if (d < TRAP_RANGE[0] || d > TRAP_RANGE[1] || state.grid[y]?.[x] === undefined || '#T'.includes(state.grid[y][x])) continue;
         if (state.units.some((u) => u.x === x && u.y === y) || (state.spikes ?? []).some((t) => t.x === x && t.y === y && t.kind === move.effect)) continue;
         const k = manhattan({ x, y }, f);
         if (!best || k < best.k) best = { k, x, y };

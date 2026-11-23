@@ -2,7 +2,7 @@
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
 
-export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity, ':': 2, '=': 1, o: 1, '@': 1, L: 1, v: 1, V: Infinity, _: 1, Y: Infinity }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소) · ':' 깊은 모래 '=' 흐르는 모래 'o'/'@' 모래지옥(사막) · 'L' 용암 'v' 현무암 'V' 분출구(화산동굴) · '_' 빙판 'Y' 고드름(얼음동굴)
+export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity, ':': 2, '=': 1, o: 1, '@': 1, L: 1, v: 1, V: Infinity, _: 1, Y: Infinity, T: Infinity }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소) · ':' 깊은 모래 '=' 흐르는 모래 'o'/'@' 모래지옥(사막) · 'L' 용암 'v' 현무암 'V' 분출구(화산동굴) · '_' 빙판 'Y' 고드름(얼음동굴) · 'T' 묘비(묘지)
 
 // 바위·땅 타입은 바위 칸 비용 1 (타입별 지형 이득)
 const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types);
@@ -12,6 +12,7 @@ const soars = (who) => typeof who === 'object' && ((typed(who, 'flying') && !who
 const climbs = (who, trees) => trees && (ab(who) === 'limber' || typed(who, 'bug')); // 유연·벌레: 나무를 비용 1 로
 export function tileCost(tile, who, trees = false) {
   if (tile === '#' || tile === '*') return tile === '#' && climbs(who, trees) ? 1 : 3;
+  if (tile === 'T') return typed(who, 'ghost') ? 1 : 3; // 묘비: 고스트는 스며 지나감, 비행·드래곤은 넘음
   if (tile === '^' && typesOfWho(who).some((t) => t === 'rock' || t === 'ground')) return 1;
   if (tile === ':' && floats(who)) return 1; // 깊은 모래: 떠 있으면 평지
   return TILE_COST[tile];
@@ -35,6 +36,7 @@ const ab = (who) => (typeof who === 'object' && !who.abilityOff ? who.ability : 
 export function canEnter(tile, who, trees = false, pass = false) {
   if (tile === undefined) return false;
   if (pass && (tile === '#' || tile === '*') && soars(who)) return true;
+  if (tile === 'T') return pass && (soars(who) || typed(who, 'ghost')); // 묘비: 지나가기만 (아무도 멈추거나 내려앉지 못함)
   if (tile === 'B') return soars(who); // 건물: 지상에선 벽, 비행·드래곤만 옥상으로 (옥상 안 이동은 search 가 따로)
   if (tile === '*' || tile === 'G' || tile === 'V' || tile === 'Y') return false; // 낙엽더미·발전기·분출구: 누구도 못 들어감 (순간이동·밀치기 포함)
   if (tile === 'L') { // 용암: 떠 있음·드래곤·마그마그 계열만 (물 타입은 못 감)
@@ -134,7 +136,7 @@ export function reachable(grid, units, unit, budget = null) {
   const { best, occ, stops } = search(grid, units, unit, budget);
   // 같은 편이 서 있는 칸은 통과만 가능, 정지 불가 (빙판에서 부딪혀 밀어낸 칸은 예외)
   for (const [k, side] of occ) if (!stops.has(k) && side === unit.side || typesOfWho(unit).includes('ghost')) best.delete(k); // 고스트도 상대 칸엔 못 섬
-  for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number); const t = grid[y][x]; if (t === '*' || (t === '#' && !(grid.trees && typed(unit, 'bug')))) best.delete(k); } // 나무 위엔 벌레만 섬, 낙엽더미 위엔 아무도
+  for (const k of [...best.keys()]) { const [x, y] = k.split(',').map(Number); const t = grid[y][x]; if (t === '*' || t === 'T' || (t === '#' && !(grid.trees && typed(unit, 'bug')))) best.delete(k); } // 나무 위엔 벌레만 섬, 낙엽더미 위엔 아무도
   return best;
 }
 
@@ -162,7 +164,7 @@ export function pathCost(grid, unit, path) {
   for (let i = 1; i < path.length; i++) {
     const a = path[i - 1], b = path[i], t = grid[b.y][b.x];
     if (i > 1 && slides(unit) && grid[a.y][a.x] === '_' && b.x - a.x === a.x - path[i - 2].x && b.y - a.y === a.y - path[i - 2].y) continue;
-    c += t === '#' ? 1 : t === 'B' && grid[a.y][a.x] !== 'B' ? 2 : t === ':' ? tileCost(':', unit) : TILE_COST[t] ?? 1;
+    c += t === 'T' ? tileCost('T', unit) : t === '#' ? 1 : t === 'B' && grid[a.y][a.x] !== 'B' ? 2 : t === ':' ? tileCost(':', unit) : TILE_COST[t] ?? 1;
   }
   return c;
 }

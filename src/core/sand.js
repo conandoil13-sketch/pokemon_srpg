@@ -8,7 +8,7 @@ import { markExplored } from './vision.js';
 
 export const SAND_TILES = ':=o@';
 const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
-const BLOCK = '#^*GB'; // 벽·바위·더미·발전기·건물: 밀려 들어가지 않음
+const BLOCK = '#^*GBT'; // 벽·바위·더미·발전기·건물: 밀려 들어가지 않음
 
 export const onSand = (state, u) => !airborne(u) && !u.burrow && SAND_TILES.includes(state.grid[u.y]?.[u.x] ?? '#');
 
