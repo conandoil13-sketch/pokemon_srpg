@@ -1,4 +1,5 @@
 // 저장 / 불러오기 (순수 + 주입한 storage). storage = { getItem(key), setItem(key, value) }
+import { CANDY_SPOTS } from '../data/town.js';
 import { TREE_SHAKES } from './shards.js';
 import { rollStock } from './shop.js';
 import { isHeldItem } from '../data/heldItems.js';
@@ -199,7 +200,7 @@ export function loadGame(storage) {
     };
     const shakes = clampInt(data.eggs?.treeShakes, 0, TREE_SHAKES);
     if (shakes) game.eggs.treeShakes = shakes;
-    const candies = (Array.isArray(data.eggs?.candies) ? data.eggs.candies : []).filter((id, i, a) => ['woodpile', 'basket', 'crates'].includes(id) && a.indexOf(id) === i);
+    const candies = (Array.isArray(data.eggs?.candies) ? data.eggs.candies : []).filter((id, i, a) => CANDY_SPOTS.some((c) => c.id === id) && a.indexOf(id) === i);
     if (candies.length) game.eggs.candies = candies; // 이상한사탕 찾은 자리
     unifyLines(game); // 같은 계열은 개체값·얻은 성별을 같이 쓴다
     unlockFromCleared(game); // 던전이 늘어나도 이미 깬 던전 다음 단계는 열려 있게

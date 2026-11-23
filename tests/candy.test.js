@@ -98,3 +98,15 @@ test('rare candies and the found spots survive saving and loading', async () => 
   assert.deepEqual(back.eggs.candies, ['basket', 'woodpile']);
   assert.equal(findCandy(back, 'basket'), 0);
 });
+
+test('a level 100 member never eats a candy even if the cap were higher', () => {
+  const g = newGame(); g.items.rareCandy = 1;
+  const lead = deployed(g)[0]; lead.level = 100;
+  const used = [];
+  const b = createBag({ game: g, levelCap: 120, onSave() {}, onBack() {}, onCandy: (m) => used.push(m) });
+  b.handle({ type: 'dir', dx: 1, dy: 0 });
+  for (let i = 0; i < b.rows.findIndex((r) => r.act === 'candy'); i++) b.handle({ type: 'dir', dx: 0, dy: 1 });
+  b.handle({ type: 'confirm' }); b.handle({ type: 'confirm' });
+  assert.equal(used.length, 0);
+  assert.equal(g.items.rareCandy, 1);
+});

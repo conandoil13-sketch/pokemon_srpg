@@ -6,6 +6,7 @@ import { josa } from '../data/text.js';
 import { STATS, POWDER_KO } from '../core/dittoBuild.js';
 import { equip, unequip } from '../core/heldBag.js';
 import { deployed } from '../core/roster.js';
+import { MAX_LEVEL } from '../core/stats.js';
 import { memberKey } from '../core/members.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
@@ -50,7 +51,7 @@ export function createBag({ game, onSave = () => {}, onBack, onCandy = null, lev
     const id = pickFor; mode = 'list'; pickFor = null;
     if (id === 'candy') { // 이상한사탕: 상한이면 쓰지 않음, 아니면 하나 줄이고 결산 화면으로 (onCandy)
       if (!m) return;
-      if (m.level >= levelCap) { msg = [`${josa(nameOf(m), '은/는')} 지금은`, '더 이상 강해질 수 없다.']; return; }
+      if (m.level >= Math.min(levelCap, MAX_LEVEL)) { msg = [`${josa(nameOf(m), '은/는')} 지금은`, '더 이상 강해질 수 없다.']; return; }
       game.items.rareCandy -= 1; onSave(); clampSel();
       onCandy?.(m);
       return;
