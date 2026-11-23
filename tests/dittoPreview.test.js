@@ -12,19 +12,20 @@ const scene = (capsules) => {
   return { b, game, d, saves: () => saves };
 };
 const press = (b, type, extra = {}) => b.handle({ type, ...extra });
+const ok = (b) => { b.update(1); press(b, 'confirm'); }; // 잠금 지난 뒤 확인
 
 test('a capsule opens its description first; backing out of the description, the slot or the question uses nothing', () => {
   const { b, game, d, saves } = scene([{ kind: 'move', value: 'ember', from: 'charmander' }]);
   press(b, 'confirm'); assert.equal(b.mode, 'preview'); assert.deepEqual(b.preview, { kind: 'move', value: 'ember' });
   press(b, 'cancel'); assert.equal(b.mode, 'list');
-  press(b, 'confirm'); press(b, 'confirm'); assert.equal(b.mode, 'slot');
+  press(b, 'confirm'); ok(b); assert.equal(b.mode, 'slot');
   assert.deepEqual(b.compare, { old: 'tackle', new: 'ember' });
   press(b, 'dir', { dx: 0, dy: 1 }); assert.deepEqual(b.compare, { old: 'growl', new: 'ember' });
   press(b, 'cancel'); assert.equal(b.mode, 'list');
-  press(b, 'confirm'); press(b, 'confirm'); press(b, 'confirm'); assert.equal(b.mode, 'confirm');
+  press(b, 'confirm'); ok(b); press(b, 'confirm'); assert.equal(b.mode, 'confirm');
   press(b, 'cancel');
   assert.equal(game.items.capsules.length, 1); assert.deepEqual(d.moves, ['tackle', 'growl', 'scratch', 'leer']); assert.equal(saves(), 0);
-  press(b, 'confirm'); press(b, 'confirm'); press(b, 'dir', { dx: 0, dy: 1 }); press(b, 'confirm'); press(b, 'confirm');
+  press(b, 'confirm'); ok(b); press(b, 'dir', { dx: 0, dy: 1 }); press(b, 'confirm'); ok(b);
   assert.equal(game.items.capsules.length, 0); assert.equal(d.moves[1], 'ember'); assert.equal(saves(), 1);
 });
 
@@ -46,4 +47,12 @@ test('the current moves and ability can be looked at without a capsule', () => {
   press(b, 'cancel'); assert.equal(b.mode, 'list');
   press(b, 'click', { px: 130, py: 94 }); // 위쪽 기술 칸 (오른쪽 아래 = 4번째)
   assert.deepEqual(b.viewing, { kind: 'move', value: 'leer' });
+});
+
+test('mashing confirm cannot spend a capsule before the description and question can be read', () => {
+  const { b, game, d } = scene([{ kind: 'ability', value: 'blaze', from: 'charmander' }]);
+  for (let i = 0; i < 6; i++) press(b, 'confirm');
+  assert.equal(game.items.capsules.length, 1); assert.notEqual(d.build.ability, 'blaze');
+  b.update(1); press(b, 'confirm'); b.update(1); press(b, 'confirm');
+  assert.equal(game.items.capsules.length, 0); assert.equal(d.build.ability, 'blaze');
 });

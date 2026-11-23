@@ -71,7 +71,10 @@ function render(text, style, color, shadow) {
   return src;
 }
 
+// 디버그: 켜면 그린 글자 칸을 모은다 (글자 넘침 점검용, __app.textProbe)
+export const textProbe = { on: false, texts: [], boxes: [] };
 export function drawText(ctx, text, x, y, color = '#383838', shadow = '#d8d8d0', style = 'main') {
   if (!text) return;
+  if (textProbe.on) textProbe.texts.push({ text: String(text), x: Math.round(x), y: Math.round(y), w: textWidth(String(text), style), h: FONTS[style].height });
   ctx.drawImage(render(String(text), style, color, shadow), Math.round(x), Math.round(y));
 }

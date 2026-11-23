@@ -9,7 +9,7 @@ import { W, H } from '../render/screen.js';
 import { CHOICE_LOCK } from './learnFlow.js';
 import { drawMoveCard } from './moveInfo.js';
 
-const LIST_Y = 24, ROW = 14, ROWS = 6, DETAIL_Y = 120;
+const LIST_Y = 24, ROW = 14, ROWS = 6, DETAIL_Y = 116;
 const YN = '확인: 예 · 취소: 아니오';
 
 export function createRelearn({ member: m, onSave = () => {}, onClose }) {
@@ -80,11 +80,12 @@ export function createRelearn({ member: m, onSave = () => {}, onClose }) {
       ctx.fillStyle = '#1c2840';
       ctx.fillRect(0, 0, W, H);
       ui.drawWindow(ctx, 2, 2, W - 4, 20);
-      drawText(ctx, `${SPECIES[m.species].name} Lv${m.level} · 기술 떠올리기`, 8, 5);
-      const back = 'X: 돌아가기';
+      const who = `${SPECIES[m.species].name} Lv${m.level}`, back = 'X: 돌아가기';
+      drawText(ctx, who, 8, 5);
+      if (8 + textWidth(who) + 6 + textWidth('기술 떠올리기', 'small') < W - 16 - textWidth(back, 'small')) drawText(ctx, '기술 떠올리기', 14 + textWidth(who), 7, '#c06010', null, 'small'); // 제목은 작게 (이름이 길면 생략)
       drawText(ctx, back, W - 10 - textWidth(back, 'small'), 7, '#7080a0', null, 'small');
       const list = cands(), forgetting = mode === 'forget' || mode === 'confirm';
-      ui.drawWindow(ctx, 2, LIST_Y, W - 4, ROWS * ROW + 8);
+      ui.drawWindow(ctx, 2, LIST_Y, W - 4, ROWS * ROW + 6);
       const rows = forgetting ? m.moves : list.slice(top, top + ROWS);
       if (!rows.length) drawText(ctx, '떠올릴 기술이 없다.', 14, LIST_Y + 6, '#909090');
       rows.forEach((id, i) => {
@@ -98,10 +99,10 @@ export function createRelearn({ member: m, onSave = () => {}, onClose }) {
       if (forgetting) drawText(ctx, '잊을 기술을 고르자', W - 12 - 44 - textWidth('잊을 기술을 고르자', 'small') - 6, LIST_Y + 5 + 4 * ROW + 2, '#c06010', null, 'small');
       ui.drawWindow(ctx, 2, DETAIL_Y, W - 4, H - DETAIL_Y - 2);
       if (forgetting) { // 옛 기술 | 새 기술
-        drawMoveCard(ctx, m.moves[slot], 8, DETAIL_Y + 5, 116, { label: '잊는다', labelColor: '#a04040' });
+        drawMoveCard(ctx, m.moves[slot], 8, DETAIL_Y + 4, 116, { label: '잊는다', labelColor: '#a04040', maxLines: 4 });
         ctx.fillStyle = '#c8c8c0'; ctx.fillRect(W / 2, DETAIL_Y + 6, 1, H - DETAIL_Y - 14);
-        drawMoveCard(ctx, picked(), W / 2 + 6, DETAIL_Y + 5, 116, { label: '떠올린다', labelColor: '#2860c8' });
-      } else if (list[sel]) drawMoveCard(ctx, list[sel], 8, DETAIL_Y + 5, W - 18, { maxLines: 4 });
+        drawMoveCard(ctx, picked(), W / 2 + 6, DETAIL_Y + 4, 116, { label: '떠올린다', labelColor: '#2860c8', maxLines: 4 });
+      } else if (list[sel]) drawMoveCard(ctx, list[sel], 8, DETAIL_Y + 4, W - 18, { maxLines: 4 });
       const blink = Math.floor(time * 3) % 2 === 0;
       if (mode === 'learn') ui.drawMessage(ctx, [`${josa(name(picked()), '을/를')} 떠올려 배울까?`, YN], null, blink);
       if (mode === 'confirm') ui.drawMessage(ctx, [`${josa(name(m.moves[slot]), '을/를')} 잊고 ${josa(name(picked()), '을/를')} 떠올릴까?`, YN], null, blink);

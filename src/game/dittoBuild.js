@@ -76,13 +76,13 @@ export function createDittoBuild({ game, onSave = () => {}, onClose }) {
   function choose(it) {
     if (it.kind === 'view') { view = 0; mode = 'view'; return; }
     if (!it.enabled) { refuse(it); return; }
-    if (it.kind === 'capsule') { pending = { item: it }; mode = 'preview'; return; } // 쓰기 전에 설명
+    if (it.kind === 'capsule') { pending = { item: it }; mode = 'preview'; t = 0; return; } // 쓰기 전에 설명
     toSlot(it);
   }
   function toSlot(it) {
     if (it.kind === 'capsule' && it.use.slots.length > 1) { pending = { item: it }; slotSel = 0; mode = 'slot'; return; }
     pending = { item: it, slot: it.kind === 'capsule' ? it.use.slots[0] : 0 };
-    mode = 'confirm';
+    mode = 'confirm'; t = 0;
   }
 
   function commit() {
@@ -109,7 +109,7 @@ export function createDittoBuild({ game, onSave = () => {}, onClose }) {
     };
     if (mode === 'view') {
       const v = viewList()[view];
-      if (v.kind === 'move') drawMoveCard(ctx, v.value, 8, y0 + 5, W - 18, { label: '지금 기술', maxLines: 4 });
+      if (v.kind === 'move') drawMoveCard(ctx, v.value, 8, y0 + 5, W - 18, { label: '지금 기술', maxLines: 3 });
       else abilityBlock(v.value, '지금 특성', y0 + 6, '#305830');
       hint('방향키: 다른 칸 · 취소: 돌아가기');
       return;
@@ -124,7 +124,7 @@ export function createDittoBuild({ game, onSave = () => {}, onClose }) {
       hint('넣을 칸을 고르자 · 방향키: 칸 · 확인 · 취소');
       return;
     }
-    if (c.kind === 'move') drawMoveCard(ctx, c.value, 8, y0 + 5, W - 18, { label: `${KIND_KO[c.kind]} 캡슐`, maxLines: 4 });
+    if (c.kind === 'move') drawMoveCard(ctx, c.value, 8, y0 + 5, W - 18, { label: `${KIND_KO[c.kind]} 캡슐`, maxLines: 3 });
     else if (c.kind === 'ability') { abilityBlock(c.value, '새 특성', y0 + 4, '#c06010'); abilityBlock(d.build.ability, '지금 특성', y0 + 34, '#305830'); }
     else {
       drawText(ctx, '새 타입', 8, y0 + 7, '#c06010', null, 'small'); ui.drawTypeBadge(ctx, c.value, 50, y0 + 6);
@@ -156,7 +156,8 @@ export function createDittoBuild({ game, onSave = () => {}, onClose }) {
       if (mode === 'msg') { if ((pick || ev.type === 'cancel') && t >= CHOICE_LOCK) mode = 'list'; return; }
       if (mode === 'preview') {
         if (ev.type === 'cancel') { pending = null; mode = 'list'; return; }
-        if (pick) toSlot(pending.item);
+        if (ev.type === 'click' && ev.py !== undefined && ev.py < 108) return; // 위쪽 빌드 영역을 눌러도 넘어가지 않음
+        if (pick && t >= CHOICE_LOCK) toSlot(pending.item);
         return;
       }
       if (mode === 'view') {
@@ -168,14 +169,14 @@ export function createDittoBuild({ game, onSave = () => {}, onClose }) {
       }
       if (mode === 'confirm') {
         if (ev.type === 'cancel') { pending = null; mode = 'list'; return; }
-        if (pick) commit();
+        if (pick && t >= CHOICE_LOCK) commit();
         return;
       }
       if (mode === 'slot') {
         const slots = pending.item.use.slots;
         if (ev.type === 'cancel') { pending = null; mode = 'list'; return; }
         if (ev.type === 'dir' && (ev.dx || ev.dy)) slotSel = (slotSel + (ev.dx || ev.dy) + slots.length) % slots.length;
-        if (pick) { pending.slot = slots[slotSel]; mode = 'confirm'; }
+        if (pick) { pending.slot = slots[slotSel]; mode = 'confirm'; t = 0; }
         return;
       }
       // list

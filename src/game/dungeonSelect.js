@@ -13,7 +13,7 @@ import { drawPortrait, requestSprites } from '../render/sprites.js';
 const ROW = 18, LIST_X = 8, LIST_Y = 30, LIST_W = 120;
 const VISIBLE = 7; // 한 번에 보이는 줄 (넘치면 커서를 따라 스크롤)
 const GO_BACK = ['출전한다', '돌아간다'];
-const CARD_W = 124, CARD_H = 44, MSG_Y = H - 50, CHOICE_X = W - 64, CHOICE_Y = MSG_Y + 18, CHOICE_ROW = 14;
+const CARD_W = 124, CARD_H = 44, MSG_Y = H - 50, CHOICE_X = W - 64, CHOICE_Y = MSG_Y + 19, CHOICE_ROW = 13; // 선택지는 아래 두 줄 (첫 줄 문구는 폭 전체)
 
 // 게시판에 보이는 주 타입: 보조 타입이 아닌 앞의 둘 (데이터의 shownTypes 가 있으면 그것)
 export const mainTypes = (d) => d.shownTypes ?? d.types.filter((t) => !(d.minorTypes ?? []).includes(t)).slice(0, 2);
@@ -129,12 +129,11 @@ export function createDungeonSelect({ game, onStart, onResume, onBack }) {
       ui.drawNameWithGender(ctx, c.member.species, c.member.gender, x + 44, y + 1);
       c.types.forEach((ty, k) => ui.drawTypeBadge(ctx, ty, x + 44 + k * 34, y + 15));
       drawText(ctx, ABILITIES[c.ability]?.name ?? '-', x + 44, y + 30, '#506080', null, 'small');
-      const lv = `Lv${c.member.level}`;
-      drawText(ctx, lv, x + CARD_W - 8 - textWidth(lv, 'small'), y + 30, '#585858', null, 'small');
+      drawText(ctx, `Lv${c.member.level}`, x + 2, y + 30, '#f8f8f8', '#384050', 'small'); // 초상화 아래쪽 (긴 특성 이름과 안 겹치게)
     });
     ui.drawWindow(ctx, 2, MSG_Y, W - 4, 48);
-    drawText(ctx, lines[0], 12, MSG_Y + 6);
-    lines.slice(1).forEach((l, k) => drawText(ctx, l, 12, MSG_Y + 22 + k * 11, '#c04040', null, 'small'));
+    drawText(ctx, lines[0], 12, MSG_Y + 4);
+    lines.slice(1).forEach((l, k) => drawText(ctx, l, 12, MSG_Y + 21 + k * 11, '#c04040', null, 'small'));
     GO_BACK.forEach((label, k) => {
       const y = CHOICE_Y + k * CHOICE_ROW;
       drawText(ctx, label, CHOICE_X, y);
