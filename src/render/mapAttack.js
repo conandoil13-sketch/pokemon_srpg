@@ -76,6 +76,7 @@ export function attackExtraLines(result, attacker) {
 export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = { choice: '구애 도구 때문에 다른 기술을 쓸 수 없다!',
+  awake: '깨어 있어서 코골기를 쓸 수 없다!', asleep: '잠들어 있어서 코골기밖에 쓸 수 없다!',
   taunt: '도발당해서 변화기를 쓸 수 없다!', encore: '앙코르 때문에 다른 기술을 쓸 수 없다!',
   disable: '그 기술은 사슬묶기로 봉인됐다!', torment: '같은 기술을 연달아 쓸 수 없다!', healBlock: '회복봉인으로 회복할 수 없다!',
 };
@@ -144,6 +145,8 @@ export function statusMessages(changes, byId, isStatusMove) {
 
 function statusSteps(result, get, isStatusMove) {
   const out = (result.thawed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}의 얼음이 녹았다!`), who: get(id), emo: 'Normal' }));
+  for (const id of result.lostFocus ?? []) out.push({ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(get(id)), '은/는')} 집중이 흐트러져 기술을 쓸 수 없다!`), who: get(id), emo: 'Pain' }); // 힘껏펀치: 집중 중 맞음
+  if (result.foreseen) { const t = get(result.foreseen.unitId); if (t) out.push({ k: 'msg', d: AUTO, text: wrapMessage(result.foreseen.moveId === 'doom-desire' ? `${josa(label(t), '을/를')} 향해 파멸의소원을 빌었다!` : `${label(t)}에게 닥칠 미래를 내다봤다!`), who: t, emo: 'Normal' }); } // 미래예지·파멸의소원
   for (const w of result.woken ?? []) out.push({ k: 'msg', d: AUTO, text: wrapMessage(w.ailment === 'sleep' ? `${josa(label(get(w.unitId)), '은/는')} 잠에서 깨어났다!` : `${label(get(w.unitId))}의 마비가 풀렸다!`), who: get(w.unitId), emo: 'Normal' }); // 잠깨움뺨치기·정신차리기
   for (const c of result.statusChanges ?? []) {
     const [text] = statusMessages([c], get, isStatusMove);

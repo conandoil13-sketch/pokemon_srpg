@@ -36,6 +36,8 @@ export const canHeal = (u) => !(u.healBlock > 0); // 회복봉인
 // 지금 그 기술을 못 쓰는 이유 (없으면 null)
 export function moveBlock(unit, moveId) {
   const m = MOVES[moveId];
+  if (moveId === 'snore' && unit.status !== 'sleep') return 'awake'; // 코골기: 잠들었을 때만
+  if (unit.status === 'sleep' && moveId !== 'snore') return 'asleep'; // 자는 동안엔 코골기만
   if (unit.taunt > 0 && m?.category === 'status') return 'taunt';
   if (unit.encore && moveId !== unit.encore.move) return 'encore';
   if (unit.disable && moveId === unit.disable.move) return 'disable';

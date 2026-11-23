@@ -163,7 +163,7 @@ test('endure keeps 1 hp against attacks only', () => {
 
 test('rest heals fully, cures, sleeps exactly 2 turns and uses a heal charge', () => {
   const { s, a } = duel('snorlax', 'pidgey', { fx: 8, fy: 8 });
-  a.hp = Math.floor(a.maxHp / 2); a.status = 'burn';
+  a.hp = Math.floor(a.maxHp / 2); a.status = 'burn'; a.moves = a.moves.filter((m) => m !== 'snore'); // 코골기가 있으면 자면서도 차례를 씀
   assert.equal(applyMove(s, a.id, 'rest', a.id, hit).effects[0].ok, true);
   assert.equal(a.hp, a.maxHp);
   assert.equal(a.status, 'sleep');

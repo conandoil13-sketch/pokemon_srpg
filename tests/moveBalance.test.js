@@ -112,3 +112,85 @@ test('wake-up slap reports who woke up (for the 잠에서 깨어났다 line)', (
   f.status = 'sleep'; f.statusTurns = 3;
   assert.deepEqual(applyMove(s, a.id, 'wake-up-slap', f.id, hit).woken, [{ unitId: f.id, ailment: 'sleep' }]);
 });
+
+// ---- 2차: 발동 시점과 사용 조건 ----
+import { moveBlock } from '../src/core/volatile.js';
+import { moveBudget } from '../src/core/status.js';
+const round2 = (s) => { endPhase(s, () => 0.9); endPhase(s, () => 0.9); };
+
+test('snore fails while awake', () => {
+  const { s, a, f } = duel('snorlax', 'onix');
+  a.moves = ['snore', 'tackle'];
+  assert.equal(moveBlock(a, 'snore'), 'awake');
+  assert.equal(applyMove(s, a.id, 'snore', f.id, hit).blocked, 'awake');
+});
+
+test('asleep with snore: cannot move, may only snore', () => {
+  const { s, a, f } = duel('snorlax', 'onix');
+  a.moves = ['snore', 'tackle'];
+  a.status = 'sleep'; a.statusTurns = 3;
+  round2(s);
+  assert.equal(a.status, 'sleep');
+  assert.equal(a.acted, false); assert.equal(moveBudget(a), 0);
+  assert.equal(moveBlock(a, 'tackle'), 'asleep'); assert.equal(moveBlock(a, 'snore'), null);
+  const before = f.hp;
+  applyMove(s, a.id, 'snore', f.id, hit);
+  assert.ok(f.hp < before);
+  const b = duel('snorlax', 'onix'); b.a.moves = ['tackle']; b.a.status = 'sleep'; b.a.statusTurns = 3;
+  round2(b.s);
+  assert.equal(b.a.acted, true, 'no snore = sleeps through');
+});
+
+test('charge: special defense +1 and the next electric attack hits twice as hard', () => {
+  const plain = duel('pikachu', 'onix', { foe: { types: ['normal'] } }), charged = duel('pikachu', 'onix', { foe: { types: ['normal'] } });
+  applyMove(charged.s, charged.a.id, 'charge', charged.a.id, hit);
+  assert.equal(charged.a.stages.spd, 1);
+  const r0 = applyMove(plain.s, plain.a.id, 'thunder-shock', plain.f.id, () => 0.5).hits[0];
+  const r1 = applyMove(charged.s, charged.a.id, 'thunder-shock', charged.f.id, () => 0.5).hits[0];
+  assert.ok(r1.damage >= r0.damage * 2 - 2 && r1.damage <= r0.damage * 2 + 2, `${r0.damage} → ${r1.damage}`);
+  assert.ok(!charged.a.charged, 'used up');
+});
+
+test('charge wears off after the next own phase', () => {
+  const { s, a } = duel('pikachu', 'onix');
+  applyMove(s, a.id, 'charge', a.id, hit);
+  round2(s); assert.ok(a.charged, 'still on in the next own phase');
+  round2(s); assert.ok(!a.charged);
+});
+
+test('focus punch: focuses first, then strikes; a hit while focusing breaks it', () => {
+  const { s, a, f } = duel('machop', 'onix');
+  const r = applyMove(s, a.id, 'focus-punch', f.id, hit);
+  assert.ok(r.charged); assert.equal(a.charging.moveId, 'focus-punch');
+  const hitBack = applyMove(s, f.id, 'tackle', a.id, hit);
+  assert.equal(a.charging, null);
+  assert.deepEqual(hitBack.lostFocus, [a.id]);
+  const b = duel('machop', 'onix');
+  applyMove(b.s, b.a.id, 'focus-punch', b.f.id, hit);
+  const before = b.f.hp;
+  applyMove(b.s, b.a.id, 'focus-punch', b.f.id, hit);
+  assert.ok(b.f.hp < before, 'strikes when undisturbed');
+});
+
+test('future sight lands two turns later on the chosen pokemon wherever it went', () => {
+  const { s, a, f } = duel('abra', 'rattata');
+  const before = f.hp;
+  const r = applyMove(s, a.id, 'future-sight', f.id, hit);
+  assert.equal(f.hp, before); assert.deepEqual(r.foreseen, { unitId: f.id, moveId: 'future-sight' });
+  f.x = 4; f.y = 4;
+  round2(s); assert.equal(f.hp, before, 'not yet after one turn');
+  endPhase(s, () => 0.5); endPhase(s, () => 0.5);
+  const ev = s.log.statusEvents.find((e) => e.kind === 'foresight');
+  assert.ok(ev && ev.unitId === f.id && ev.damage > 0, JSON.stringify(s.log.statusEvents));
+  assert.ok(!s.units.includes(f) || f.hp < before);
+  assert.equal((s.delayed ?? []).length, 0);
+});
+
+test('doom desire knocks out and credits the user', () => {
+  const { s, a, f } = duel('jirachi', 'rattata');
+  applyMove(s, a.id, 'doom-desire', f.id, hit);
+  f.hp = 1;
+  round2(s); endPhase(s, () => 0.5); endPhase(s, () => 0.5);
+  assert.ok(!s.units.includes(f));
+  assert.ok(s.log.defeated.some((d) => d.species === 'rattata'));
+});

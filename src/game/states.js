@@ -160,6 +160,7 @@ export function phaseNotices(events, expired, get) {
       : e.kind === 'wish' ? `${who(e.unitId)}의 소원이 이루어졌다!`
       : e.kind === 'nightmare' ? `${josa(who(e.unitId), '은/는')} 악몽에 시달리고 있다!`
       : e.kind === 'bideRelease' ? `${josa(who(e.unitId), '은/는')} 참았던 힘을 터뜨렸다!`
+      : e.kind === 'foresight' ? (e.missed ? `${MOVES[e.moveId].name} 공격이 ${who(e.unitId)}에게서 빗나갔다!` : `${MOVES[e.moveId].name} 공격이 ${josa(who(e.unitId), '을/를')} 덮쳤다!`) // 두 턴 뒤 떨어짐
       : e.kind === 'bideHit' ? `${josa(who(e.unitId), '은/는')} 큰 피해를 입었다!`
       : e.kind === 'bideFail' ? `${who(e.unitId)}의 참기는 아무것도 모으지 못했다...`
       : e.kind === 'naturalCure' ? `${josa(who(e.unitId), '은/는')} 자연회복으로 상태이상이 나았다!`

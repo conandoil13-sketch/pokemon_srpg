@@ -60,6 +60,7 @@ export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 
 export const moveBudget = (unit) => {
   const runAway = has(unit, 'run-away') || !!itemOf(unit)?.escape; // 도주 · 연기구슬: 상대가 거는 이동 제한(이동 불가·속박·묶기 특성)을 무시
+  if (unit.status === 'sleep') return 0; // 잠듦: 못 걷는다 (코골기는 제자리에서)
   if (unit.rooted || (!runAway && (unit.noMove > 0 || unit.bound))) return 0; // 검은눈빛·블록·거미집·뿌리박기·속박
   const m = unit.baseSpe !== undefined ? movementFor(unit.types ?? SPECIES[unit.species].types, unit.baseSpe) : SPECIES[unit.species].move; // 메타몽: 빌드 스피드·타입
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;
