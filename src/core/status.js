@@ -39,6 +39,7 @@ const types = (unit) => unit.types ?? SPECIES[unit.species].types; // 메타몽 
 export function canInflict(unit, ailment, move, weather = null, { breaker = false } = {}) {
   if (weatherBlocksAilment(weather, ailment)) return { ok: false, reason: 'weather' }; // 쾌청엔 얼지 않는다
   if (unit.field?.safeguard) return { ok: false, reason: 'safeguard' }; // 신비의부적 오라
+  if (ailment === 'sleep' && unit.uproarZone) return { ok: false, reason: 'uproar' }; // 소란 근처에선 못 잠듦
   if (!breaker && blocksAilment(unit, ailment, weather)) return { ok: false, reason: 'ability' }; // 면역·불면·리프가드 …
   if (IMMUNE[ailment]?.some((t) => types(unit).includes(t))) return { ok: false, reason: 'immune' };
   if (move?.id === 'thunder-wave' && typeMultiplier(move.type, types(unit)) === 0) return { ok: false, reason: 'immune' };
@@ -60,6 +61,7 @@ export const cure = (unit) => { unit.status = null; unit.statusTurns = 0; };
 
 export const moveBudget = (unit) => {
   const runAway = has(unit, 'run-away') || !!itemOf(unit)?.escape; // 도주 · 연기구슬: 상대가 거는 이동 제한(이동 불가·속박·묶기 특성)을 무시
+  if (unit.status === 'sleep') return 0; // 잠듦: 못 걷는다 (코골기는 제자리에서)
   if (unit.rooted || (!runAway && (unit.noMove > 0 || unit.bound))) return 0; // 검은눈빛·블록·거미집·뿌리박기·속박
   const m = unit.baseSpe !== undefined ? movementFor(unit.types ?? SPECIES[unit.species].types, unit.baseSpe) : SPECIES[unit.species].move; // 메타몽: 빌드 스피드·타입
   const base = unit.status === 'paralysis' && !ignoresParalysisSlow(unit) ? Math.max(1, Math.floor(m / 2)) : m;

@@ -76,6 +76,8 @@ export function attackExtraLines(result, attacker) {
 export const TRAP_LINE = { spikes: '압정에 찔렸다!', toxicSpikes: '독압정을 밟았다!', cleared: '독압정을 치웠다!' };
 const WEATHER_TEXT = { 'rain-dance': '비가 내리기 시작했다!', 'sunny-day': '햇살이 강해졌다!', sandstorm: '모래바람이 불기 시작했다!', hail: '싸라기눈이 내리기 시작했다!' };
 const BLOCK_TEXT = { choice: '구애 도구 때문에 다른 기술을 쓸 수 없다!',
+  uproar: '소란을 피우느라 다른 기술을 쓸 수 없다!',
+  awake: '깨어 있어서 코골기를 쓸 수 없다!', asleep: '잠들어 있어서 코골기밖에 쓸 수 없다!',
   taunt: '도발당해서 변화기를 쓸 수 없다!', encore: '앙코르 때문에 다른 기술을 쓸 수 없다!',
   disable: '그 기술은 사슬묶기로 봉인됐다!', torment: '같은 기술을 연달아 쓸 수 없다!', healBlock: '회복봉인으로 회복할 수 없다!',
 };
@@ -98,6 +100,7 @@ function effectLines(result, get, moveId = null) {
     else if (e.ok && EFFECT_TEXT[e.effect]) say(u, EFFECT_TEXT[e.effect](label(u)), e.effect);
     else if (!e.ok && e.effect === 'push' && (e.reason === 'stuck' || e.reason === 'immune')) say(u, `${W_(label(u), '은/는')} 꿈쩍도 하지 않았다!`);
     else if (!e.ok && e.reason === 'splash') say(u, '하지만 아무 일도 일어나지 않았다!');
+    else if (!e.ok && e.reason === 'uproar') say(u, `소란 때문에 ${W_(label(u), '은/는')} 잠들 수 없다!`);
     else if (!e.ok && e.reason === 'safeguard') say(u, `${W_(label(u), '은/는')} 신비의 베일이 지켜 주고 있다!`);
     else if (!e.ok && !failed) { failed = true; say(u, FAIL_TEXT); }
   }
@@ -138,12 +141,16 @@ export function statusMessages(changes, byId, isStatusMove) {
     const who = label(get(c.unitId));
     if (c.ok) return [`${josa(who, '은/는')} ${INFLICT[c.ailment]}`];
     if (c.reason === 'safeguard') return [`${josa(who, '은/는')} 신비의 베일이 지켜 주고 있다!`];
+    if (c.reason === 'uproar') return [`소란 때문에 ${josa(who, '은/는')} 잠들 수 없다!`];
     return isStatusMove ? [`${who}에게는 효과가 없는 것 같다...`] : [];
   });
 }
 
 function statusSteps(result, get, isStatusMove) {
   const out = (result.thawed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}의 얼음이 녹았다!`), who: get(id), emo: 'Normal' }));
+  for (const id of result.lostFocus ?? []) out.push({ k: 'msg', d: AUTO, text: wrapMessage(`${josa(label(get(id)), '은/는')} 집중이 흐트러져 기술을 쓸 수 없다!`), who: get(id), emo: 'Pain' }); // 힘껏펀치: 집중 중 맞음
+  if (result.foreseen) { const t = get(result.foreseen.unitId); if (t) out.push({ k: 'msg', d: AUTO, text: wrapMessage(result.foreseen.moveId === 'doom-desire' ? `${josa(label(t), '을/를')} 향해 파멸의소원을 빌었다!` : `${label(t)}에게 닥칠 미래를 내다봤다!`), who: t, emo: 'Normal' }); } // 미래예지·파멸의소원
+  for (const w of result.woken ?? []) out.push({ k: 'msg', d: AUTO, text: wrapMessage(w.ailment === 'sleep' ? `${josa(label(get(w.unitId)), '은/는')} 잠에서 깨어났다!` : `${label(get(w.unitId))}의 마비가 풀렸다!`), who: get(w.unitId), emo: 'Normal' }); // 잠깨움뺨치기·정신차리기
   for (const c of result.statusChanges ?? []) {
     const [text] = statusMessages([c], get, isStatusMove);
     if (text) out.push({ k: 'msg', d: AUTO, text: wrapMessage(text), who: get(c.unitId), emo: c.ok ? 'Pain' : 'Normal', pop: c.ok ? c : null, stage: true });
@@ -461,12 +468,15 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   for (const b of result.bound ?? []) { const u = get(b.unitId); if (u) after.push({ text: bindLine(label(u), b.moveId), who: u, emo: 'Pain', effect: 'bind', moveId: b.moveId }); }
   const bonded = result.bond?.includes(attacker.id) ? defenders.find((d) => hitOf(d)?.fainted) : null; // 길동무로 같이 쓰러짐
   if (bonded) after.push({ text: `${josa(label(bonded), '은/는')} 상대를 길동무로 삼았다!`, who: bonded, emo: 'Pain', effect: 'bond' });
+  const dashLen = result.dashed ? Math.abs(result.dashed.to.x - result.dashed.from.x) + Math.abs(result.dashed.to.y - result.dashed.from.y) : 0;
   const steps = [
+    ...(result.dashed ? [{ k: 'dash', d: 0.1 * dashLen + 0.05 }] : []), // 대시: 대상 앞까지 달려감
     { k: 'act', d: actLen },
     ...(travel ? [{ k: 'travel', d: 0.25 }] : []),
     { k: 'impact', d: result.selfKO ? 1.2 : 0.6 },
     ...(result.countered ? [{ k: 'counter', d: 0.8 }] : []), // 반격: 받은 기술을 키워서 되돌림
     ...(result.stepped || result.shoved ? [{ k: 'slide', d: 0.25 }] : []), // 화풀이·은혜갚기 한 칸
+    ...(result.returned ? [{ k: 'back', d: 0.1 * dashLen + 0.1 }] : []), // 회전부리·유턴: 제자리로
     ...mid.map((m) => ({ k: 'msg', d: AUTO, text: wrapMessage(m.text), who: m.who, emo: 'Pain', efx: m.effect ? { effect: m.effect, unitId: m.who.id } : null })),
     ...(faints.length ? [{ k: 'faint', d: 0.6 }, ...faints.map((m) => ({ k: 'msg', d: AUTO, text: m.text, who: m.who, emo: 'Pain' }))] : []),
     ...stageSteps(result.stageChanges, get),
@@ -479,10 +489,18 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
   const step = () => steps[i];
   const passed = (k) => steps.slice(0, i).some((x) => x.k === k);
 
-  // 화풀이·은혜갚기: 미끄러지기 전엔 원래 칸에 있는 것처럼 (상태는 이미 새 칸)
-  const moved = new Map([result.stepped, result.shoved].filter(Boolean).map((m) => [m.unitId, m]));
-  const at = (u) => { const m = moved.get(u.id); return m && !passed('slide') && step()?.k !== 'slide' ? m.from : u; };
-  const slideOff = (u) => { const m = moved.get(u.id); if (!m) return null; const k = passed('slide') ? 1 : step()?.k === 'slide' ? Math.min(1, t / 0.25) : 0; return { dx: (m.from.x - m.to.x) * TILE * (1 - k), dy: (m.from.y - m.to.y) * TILE * (1 - k) }; };
+  // 화풀이·은혜갚기·대시·돌아오기: 그 단계 전엔 출발 칸, 그 단계 동안 미끄러짐 (상태는 이미 마지막 칸)
+  const segs = new Map();
+  for (const [m, key] of [[result.dashed, 'dash'], [result.returned, 'back'], [result.stepped, 'slide'], [result.shoved, 'slide']]) if (m) segs.set(m.unitId, [...(segs.get(m.unitId) ?? []), { ...m, key }]);
+  const posOf = (u) => {
+    for (const m of segs.get(u.id) ?? []) {
+      if (step()?.k === m.key) { const k = Math.min(1, t / step().d); return { x: m.from.x + (m.to.x - m.from.x) * k, y: m.from.y + (m.to.y - m.from.y) * k }; }
+      if (!passed(m.key)) return m.from;
+    }
+    return u;
+  };
+  const at = (u) => { const p = posOf(u); return p === u ? u : { ...u, x: p.x, y: p.y }; };
+  const slideOff = (u) => { const p = posOf(u); return p === u ? null : { dx: (p.x - u.x) * TILE, dy: (p.y - u.y) * TILE }; };
   // pixelfx: 단계에 들어갈 때 한 번씩
   const dist0 = defenders[0] ? Math.abs(defenders[0].x - attacker.x) + Math.abs(defenders[0].y - attacker.y) : 1;
   const spec = fx ? fxForMove(move, { distance: dist0 }) : null;
