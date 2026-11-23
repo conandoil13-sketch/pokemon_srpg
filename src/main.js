@@ -80,7 +80,7 @@ function startFloor() {
   const run = game.run;
   const d = dungeonById(run.dungeonId);
   const map = generateFloor(d, run.floor, floorSeed(run));
-  requestSprites([...deployed(game).map((m) => m.species), ...map.enemies.map((e) => e.species), ...(map.piles ?? []).filter((p) => p.kind === 'mon').map((p) => p.species)]); // 낙엽더미에 숨은 포켓몬도 미리
+  requestSprites([...deployed(game).map((m) => m.species), ...map.enemies.map((e) => e.species), ...(map.piles ?? []).filter((p) => p.kind === 'mon').map((p) => p.species), ...(map.wisps ?? []).map((w) => w.species)]); // 묘지 혼불 고스트도 // 낙엽더미에 숨은 포켓몬도 미리
   save(); // 층 시작 시점 저장 (같은 시드 → 같은 맵으로 재개)
   scene = createGame({
     rng, map, party: deployed(game), hpRatio: floorStartHp(run), theme: d.theme, // 메타몽 + 출전 4

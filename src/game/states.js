@@ -115,6 +115,13 @@ const STATUS_LINE = {
 const START_EVENTS = ['asleep', 'woke', 'frozen', 'thawed'];
 // 차례 끝 회복: 회복 표시를 띄울 유닛 (씨뿌리기는 빼앗아 회복한 쪽)
 const HEAL_EVENTS = { wish: (e) => e.unitId, aquaRing: (e) => (e.healed > 0 ? e.unitId : null), ingrain: (e) => (e.healed > 0 ? e.unitId : null), leech: (e) => (e.healed > 0 ? e.by : null) };
+// 묘지 혼불 알림 (적 페이즈 끝): 혼불이 핀 묘비, 나타난 고스트
+// hidden: 안개에 가려 안 보이는 적 id — 이름 대신 "무언가"
+export function wispNotices(events = [], get, hidden = new Set()) {
+  return events.map((e) => e.kind === 'lit'
+    ? { lines: ['묘비에 혼불이 피어올랐다…'], at: { x: e.x, y: e.y }, hp: null }
+    : { lines: [`${hidden.has(e.unitId) ? '무언가가' : josa(unitLabel(get(e.unitId)), '이/가')} 묘비에서 나타났다!`], at: { x: e.x, y: e.y }, hp: null });
+}
 // 압정 밟기 알림 (이동·밀려나기 뒤). fainted 면 쓰러짐 줄을 하나 더
 export function trapNotices(events = [], get) {
   const out = [];
@@ -459,10 +466,11 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
       endPhase(st, rng);
       if (st.log.pulsed?.length) { pulseFx = { gens: st.log.pulsed, at: clock }; } // 발전소: 방출 번개
       if (st.log.steamed?.length) steamFx = { vents: st.log.steamed, at: clock }; // 화산동굴: 스팀 기둥
+      for (const e of st.log.wisps ?? []) if (e.unitId) { const u = st.units.find((o) => o.id === e.unitId); everyone.set(u.id, u); facing[u.id] = DIR.Left; requestSprites([u.species]); } // 묘지: 혼불에서 나온 고스트
       const go = () => {
         cursor = { ...(allyUnits()[0] ?? cursor) };
         if (st.result) { noticeChain(phaseLines(), () => { mode = 'result'; }); return; }
-        playerPhase(phaseLines());
+        playerPhase([...wispNotices(st.log.wisps, (id) => everyone.get(id), hiddenIds()), ...phaseLines()]);
       };
       const pushes = (st.log.steamPushes ?? []).map((p) => ({ unit: everyone.get(p.unitId), from: p.from, to: p.to })).filter((m) => m.unit && st.units.includes(m.unit));
       if (pushes.length) startSlide(pushes, 0.25 + 0.07 * Math.max(...pushes.map((m) => Math.abs(m.to.x - m.from.x) + Math.abs(m.to.y - m.from.y))), [], go); // 스팀에 밀려나는 포켓몬들 (동시에)

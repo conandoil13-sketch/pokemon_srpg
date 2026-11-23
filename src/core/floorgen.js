@@ -202,7 +202,9 @@ export function generateFloor(dungeon, floor, seed) {
   // 13. 얼음동굴: 빙판·고드름·빙판 위 바위 (별도 난수, 맨 끝). 미끄럼 규칙으로 계단·상자·더미에 멈춰 닿을 때까지 다시
   if (dungeon.ice) iceLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests], piles, createRng(hashSeed(seed, 7500)));
   // 14. 묘지: 세로 묘비 줄·추모 정원 + 혼불 예정표 (별도 난수, 맨 끝). 지상 포켓몬이 계단·상자·적에 닿을 때까지 다시
-  const wisps = dungeon.graveyard ? graveyardLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests, ...enemies], floor >= dungeon.floors - 1 ? 3 : 2, createRng(hashSeed(seed, 7600))) : null;
+  const ghosts = dungeon.graveyard ? encounterPool(dungeon, floor).filter((id) => SPECIES[id].types.includes('ghost')) : [];
+  const wisps = dungeon.graveyard ? graveyardLayout(g, used, allySlots, [...(stairs ? [stairs] : []), ...chests, ...enemies], floor >= dungeon.floors - 1 ? 3 : 2, createRng(hashSeed(seed, 7600)))
+    .map((w, i) => ({ ...w, species: ghosts.length ? ghosts[(w.round * 7 + i) % ghosts.length] : 'gastly', level: dungeon.baseLevel[floor - 1] - 2 })) : null;
 
   return { tiles: tiles(), allySlots, enemies, stairs, chests, piles, weather: rollWeather(dungeon, seed), ...(dungeon.dark ? { dark: true } : {}),
     ...(sea ? { tide: { a: sea.list('a'), b: sea.list('b') }, island: island?.info ?? null } : {}), ...(warps ? { warps } : {}), ...(generators ? { generators } : {}), ...(flows ? { flows } : {}), ...(vents ? { vents } : {}), ...(wisps ? { wisps } : {}) };
