@@ -170,12 +170,13 @@ const overTurns = (tiles, start) => {
   return seen;
 };
 
-test('canyon floors: a ridge up top, a creek below, 2+ chasm cells, vines under the ridge, start columns clean, everything reachable on foot over turns', () => {
+test('canyon floors: a ridge up top, a creek below, big chasms (16+ cells, 2+ wide), vines under the ridge, start columns clean, everything reachable on foot over turns', () => {
   for (let seed = 1; seed <= 25; seed++) {
     const f = 1 + (seed % CY.floors), m = generateFloor(CY, f, seed), T = m.tiles, H = T.length;
     const count = (ch) => T.join('').split(ch).length - 1;
     assert.ok(count('H') >= 20, `seed ${seed}: ridge ${count('H')}`);
-    assert.ok(count('X') >= 2, `seed ${seed}: chasm`);
+    assert.ok(count('X') >= 16, `seed ${seed}: chasm ${count('X')}`);
+    assert.ok(T.some((row) => row.includes('XX')), `seed ${seed}: a gorge 2+ wide`);
     assert.ok(count('|') >= 1, `seed ${seed}: vines`);
     assert.ok(T.slice(H - 2).join('').includes('~'), `seed ${seed}: creek`);
     T.forEach((row, y) => [...row].forEach((c, x) => {

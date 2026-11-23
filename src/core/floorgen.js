@@ -718,15 +718,19 @@ function canyonLayout(g, used, allySlots, targets, rng) {
       if (rng() < 0.35 && free(x, H - 2)) paint(x, H - 2, '~');
     }
     for (let n = int(3, 5); n > 0; n--) { const x = int(SAFE_COLS, W - 1), y = g[H - 2][x] === '~' ? H - 3 : H - 2; if (free(x, y) && g[y][x] === '.') paint(x, y, rng() < 0.4 ? '#' : '"'); }
-    // 낭떠러지: 능선 가장자리에서 아래로 2~5칸 (폭 1, 가끔 옆으로 한 칸 어긋남) + 들판 구덩이
-    for (let n = int(2, 3); n > 0; n--) {
-      let x = int(SAFE_COLS + 2, W - 2);
-      for (let y = edge[x] + 1, len = int(2, 5); len > 0 && y < H - 2; len--, y++) {
-        if (rng() < 0.25) x = Math.max(SAFE_COLS + 1, Math.min(W - 1, x + (rng() < 0.5 ? -1 : 1)));
-        if (free(x, y) && g[y][x] !== '|') paint(x, y, 'X');
+    // 낭떠러지: 능선 가장자리에서 개울 앞까지 내려오는 협곡 2~3줄기 (폭 2~3, 줄마다 조금씩 굽음), 줄기마다 폭 1 줄짜리 다리 하나 + 들판 구덩이
+    const starts = [];
+    for (let n = int(2, 3), tries = 0; starts.length < n && tries < 30; tries++) { const x = int(SAFE_COLS + 2, W - 3); if (starts.every((s) => Math.abs(s - x) >= 5)) starts.push(x); }
+    for (const x0 of starts) {
+      const w = int(2, 3), top = edge[x0] + 1, bridge = int(top + 2, H - 4);
+      let x = x0;
+      for (let y = top; y <= H - 3; y++) {
+        if (y > top && rng() < 0.3) x = Math.max(SAFE_COLS + 1, Math.min(W - w, x + (rng() < 0.5 ? -1 : 1)));
+        if (y === bridge) continue; // 건너는 다리 (밀어 떨어뜨리기 좋은 자리)
+        for (let dx = 0; dx < w; dx++) if (free(x + dx, y)) paint(x + dx, y, 'X');
       }
     }
-    if (rng() < 0.5) { const x = int(SAFE_COLS + 3, W - 3), y = int(Math.floor(H / 2), H - 4); for (const [dx, dy] of [[0, 0], [1, 0]].slice(0, int(1, 2))) if (free(x + dx, y + dy)) paint(x + dx, y + dy, 'X'); }
+    if (rng() < 0.6) { const x = int(SAFE_COLS + 2, W - 4), y = int(Math.floor(H / 2), H - 4); for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < int(2, 3); dx++) if (free(x + dx, y + dy)) paint(x + dx, y + dy, 'X'); }
     for (let x = SAFE_COLS; x < W; x++) { const y = edge[x] + 1; if (g[y]?.[x] === '|' && g[y - 1][x] !== 'H') { g[y][x] = '.'; } } // 덩굴 위는 늘 고지
     if (painted.some((p) => g[p.y][p.x] === 'X') && painted.some((p) => g[p.y][p.x] === '|') && ok()) return;
     for (const p of painted.reverse()) g[p.y][p.x] = p.was; // 되돌리고 다시
