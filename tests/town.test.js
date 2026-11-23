@@ -65,6 +65,7 @@ test('dungeon select: locked cave cannot be picked until unlocked', () => {
   game.unlocked.push('sinnoh-cave');
   const sel2 = createDungeonSelect({ game, onStart: (id) => started.push(id), onResume() {}, onBack() {} });
   sel2.handle({ type: 'dir', dx: 0, dy: 1 }); sel2.handle({ type: 'confirm' });
+  sel2.update(CHOICE_LOCK + 0.1); sel2.handle({ type: 'confirm' }); // 출전 확인창
   assert.deepEqual(started, ['sinnoh-cave']);
 });
 
@@ -658,9 +659,11 @@ test('dungeon select scrolls to reach the last stage and clicks map to the scrol
   assert.equal(sel.visibleTop, 0);
   for (let i = 0; i < ALL_D.length - 1; i++) sel.handle({ type: 'dir', dx: 0, dy: 1 });
   assert.ok(sel.visibleTop > 0);
-  sel.handle({ type: 'confirm' }); assert.equal(started, 'trial-8');
+  sel.handle({ type: 'confirm' }); sel.update(CHOICE_LOCK + 0.1); sel.handle({ type: 'confirm' }); assert.equal(started, 'trial-8');
   const top = sel.visibleTop;
   sel.handle({ type: 'click', px: 20, py: 30 + 4 + 2 }); // 보이는 첫 줄
+  assert.equal(sel.confirming, true);
+  sel.update(CHOICE_LOCK + 0.1); sel.handle({ type: 'click', px: 200, py: 192 - 50 + 18 + 2 }); // 출전한다
   assert.equal(started, ALL_D[top].id);
 });
 test('dungeon select with a run in progress scrolls the resume row too', () => {

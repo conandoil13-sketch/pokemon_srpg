@@ -11,6 +11,7 @@ export const DESERT = {
   theme: 'desert',
   types: ['ground', 'rock', 'fire', 'psychic', 'ghost'],
   minorTypes: ['fire', 'psychic', 'ghost'], // 이 타입만 가진 종은 드물게 (뽑히면 70% 한 번 다시)
+  shownTypes: ['ground'], // 출격 게시판 배지 (바위는 숨김)
   bossTypes: ['ground', 'rock'],
   early: [],
   signature: ['cacnea', 'cacturne'], // 사막 고유종: 단계 상한 안에서 늘 후보에 섞음
