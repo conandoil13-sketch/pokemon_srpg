@@ -663,7 +663,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const contactBase = move.category === 'physical';
   const breaksDef = has(a, 'mold-breaker');
   let dealt = 0; // 실제로 깎인 HP 합 (흡수·반동 기준)
-  const flinched = [], bound = [], screensBroken = [];
+  const flinched = [], bound = [], screensBroken = [], woken = [];
   let countered = null;
   if (targets.length && move.power) a.ncTouched = true; // 자연회복: 공격함
   const flinchChance = move.flinchChance || (has(a, 'stench') && move.power ? STENCH_FLINCH : 0) || (itemOf(a)?.flinch && move.power ? itemOf(a).flinch : 0); // 악취·왕의징표석: 풀죽음 10%
@@ -690,7 +690,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
         : calcDamage(a, d, hideDouble(move, d) ? { ...dmgMove, power: dmgMove.power * 2 } : dmgMove, { rng, defTile: state.grid[d.y][d.x], spread, weather: W, forceHit: k > 0, ...terrainCtx(state, a, d) });
       if (r.absorbed) absorb(d, r.absorbed);
       if (r.damage > 0 && d !== a && has(d, 'pressure') && (d.pressureUsed ?? 0) < PRESSURE_SHIELD) { d.pressureUsed = (d.pressureUsed ?? 0) + 1; r.damage = 0; r.shielded = true; } // 프레셔: 층마다 타격 2회 막음
-      if (r.damage > 0) { d.ncTouched = true; d.revealed = true; alertHunt(state, d, a); } // 자연회복: 맞음 · 악 숨기: 맞으면 드러남 · 깊은 동굴: 어둠 속에서 맞으면 쫓아옴
+      if (r.damage > 0) { d.ncTouched = true; d.revealed = true; alertHunt(state, d, a); d.hurtThisPhase = true; if (d !== a) d.lastHitBy = a.id; } // 승부굳히기·리벤지 판정용 // 자연회복: 맞음 · 악 숨기: 맞으면 드러남 · 깊은 동굴: 어둠 속에서 맞으면 쫓아옴
       if (r.damage > 0 && d.bide && d !== a) d.bide.stored += Math.min(r.damage, d.hp); // 참기: 받은 피해 모음
       d.hp = Math.max(0, d.hp - r.damage);
       const endured = d.hp === 0 && d.guard === 'endure' && r.damage > 0; // 버티기: 공격으로는 1 남김
@@ -710,6 +710,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
       }
       if (fainted) { knockOut(state, d, a, { deferExp: true }); knocked.push(d); }
       else if (move.type === 'fire' && r.damage > 0 && d.status === 'freeze') { cure(d); thawed.push(d.id); } // 불꽃 공격에 맞으면 녹는다
+      else if (move.wakes && r.damage > 0 && d.status === move.wakes) { cure(d); woken.push({ unitId: d.id, ailment: move.wakes }); } // 잠깨움뺨치기·정신차리기: 때리고 풀어 줌
       landed ||= r.hit && r.typeMult > 0;
       // 접촉 반격 (거리 1 물리기, 타마다): 정전기·독가시·불꽃몸·포자 30%, 까칠한피부 1/8, 유폭(기절 시) 1/4
       const strikeFainted = fainted;
@@ -847,7 +848,7 @@ export function applyMove(state, userId, moveId, aim, rng) {
   const selfKO = SELF_KO.includes(move.id) && state.units.includes(a);
   if (selfKO) { a.hp = 0; knockOut(state, a, null, { reward: false }); }
   checkResult(state);
-  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
+  const out = { kind, hits, expGained, stageChanges, statusChanges, thawed, woken, selfKO, abilityEvents, drained, recoil: recoilDamage, crash, screensBroken, spun, presentHealed, stepped, shoved, countered, unbound: [...(state.log.unbound ?? [])], flinched, bound: bound.filter((b) => state.units.includes(a) && byId(state, b.unitId)?.bound), retreat: !!a.retreatReady && state.units.includes(a), bond: [...state.log.bonded], chain, ...(targets.length || ranged ? {} : { empty: true }) };
   const ids = [...new Set(hits.map((h) => h.unitId))];
   if (ids.length === 1) { // 대상 하나 (연속 공격이면 타를 합쳐서)
     const { hit, typeMult } = hits[0];
@@ -1073,6 +1074,7 @@ export function endPhase(state, rng = Math.random) {
   state.phase = state.phase === 'player' ? 'enemy' : 'player';
   if (state.phase === 'player') { state.turn++; if (state.tideCells && tideFor(state.turn) !== state.tide) applyTide(state, tideFor(state.turn)); } // 해변: 3라운드마다 물때
   const side = state.phase === 'player' ? 'ally' : 'enemy';
+  for (const u of state.units) u.hurtThisPhase = false; // 승부굳히기: 페이즈마다 새로
   for (const u of state.units) {
     if (u.side !== side) continue;
     u.moved = false; u.acted = false; u.pitEscaped = false;

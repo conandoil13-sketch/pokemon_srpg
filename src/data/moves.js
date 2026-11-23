@@ -47,3 +47,9 @@ for (const id of ['aerial-ace', 'aura-sphere', 'feint-attack', 'magical-leaf', '
 for (const [id, effect] of Object.entries(EFFECT_MOVES)) if (MOVES[id]) Object.assign(MOVES[id], { effect, learnable: true });
 for (const [id, v] of Object.entries(KIND_OVERRIDES)) if (MOVES[id]) Object.assign(MOVES[id], v);
 for (const id of PLAIN_MOVES) if (MOVES[id]) MOVES[id].learnable = true;
+
+// 기술 밸런스 조정 1차 (codex-reviews/2026-11-20-move-balance-decisions.md): 조건부 위력 (실제 위력은 damage.js varPower, 웨더볼·솔라빔은 situationalMove)
+const SITUATIONAL = { brine: 'brine', facade: 'facade', eruption: 'hpRatio', 'water-spout': 'hpRatio', 'wake-up-slap': 'wake', 'smelling-salts': 'wake', assurance: 'assurance', revenge: 'revenge', avalanche: 'revenge', punishment: 'punishment' };
+for (const [id, varPower] of Object.entries(SITUATIONAL)) if (MOVES[id]) Object.assign(MOVES[id], { varPower, learnable: true });
+if (MOVES['wake-up-slap']) MOVES['wake-up-slap'].wakes = 'sleep';
+if (MOVES['smelling-salts']) MOVES['smelling-salts'].wakes = 'paralysis';

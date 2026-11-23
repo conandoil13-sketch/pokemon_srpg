@@ -43,6 +43,14 @@ export function varPower(attacker, defender, move) {
     case 'speed': return Math.min(150, Math.floor(25 * effectiveStat(defender, 'spe') / Math.max(1, effectiveStat(attacker, 'spe'))) + 1);
     case 'stock': return 100 * Math.max(1, attacker.stockpile ?? 0); // 토해내기
     case 'lastStand': return attacker.allMovesUsed ? 200 : 40; // 마지막수단: 남은 아군 모두가 모든 기술을 한 번씩 썼으면
+    // 기술 밸런스 조정 (2026-11-20 사용자 결정)
+    case 'brine': return defender.hp * 2 <= defender.maxHp ? move.power * 2 : move.power; // 소금물: 상대 HP 절반 이하
+    case 'facade': return ['poison', 'toxic', 'paralysis', 'burn'].includes(attacker.status) ? move.power * 2 : move.power; // 객기
+    case 'hpRatio': return Math.max(1, Math.floor(150 * attacker.hp / attacker.maxHp)); // 분화·해수스파우팅
+    case 'wake': return defender.status === move.wakes ? move.power * 2 : move.power; // 잠깨움뺨치기(잠)·정신차리기(마비)
+    case 'assurance': return defender.hurtThisPhase ? move.power * 1.5 : move.power; // 승부굳히기: 이번 페이즈에 이미 맞았으면
+    case 'revenge': return attacker.lastHitBy === defender.id ? move.power * 1.5 : move.power; // 리벤지·눈사태: 마지막으로 나를 때린 상대
+    case 'punishment': return Math.min(200, 60 + 20 * Object.values(defender.stages ?? {}).reduce((t, n) => t + Math.max(0, n), 0)); // 혼내기
     default: return move.power;
   }
 }
@@ -95,7 +103,16 @@ export function fixedDamage(attacker, defender, move, weather = null) {
 }
 
 // forceHit: 연속 공격 2타째부터 (명중은 첫 타만)
+// 날씨에 따라 바뀌는 기술: 웨더볼 (타입·위력 100) · 솔라빔 (비·모래바람·싸라기눈에 위력 절반)
+const WEATHER_BALL = { rain: 'water', sun: 'fire', sand: 'rock', hail: 'ice' };
+export function situationalMove(attacker, move, weather) {
+  if (move.id === 'weather-ball' && WEATHER_BALL[weather]) return { ...move, type: WEATHER_BALL[weather], power: 100 };
+  if (move.id === 'solar-beam' && ['rain', 'sand', 'hail'].includes(weather)) return { ...move, power: Math.floor(move.power / 2) };
+  return move;
+}
+
 export function calcDamage(attacker, defender, move, { rng, defTile, spread = 1, weather = null, forceHit = false, atkTile, guards, charged: chg }) {
+  move = situationalMove(attacker, move, weather);
   const ctx = { atkTile, guards, charged: chg };
   if (move.fixedDamage) {
     const fd = fixedDamage(attacker, defender, move, weather);

@@ -144,6 +144,7 @@ export function statusMessages(changes, byId, isStatusMove) {
 
 function statusSteps(result, get, isStatusMove) {
   const out = (result.thawed ?? []).map((id) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(id))}의 얼음이 녹았다!`), who: get(id), emo: 'Normal' }));
+  for (const w of result.woken ?? []) out.push({ k: 'msg', d: AUTO, text: wrapMessage(w.ailment === 'sleep' ? `${josa(label(get(w.unitId)), '은/는')} 잠에서 깨어났다!` : `${label(get(w.unitId))}의 마비가 풀렸다!`), who: get(w.unitId), emo: 'Normal' }); // 잠깨움뺨치기·정신차리기
   for (const c of result.statusChanges ?? []) {
     const [text] = statusMessages([c], get, isStatusMove);
     if (text) out.push({ k: 'msg', d: AUTO, text: wrapMessage(text), who: get(c.unitId), emo: c.ok ? 'Pain' : 'Normal', pop: c.ok ? c : null, stage: true });
