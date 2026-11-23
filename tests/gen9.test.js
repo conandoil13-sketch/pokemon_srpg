@@ -21,10 +21,10 @@ test('move numbers are gen 9 values', () => {
   assert.equal(MOVES.charm.type, 'fairy');
 });
 
-test('moves and abilities from gen 5 on stay out until their generation is added', () => {
-  for (const id of ['volt-switch', 'scald', 'hurricane', 'moonblast', 'play-rough', 'dazzling-gleam']) assert.equal(MOVES[id], undefined, id);
+test('moves and abilities past GEN_LIMIT (now 5) stay out until their generation is added', () => {
+  for (const id of ['moonblast', 'play-rough', 'dazzling-gleam', 'draining-kiss']) assert.equal(MOVES[id], undefined, id);
   for (const s of Object.values(SPECIES)) for (const [, m] of s.learnset) assert.ok(MOVES[m], `${s.key} ${m}`);
-  assert.deepEqual(SPECIES.gengar.abilities, ['levitate'], 'cursed body (gen 5) waits; gengar keeps its gen 4 slot');
+  assert.deepEqual(SPECIES.gengar.abilities, ['cursed-body'], 'gen 9 slot ability (gen 5) once gen 5 is in');
 });
 
 test('learnsets merge the first and last games, keep the lower level, and never use level 0', () => {

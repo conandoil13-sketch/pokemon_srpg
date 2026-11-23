@@ -47,11 +47,25 @@ export const SRPG_ABILITY_TEXT = {
   'suction-cups': '울부짖기·날려버리기에 밀려나지 않는다.',
   levitate: '땅 타입 기술을 받지 않는다. 비행 타입처럼 물 위를 지나갈 수 있다.',
   sniper: '급소에 맞으면 위력이 더 커진다. 사거리 2 이상인 기술은 사거리가 1칸 늘어난다.',
+  // 5세대 (codex-reviews/2026-11-20-gen5-moves-abilities.md)
+  'cursed-body': '공격에 맞으면 30% 확률로 그 기술을 사슬묶기한다. 한 번에 맞은 보유자가 여럿이면 한 마리당 +10%.',
+  regenerator: '자기 차례 끝에, 직전 상대 차례부터 공격하지도 공격받지도 않았으면 최대 HP의 1/4을 회복한다.',
+  healer: '자기 차례 끝에 옆 동료의 상태이상을 30% 확률로 고친다.',
+  'sheer-force': '부가효과가 있는 공격기(선공기 제외)의 위력이 1.3배가 되고 부가효과는 사라진다.',
+  moxie: '상대를 쓰러뜨릴 때마다 공격이 1랭크 오른다.',
+  mummy: '접촉 공격을 한 상대의 특성을 미라로 바꾼다.',
+  overcoat: '날씨 피해와 가루·포자 기술을 받지 않는다.',
+  telepathy: '우리 편 공격의 피해를 받지 않는다.',
+  'victory-star': '자신과 주변 2칸 동료의 명중률이 1.1배가 된다.',
+  infiltrator: '상대의 리플렉터·빛의장막을 무시하고 공격한다.',
+  'wonder-skin': '이 포켓몬을 노리는 변화기의 명중률이 50%를 넘지 않는다.',
+  'weak-armor': '물리 공격에 맞으면 방어가 1랭크 떨어지고 스피드가 2랭크 오른다.',
   limber: '마비되지 않는다. 숲에서는 나무 사이를 지나갈 수 있다(나무 위에 멈추지는 못함).',
 };
 
 // 지금 게임에 해당 시스템이 없어 효과가 없는 특성 (스펙 §4-②)
-export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk', 'multitype', 'stall']; // 도구 시스템과 함께 할 것 · 지구력
+export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk', 'multitype', 'stall', // 도구 시스템과 함께 할 것 · 지구력
+  'illusion', 'prankster', 'unnerve']; // 5세대: 일루전·짓궂은마음 (코덱스 판정은 있음, 화면·보너스 행동이 필요) · 긴장감 (나무열매 없음)
 
 export const ABILITIES = Object.fromEntries(Object.values(POKEDEX.abilities).map((a) => [a.id, {
   ...a,

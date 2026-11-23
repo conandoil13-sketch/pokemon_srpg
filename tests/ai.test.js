@@ -332,3 +332,13 @@ test('binding an unbound foe is worth a little more than hitting a bound one', (
 test('bind value scales with accuracy', () => {
   assert.ok(bindValue({ ...MV.wrap, accuracy: 50 }, { bound: null }) < bindValue({ ...MV.wrap, accuracy: 100 }, { bound: null }));
 });
+
+test('final gambit is a self-KO move: only when it knocks the target out', () => {
+  const s = mkm('sawk', 'enemy', 4, 2, ['final-gambit', 'tackle']);
+  const a = mkm('snorlax', 'ally', 3, 2, ['tackle']);
+  a.hp = a.maxHp = 999;
+  assert.equal(planEnemyAction(state(9, 5, [s, a]), s).attack?.moveId, 'tackle');
+  const s2 = mkm('sawk', 'enemy', 4, 2, ['final-gambit', 'tackle']);
+  const b = mkm('pikachu', 'ally', 3, 2, ['tackle']); b.hp = 5;
+  assert.notEqual(planEnemyAction(state(9, 5, [s2, b]), s2).attack, undefined);
+});

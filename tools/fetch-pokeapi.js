@@ -1,4 +1,4 @@
-// PokeAPI → src/data/generated/pokedex.js (전국도감 1~493, 9세대 값 · 기술·특성은 GEN_LIMIT 세대까지 — 2026-11-24)
+// PokeAPI → src/data/generated/pokedex.js (전국도감 1~649, 9세대 값 · 기술·특성은 GEN_LIMIT 세대까지 — 2026-11-24)
 // 실행: node tools/fetch-pokeapi.js   (첫 실행 수 분, 응답은 tools/.cache/ 에 저장되어 다음엔 빠름)
 // 게임 실행 중에는 API 를 호출하지 않는다.
 import { writeFile, readFile, mkdir } from 'node:fs/promises';
@@ -7,10 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { classifyBranches } from '../src/core/evolution.js';
 import { TARGET_KIND } from '../src/data/moveTargets.js';
 
-const MAX_DEX = 493;
+const MAX_DEX = 649; // 5세대까지 (2026-11-24)
 const EXTRA_MOVES = ['tackle', 'grass-knot']; // tackle: 기술이 없을 때 대체 / grass-knot: 몸무게 기술(기술머신 전용, 나중 획득)
 const OLD_GROUPS = ['platinum', 'heartgold-soulsilver', 'diamond-pearl']; // 예전(4세대) 습득표 — 그 기술은 기술 데이터에 남김 (저장 호환)
-const GEN_LIMIT = 4; // 이 세대까지 나온 기술·특성만 (세대를 넣을 때 올림)
+const GEN_LIMIT = 5; // 이 세대까지 나온 기술·특성만 (세대를 넣을 때 올림)
 // 습득표 첫·마지막을 고를 본편 버전 그룹 (화이트리스트 — 외전·DLC·새 그룹이 끼지 않게)
 const MAIN_GROUPS = ['red-green-japan', 'red-blue', 'yellow', 'gold-silver', 'crystal', 'ruby-sapphire', 'emerald', 'firered-leafgreen', 'diamond-pearl', 'platinum', 'heartgold-soulsilver',
   'black-white', 'black-2-white-2', 'x-y', 'omega-ruby-alpha-sapphire', 'sun-moon', 'ultra-sun-ultra-moon', 'sword-shield', 'brilliant-diamond-shining-pearl', 'scarlet-violet'];
@@ -136,6 +136,7 @@ async function main() {
     const lowest = new Map();
     for (const g of new Set([groups[0], groups.at(-1)])) for (const [lv, mv] of byGroup.get(g) ?? []) lowest.set(mv, Math.min(lv, lowest.get(mv) ?? 99));
     const learnset = [...lowest].map(([mv, lv]) => [lv, mv]).sort((a, b) => a[0] - b[0] || a[1].localeCompare(b[1])); // 레벨 오름차순 (learn.js 가 기대)
+    learnset.forEach(([, mv]) => moveNames.add(mv));
     for (const g of OLD_GROUPS) for (const [, mv] of byGroup.get(g) ?? []) oldMoves.add(mv);
     const st = Object.fromEntries(pk.stats.map((s) => [s.stat.name, s.base_stat]));
     const base = { hp: st.hp, atk: st.attack, def: st.defense, spa: st['special-attack'], spd: st['special-defense'], spe: st.speed };

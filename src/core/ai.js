@@ -13,7 +13,7 @@ import { expectedDamage, hitChance, terrainCtx } from './damage.js';
 import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { canInflict, canInfatuate } from './status.js';
-import { immunity, has } from './abilities.js';
+import { immunity, has, moldBreaker } from './abilities.js';
 import { aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
 import { moveBlock, moveFor, isHealMove, BIND_MOVES } from './volatile.js';
@@ -30,7 +30,7 @@ const isStatus = (m) => m.category === 'status';
 let W = null;
 const FRIENDLY_WEIGHT = 1.5;  // 같은 편이 휘말린 데미지 감점 배율
 const HEAL_WEIGHT = 1.2;      // 회복기 점수: 회복량 × 이 값
-const SELF_KO = ['self-destruct', 'explosion'];
+const SELF_KO = ['self-destruct', 'explosion', 'final-gambit']; // 목숨걸기도 쓰면 쓰러짐
 const SELF_TURNS = 3;         // 자폭 감점: 자기 최선 기대 데미지 × 3턴
 const SIG_SELF_KO = 0.3, OTHER_SELF_KO = 2;
 // 변화기 묶음 1차 (포켓몬에 붙는 효과) 점수
@@ -202,8 +202,8 @@ export function planEnemyAction(state, unit, { unseen = new Set() } = {}) {
 const SLEEP_LOCK = 2;
 function ailmentValue(state, user, r, move) {
   const a = move.ailment;
-  if (a === 'infatuation') return canInfatuate(r, user, { breaker: has(user, 'mold-breaker') }).ok ? bestDamage(r, [user]) * 0.5 : 0; // 헤롱헤롱: 반대 성별만
-  if (!a || !canInflict(r, a, move, W, { breaker: has(user, 'mold-breaker') }).ok) return 0;
+  if (a === 'infatuation') return canInfatuate(r, user, { breaker: moldBreaker(user) }).ok ? bestDamage(r, [user]) * 0.5 : 0; // 헤롱헤롱: 반대 성별만
+  if (!a || !canInflict(r, a, move, W, { breaker: moldBreaker(user) }).ok) return 0;
   if (a === 'sleep') {
     // 상대 편이 이미 2마리 이상 쉬고 있거나, 깨어 있는 마지막 하나라면 재우지 않는다 (소수 편성 보호)
     const side = state.units.filter((u) => u.side === r.side);

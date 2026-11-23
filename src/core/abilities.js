@@ -4,11 +4,17 @@ import { typeMultiplier } from '../data/types.js';
 import { itemAttackMult, itemDefMult, itemCritBonus, itemAcc } from './items.js';
 
 export const PUNCH = ['ice-punch', 'fire-punch', 'thunder-punch', 'mach-punch', 'mega-punch', 'comet-punch', 'dizzy-punch', 'dynamic-punch', 'focus-punch', 'hammer-arm', 'meteor-mash', 'drain-punch', 'bullet-punch', 'shadow-punch', 'sky-uppercut'];
-export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell'];
+export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell', 'echoed-voice', 'round', 'relic-song', 'snarl'];
 const PINCH = { overgrow: 'grass', blaze: 'fire', torrent: 'water', swarm: 'bug' };
 
 export const has = (u, id) => u?.ability === id && !u.abilityOff; // 위액: 특성 꺼짐
-const breaks = (attacker) => has(attacker, 'mold-breaker'); // 틀깨기: 방어 쪽 특성 무시
+export const moldBreaker = (u) => has(u, 'mold-breaker') || has(u, 'teravolt') || has(u, 'turboblaze'); // 틀깨기·테라볼티지·터보블레이즈
+const breaks = moldBreaker; // 방어 쪽 특성 무시
+// 우격다짐: 부가효과가 있는 공격기 (선공기 제외). 자기 능력이 떨어지는 반동(오버히트 등)은 부가효과가 아님
+export const sheerForce = (attacker, move) => has(attacker, 'sheer-force') && move.category !== 'status' && !(move.priority > 0)
+  && ((move.effectKind === 'damage-lower' && move.statChanges?.length > 0) || (move.ailment && move.category !== 'status') || move.flinchChance > 0
+    || (move.effectKind === 'damage-raise' && move.statChanges?.some((c) => c.change > 0)));
+const POWDER = ['sleep-powder', 'stun-spore', 'poison-powder', 'spore', 'cotton-spore', 'powder']; // 방진: 가루·포자
 const def = (attacker, defender, id) => !breaks(attacker) && has(defender, id);
 
 // 실제 타입 (기분파·변색)
@@ -57,6 +63,9 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   if (attacker.slowTurns > 0 && physical) m *= 0.5;            // 슬로스타트
   if (attacker.plusActive && !physical) m *= 1.5;               // 플러스·마이너스 (전투가 옆 동료를 보고 켬)
   if (attacker.flowerActive && physical) m *= 1.5;              // 플라워기프트 (쾌청 + 본인/옆)
+  if (has(attacker, 'defeatist') && attacker.hp <= attacker.maxHp / 2) m *= 0.5; // 무기력
+  if (has(attacker, 'sand-force') && weather === 'sand' && ['rock', 'ground', 'steel'].includes(type)) m *= 1.3; // 모래의힘
+  if (sheerForce(attacker, move)) m *= 1.3; // 우격다짐
   return m * itemAttackMult(attacker, defender, move, typeMult, type); // 지니는 도구
 }
 // 화상의 물리 반감을 무시하는가 (근성)
@@ -89,6 +98,9 @@ export function immunity(attacker, defender, move, typeMult = 1) {
   if (a === 'wonder-guard' && move.category !== 'status' && typeMult <= 1) return { ability: a };
   if (a === 'lightning-rod' && type === 'electric') return { ability: a, boost: { spa: 1 } };
   if (a === 'storm-drain' && type === 'water') return { ability: a, boost: { spa: 1 } };
+  if (a === 'sap-sipper' && type === 'grass') return { ability: a, boost: { atk: 1 } }; // 초식
+  if (a === 'telepathy' && attacker.side && attacker.side === defender.side && move.category !== 'status') return { ability: a }; // 텔레파시: 우리 편 공격
+  if (a === 'overcoat' && POWDER.includes(move.id)) return { ability: a }; // 방진
   return null;
 }
 
@@ -101,6 +113,7 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
   if ((def(attacker, defender, 'sand-veil') && weather === 'sand') || (def(attacker, defender, 'snow-cloak') && weather === 'hail')) v -= 20;
   if (def(attacker, defender, 'tangled-feet') && defender.confusion > 0) v -= 20;
   v *= itemAcc(attacker, defender); // 광각렌즈·빛의가루
+  if (move.category === 'status' && attacker !== defender && def(attacker, defender, 'wonder-skin')) v = Math.min(v, 50); // 미라클스킨
   return { value: v, sure: false };
 }
 
@@ -109,6 +122,7 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
 export function critRate(attacker, defender, move = null) {
   if (defender?.field?.luckyChant) return 0; // 주술 오라
   if (def(attacker, defender, 'battle-armor') || def(attacker, defender, 'shell-armor')) return 0;
+  if ((move?.critRate ?? 0) >= 3) return 1; // 얼음숨결·업어후리기: 반드시 급소
   const stage = (move?.critRate ?? 0) + (has(attacker, 'super-luck') ? 1 : 0) + (attacker.focusEnergy ? 2 : 0) + itemCritBonus(attacker); // 기충전 +2 · 초점렌즈 등
   return stage >= 2 ? 1 / 4 : stage === 1 ? 1 / 8 : 1 / 16;
 }
@@ -131,6 +145,7 @@ export function stageGuard(unit, key, change, fromOther) {
     if (has(unit, 'clear-body') || has(unit, 'white-smoke')) return 0;
     if (has(unit, 'hyper-cutter') && key === 'atk') return 0;
     if (has(unit, 'keen-eye') && key === 'acc') return 0;
+    if (has(unit, 'big-pecks') && key === 'def') return 0; // 부풀린가슴
   }
   return has(unit, 'simple') ? change * 2 : change;
 }
@@ -141,6 +156,7 @@ export function speedMult(unit) {
   if (unit.slowTurns > 0) return 0.5;
   if (has(unit, 'swift-swim') && w === 'rain') return 2;
   if (has(unit, 'chlorophyll') && w === 'sun') return 2;
+  if (has(unit, 'sand-rush') && w === 'sand') return 2; // 모래헤치기
   if (has(unit, 'quick-feet') && unit.status) return 1.5;
   return 1;
 }
@@ -148,14 +164,15 @@ export const ignoresParalysisSlow = (unit) => has(unit, 'quick-feet');
 export function moveBonus(unit) {
   const w = unit.fieldWeather;
   if (unit.slowTurns > 0) return -1;
-  if ((has(unit, 'swift-swim') && w === 'rain') || (has(unit, 'chlorophyll') && w === 'sun') || (has(unit, 'quick-feet') && unit.status)) return 1;
+  if ((has(unit, 'swift-swim') && w === 'rain') || (has(unit, 'chlorophyll') && w === 'sun') || (has(unit, 'sand-rush') && w === 'sand') || (has(unit, 'quick-feet') && unit.status)) return 1;
   return 0;
 }
 
 // ---- 날씨 피해 면역 / 기술 외 피해 무효 ----
 export const magicGuard = (unit) => has(unit, 'magic-guard');
 export function weatherChipImmune(unit, weather) {
-  if (magicGuard(unit)) return true;
+  if (magicGuard(unit) || has(unit, 'overcoat')) return true; // 방진
+  if (weather === 'sand' && (has(unit, 'sand-force') || has(unit, 'sand-rush'))) return true;
   if (weather === 'sand' && has(unit, 'sand-veil')) return true;
   if (weather === 'hail' && (has(unit, 'snow-cloak') || has(unit, 'ice-body'))) return true;
   return false;

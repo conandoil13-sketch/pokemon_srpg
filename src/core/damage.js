@@ -1,11 +1,11 @@
 // 데미지 / 명중 계산 (순수 함수, spec §4.4)
-import { weightPower, weightOf } from './individual.js';
+import { weightPower, heavyPower, weightOf } from './individual.js';
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { effectiveStat, accuracyShift } from './stages.js';
 import { weatherDamageMult, weatherAccuracy } from './weather.js';
 import { fieldDamageMult } from './field.js';
-import { has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult, moveTypeOf, airborne } from './abilities.js';
+import { moldBreaker, typesOf, has, typeEffect, stabMult, attackMult, defendMult, ignoresBurn, immunity, accuracyFor, critRate, critMult, moveTypeOf, airborne } from './abilities.js';
 
 
 const sp = (unit) => SPECIES[unit.species];
@@ -15,7 +15,8 @@ const isType = (u, t) => (u.types ?? SPECIES[u.species].types).includes(t);
 import { charged, CHARGE_MULT } from './generator.js';
 export function terrainCtx(state, a, d) {
   const guards = state.units.filter((o) => o !== d && o.side === d.side && o.hp > 0 && Math.abs(o.x - d.x) + Math.abs(o.y - d.y) === 1).length;
-  return { atkTile: state.grid[a.y]?.[a.x], guards, charged: charged(state, a) }; // 발전소: 발전기에 붙어 섬
+  const victoryStar = state.units.some((u) => u.side === a.side && u.hp > 0 && has(u, 'victory-star') && Math.abs(u.x - a.x) + Math.abs(u.y - a.y) <= 2); // 승리의별: 자신·주변 2칸 아군
+  return { atkTile: state.grid[a.y]?.[a.x], guards, charged: charged(state, a), victoryStar }; // 발전소: 발전기에 붙어 섬
 }
 
 export function hitChance(attacker, defender, move, defTile, weather = null, ctx = {}) {
@@ -31,7 +32,7 @@ export function hitChance(attacker, defender, move, defTile, weather = null, ctx
   const evasion = Math.min(30, bush + Math.max(0, speGap));
   const rockAim = ctx.atkTile === '^' && isType(attacker, 'fighting') ? 5 : 0; // 격투: 바위 위에서 명중 +5
   const high = (t) => t === 'B' || t === 'H', height = high(ctx.atkTile) && !high(defTile) ? 10 : !high(ctx.atkTile) && high(defTile) ? -10 : 0; // 시티 옥상·협곡 고지: 위 → 아래 +10, 아래 → 위 −10
-  return Math.max(0, Math.min(100, acc.value + rockAim + height - evasion + accuracyShift(attacker, defender)));
+  return Math.max(0, Math.min(100, (acc.value + rockAim + height - evasion + accuracyShift(attacker, defender)) * (ctx.victoryStar ? 1.1 : 1))); // 승리의별: 마지막에 ×1.1
 }
 
 // 난수·급소를 제외한 기본 데미지 (STAB·상성 포함)
@@ -51,6 +52,12 @@ export function varPower(attacker, defender, move) {
     case 'assurance': return defender.hurtThisPhase ? move.power * 1.5 : move.power; // 승부굳히기: 이번 페이즈에 이미 맞았으면
     case 'revenge': return attacker.lastHitBy === defender.id ? move.power * 1.5 : move.power; // 리벤지·눈사태: 마지막으로 나를 때린 상대
     case 'streak': { const n = attacker.streak?.moveId === move.id ? attacker.streak.n : 0; return move.power * 2 ** n; } // 연속자르기·구르기·아이스볼: 연속 명중마다 2배
+    case 'hex': return defender.status ? move.power * 2 : move.power; // 병상첨병: 상태이상인 상대
+    case 'venoshock': return defender.status === 'poison' || defender.status === 'toxic' ? move.power * 2 : move.power; // 베놈쇼크: 독
+    case 'storedPower': return 20 + 20 * Object.values(attacker.stages ?? {}).reduce((t, n) => t + Math.max(0, n), 0); // 어시스트파워: 내 오른 랭크
+    case 'acrobatics': return attacker.held ? move.power : move.power * 2; // 애크로배틱: 지닌 도구 없으면
+    case 'electroBall': { const r = effectiveStat(attacker, 'spe') / Math.max(1, effectiveStat(defender, 'spe')); return r >= 4 ? 150 : r >= 3 ? 120 : r >= 2 ? 80 : r >= 1 ? 60 : 40; } // 일렉트릭볼: 스피드 비
+    case 'retaliate': return defender.felled?.[attacker.side] ? 140 : move.power; // 원수갚기: 우리 편을 쓰러뜨린 상대에게 처음 한 번
     case 'punishment': return Math.min(200, 60 + 20 * Object.values(defender.stages ?? {}).reduce((t, n) => t + Math.max(0, n), 0)); // 혼내기
     default: return move.power;
   }
@@ -58,17 +65,20 @@ export function varPower(attacker, defender, move) {
 
 function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {}) {
   if (move.varPower) move = { ...move, power: varPower(attacker, defender, move) };
-  if (move.weightPower) move = { ...move, power: weightPower(weightOf(defender)) }; // 안다리걸기·풀묶기: 상대 몸무게
+  if (move.weightPower === 'ratio') move = { ...move, power: heavyPower(weightOf(attacker) / weightOf(defender)) }; // 헤비봄버·히트스탬프: 몸무게 비
+  else if (move.weightPower) move = { ...move, power: weightPower(weightOf(defender)) }; // 안다리걸기·풀묶기: 상대 몸무게
   const physical = move.category === 'physical';
+  const user = move.foulPlay ? defender : attacker; // 속임수: 상대 공격으로
   // 천진: 상대 랭크를 무시 (틀깨기면 천진도 무시)
-  const aKey = physical ? 'atk' : 'spa', dKey = physical ? 'def' : 'spd';
-  const A = defender.ability === 'unaware' && attacker.ability !== 'mold-breaker' ? attacker.stats[aKey] : effectiveStat(attacker, aKey);
-  let D = attacker.ability === 'unaware' ? defender.stats[dKey] : effectiveStat(defender, dKey);
+  const aKey = physical ? 'atk' : 'spa', dKey = physical || move.hitsDef ? 'def' : 'spd'; // 사이코쇼크·사이코브레이크·신비의칼: 방어로 받음
+  const A = defender.ability === 'unaware' && !moldBreaker(attacker) ? user.stats[aKey] : effectiveStat(user, aKey);
+  let D = attacker.ability === 'unaware' || move.ignoreDefStages ? defender.stats[dKey] : effectiveStat(defender, dKey); // 야금야금·성스러운칼: 상대 랭크 무시
   if (defTile === '^') D *= isType(defender, 'steel') ? 1.35 : 1.2; // 강철: 바위 칸 ×1.35
   else if (defTile === '#') D *= 1.1; // 나무 위(벌레)
   const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;
   const stab = stabMult(attacker, move, weather);
   let typeMult = typeEffect(attacker, defender, move, weather);
+  if (move.id === 'synchronoise' && !typesOf(defender).some((t) => typesOf(attacker).includes(t))) typeMult = 0; // 싱크로노이즈: 같은 타입끼리만
   const blocked = immunity(attacker, defender, move, typeMult); // 특성 무효·흡수 (축전·부유·불가사의부적 …)
   if (blocked) typeMult = 0;
   const burn = physical && attacker.status === 'burn' && !ignoresBurn(attacker) ? 0.5 : 1; // 화상: 물리 데미지 절반 (근성 제외)
@@ -98,6 +108,7 @@ export function fixedDamage(attacker, defender, move, weather = null) {
     case 'level': case 'psywave': return attacker.level; // 사이코웨이브는 전투에서 0.5~1.5배로 굴림 (예상은 평균)
     case 'half': return Math.max(1, Math.floor(defender.hp / 2)); // 분노의앞니
     case 'endeavor': return Math.max(0, defender.hp - attacker.hp); // 죽기살기: 내 HP 까지 깎음
+    case 'gambit': return attacker.hp; // 목숨걸기: 내 HP 만큼 (쓴 쪽은 기절)
     case 'ohko': return defender.boss || defender.level > attacker.level ? 0 : defender.hp; // 일격필살: 보스·레벨 높은 상대에겐 안 됨
     default: return move.fixedDamage;
   }

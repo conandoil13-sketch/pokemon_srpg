@@ -36,8 +36,10 @@ test('2nd-stage adjustment: at least previous level + 8, none after a stone', ()
   assert.equal(classifyEvolution([d({ minLevel: 33 })], { length: 3, order: 2, prevLevel: 30 }).level, 33);
 });
 
-test('priority: stone > original level > friendship > trade > other', () => {
-  assert.deepEqual(classifyEvolution([d({ trigger: 'use-item', item: 'x' }), d({ minLevel: 20 })], { length: 2, order: 1, prevLevel: null }), { kind: 'stone' });
+test('priority: original level > stone > friendship > trade > other', () => {
+  // 원작 레벨이 있으면 레벨 (리전폼의 돌 조건이 같이 와도: 모래두지·찌리리공·달막화)
+  assert.deepEqual(classifyEvolution([d({ trigger: 'use-item', item: 'x' }), d({ minLevel: 20 })], { length: 2, order: 1, prevLevel: null }), { kind: 'level', level: 20, source: 'original' });
+  assert.deepEqual(classifyEvolution([d({ trigger: 'use-item', item: 'x' }), d({ trigger: 'trade' })], { length: 2, order: 1, prevLevel: null }), { kind: 'stone' });
   assert.equal(classifyEvolution([d({ minLevel: 30, extra: true })], { length: 2, order: 1, prevLevel: null }).source, 'other');
   assert.equal(classifyEvolution([d({ minLevel: 30, extra: true })], { length: 2, order: 1, prevLevel: null }).level, 25);
   assert.equal(classifyEvolution([d({ trigger: 'trade' }), d({ minHappiness: 1 })], { length: 2, order: 1, prevLevel: null }).source, 'friendship');
