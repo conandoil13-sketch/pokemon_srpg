@@ -107,7 +107,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       const nameEnd = ui.drawNameWithGender(ctx, m.species, m.gender, 54, 23);
       drawText(ctx, `Lv.${m.level}`, nameEnd + 8, 23);
       typesOfMember(m).forEach((ty, k) => ui.drawTypeBadge(ctx, ty, 54 + k * 34, 39)); // 메타몽은 빌드 타입
-      const sub = `${i + 1}/${list.length}  ▲▼ 다른 동료`;
+      const sub = pg === 3 && !m.build && abilityRows(m).length > 1 ? `${i + 1}/${list.length}` : `${i + 1}/${list.length}  ▲▼ 다른 동료`; // 특성 페이지에선 위아래 = 특성
       drawText(ctx, sub, W - 10 - textWidth(sub, 'small'), 52, '#909090', null, 'small');
       const y0 = 68, small = (text, x, y, c = '#383838') => drawText(ctx, text, x, y, c, null, 'small');
       if (pg === 0) {
