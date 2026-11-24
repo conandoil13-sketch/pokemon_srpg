@@ -6,12 +6,13 @@ import { josa } from '../data/text.js';
 import { abilityOf } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
 import { rollExtra, extraTier, EXTRA_COST, TIER_ODDS } from '../core/extraAbility.js';
-import { rouletteTimeline, rouletteAt } from './roulette.js';
+import { reelTimeline, reelAt } from './roulette.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
 import { W, H } from '../render/screen.js';
 import { CHOICE_LOCK } from './learnFlow.js';
 
+const at0 = (r) => (r.phase === 'upgrade' ? -1 : ((Math.round(r.pos) % r.ring.length) + r.ring.length) % r.ring.length); // Task 2 에서 슬롯으로 교체
 export const TIER_COLOR = { S: '#e0a818', A: '#d84040', B: '#3870d8', C: '#8c8c8c' };
 const YN = '확인: 예 · 취소: 아니오';
 const shardsOf = (game, m) => game.shards?.[lineRoot(m.species)] ?? 0;
@@ -35,7 +36,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
   let mode = 'view', msg = null, t = 0, result = null, tl = null;
   const enter = (md) => { mode = md; t = 0; };
   const say = (lines) => { msg = lines; enter('msg'); };
-  const revealEnd = () => tl.steps.at(-1).t + 0.6;
+  const revealEnd = () => tl.end;
   // 룰렛이 도는 동안 뒤 화면은 예전 2칸 (결과를 미리 보여 주지 않게)
   const shownExtra = () => (mode === 'spin' && result ? result.prev : m.extraAbility ?? null);
 
@@ -43,7 +44,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
     const r = rollExtra(game, m.uid ?? m.species);
     if (!r.ok) { say([`${lineName(m)} 계열 결정이 모자라다 (${shardsOf(game, m)}/${EXTRA_COST})`]); return; }
     onSave(); // 결과는 연출 전에 이미 저장
-    result = r; tl = rouletteTimeline(r);
+    result = r; tl = reelTimeline(r);
     enter('spin');
   }
 
@@ -60,7 +61,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
   }
 
   function drawRoulette(ctx, time) {
-    const at = rouletteAt(tl, t), n = at.ring.length, cell = 40, gap = 6;
+    const r0 = reelAt(tl, t), at = { ...r0, index: at0(r0) }, n = at.ring.length, cell = 40, gap = 6;
     const shake = at.phase === 'upgrade' ? Math.round(Math.sin(t * 60) * 2) : 0;
     ctx.fillStyle = 'rgba(16,20,36,0.86)'; ctx.fillRect(0, 0, W, H);
     const x0 = Math.round((W - (n * cell + (n - 1) * gap)) / 2) + shake, y0 = 70;

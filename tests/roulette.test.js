@@ -1,56 +1,54 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rouletteTimeline, rouletteAt } from '../src/game/roulette.js';
+import { reelTimeline, reelAt } from '../src/game/roulette.js';
 import { extraMenuItem } from '../src/game/extraRoll.js';
 import { newMember } from '../src/core/progress.js';
 
 const hasS = (ring) => ring.includes('S');
 const kinds = (tl) => tl.steps.map((s) => s.kind);
-
-test('S always upgrades', () => {
-  const tl = rouletteTimeline({ tier: 'S', tease: false });
-  assert.equal(tl.upgrade, true);
-  assert.equal(tl.stopTier, 'S');
-  const up = tl.steps.findIndex((s) => s.kind === 'upgrade');
-  assert.ok(up > 0);
-  assert.ok(tl.steps.slice(0, up).every((s) => !hasS(s.ring)));
-  assert.ok(tl.steps.slice(up).every((s) => hasS(s.ring)));
-});
-
-test('tease upgrades then stops below S', () => {
-  const tl = rouletteTimeline({ tier: 'A', tease: true });
-  assert.equal(tl.upgrade, true);
-  assert.equal(tl.stopTier, 'A');
-  assert.ok(kinds(tl).includes('upgrade'));
-});
+const stepT = (tl, k) => tl.steps.find((s) => s.kind === k).t;
+const sweep = (tl, f) => { for (let t = 0; t <= tl.end; t += 0.02) f(reelAt(tl, t), t); };
 
 test('plain roll never shows S', () => {
-  const tl = rouletteTimeline({ tier: 'B', tease: false });
+  const tl = reelTimeline({ tier: 'B', tease: false });
   assert.equal(tl.upgrade, false);
-  assert.equal(tl.stopTier, 'B');
-  assert.ok(tl.steps.every((s) => !hasS(s.ring)));
   assert.ok(!kinds(tl).includes('upgrade'));
+  sweep(tl, (at) => assert.ok(!hasS(at.ring)));
 });
 
-test('steps end with stop then reveal', () => {
-  for (const r of [{ tier: 'S', tease: false }, { tier: 'A', tease: true }, { tier: 'C', tease: false }]) {
-    const tl = rouletteTimeline(r), k = kinds(tl);
-    assert.deepEqual(k.slice(-2), ['stop', 'reveal']);
-    assert.equal(k[0], 'spin');
-    for (let i = 1; i < tl.steps.length; i++) assert.ok(tl.steps[i].t > tl.steps[i - 1].t);
-    assert.ok(tl.steps.at(-1).t <= 3.5);
+test('S always upgrades', () => {
+  const tl = reelTimeline({ tier: 'S', tease: false }), up = stepT(tl, 'upgrade');
+  assert.equal(tl.upgrade, true);
+  sweep(tl, (at, t) => assert.equal(hasS(at.ring), t >= up, `t=${t}`));
+});
+
+test('reel lands on the result tier', () => {
+  for (const r of [{ tier: 'S', tease: false }, { tier: 'A', tease: true }, { tier: 'A', tease: false }, { tier: 'B', tease: false }, { tier: 'C', tease: false }, { tier: 'B', tease: true }]) {
+    const tl = reelTimeline(r), stop = stepT(tl, 'stop');
+    assert.equal(tl.stopTier, r.tier);
+    assert.equal(reelAt(tl, stop + 0.31).symbol, r.tier, JSON.stringify(r));
+    assert.equal(reelAt(tl, tl.end).symbol, r.tier);
+    assert.ok(tl.end <= 4.5, `end ${tl.end}`);
   }
 });
 
-test('the highlighted cell lands on the result tier', () => {
-  for (const r of [{ tier: 'S', tease: false }, { tier: 'A', tease: true }, { tier: 'A', tease: false }, { tier: 'B', tease: false }, { tier: 'C', tease: false }]) {
-    const tl = rouletteTimeline(r), stop = tl.steps.find((s) => s.kind === 'stop');
-    const at = rouletteAt(tl, stop.t + 0.01);
-    assert.equal(at.ring[at.index], r.tier);
-    assert.equal(at.phase, 'stop');
-    const early = rouletteAt(tl, 0.2);
-    assert.equal(early.phase, 'spin');
-    if (!tl.upgrade) assert.ok(!hasS(early.ring));
+test('tease pauses on S first', () => {
+  for (const tier of ['A', 'B']) {
+    const tl = reelTimeline({ tier, tease: true }), at = reelAt(tl, stepT(tl, 'tease') + 0.2);
+    assert.equal(at.symbol, 'S');
+    assert.equal(at.speed, 0);
+  }
+  assert.ok(!kinds(reelTimeline({ tier: 'A', tease: false })).includes('tease'));
+});
+
+test('steps in order', () => {
+  for (const r of [{ tier: 'S' }, { tier: 'A', tease: true }, { tier: 'C' }]) {
+    const tl = reelTimeline(r), k = kinds(tl);
+    assert.equal(k[0], 'spin');
+    assert.deepEqual(k.slice(-2), ['stop', 'reveal']);
+    for (let i = 1; i < tl.steps.length; i++) assert.ok(tl.steps[i].t > tl.steps[i - 1].t);
+    assert.ok(reelAt(tl, 0.06).pos < 0, 'kicks up first');
+    assert.ok(reelAt(tl, 0.5).speed > 10, 'spins fast');
   }
 });
 
