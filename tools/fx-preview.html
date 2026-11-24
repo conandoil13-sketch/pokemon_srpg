@@ -25,23 +25,50 @@
   .tag { display: inline-block; padding: 0 6px; border-radius: 4px; font-size: 12px; background: #2c3548; color: var(--muted); }
   .tag.next { background: #3a3418; color: var(--accent); }
   .tablewrap { overflow-x: auto; }
+  .layout { display: grid; grid-template-columns: minmax(300px, 440px) 1fr; gap: 16px; align-items: start; }
+  .stage { position: sticky; top: 12px; }
+  .card { background: var(--panel); border: 1px solid #2c3548; border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+  .card h3 { margin: 0 0 8px; font-size: 13px; color: var(--accent); letter-spacing: .02em; }
+  .card .row { margin-bottom: 6px; gap: 8px; }
+  .card select, .card input[type=text] { background: var(--bg); }
+  input[type=text] { color: var(--ink); border: 1px solid #39445c; border-radius: 6px; padding: 6px 8px; font: inherit; }
+  #moveList { width: 100%; height: 260px; }
+  #moveCount { color: var(--muted); font-size: 12px; }
+  @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .stage { position: static; } }
 </style>
 </head>
 <body>
 <h1>이펙트 미리보기</h1>
 <p class="note">개발용 페이지 (게임에서 연결되지 않음). 게임과 같은 <code>fxForMove</code> · <code>fxForAilment</code> · <code>EFFECT_FX</code> 를 그대로 호출한다. 왼쪽부터 아군 · 나 · 적 (칸 24px).</p>
+<div class="layout"><div class="side">
+<div class="card"><h3>기술 고르기</h3>
+<div class="row">
+  <input type="text" id="mFind" placeholder="기술 이름" style="flex:1;min-width:120px">
+  <select id="mType"><option value="">모든 타입</option></select>
+  <select id="mCat"><option value="">물리·특수</option><option value="physical">물리</option><option value="special">특수</option></select>
+</div>
+<div class="row">
+  <select id="mFam"><option value="">모든 계열</option></select>
+  <select id="mPow"><option value="">모든 위력</option><option value="0-50">≤50</option><option value="51-89">51–89</option><option value="90-999">≥90</option></select>
+  <span id="moveCount"></span>
+</div>
+<select id="moveList" size="12"></select>
+<div class="row" style="margin-top:8px">
+  <label>거리 <select id="dist"><option value="1" selected>1칸 (근접)</option><option value="2">2칸</option><option value="3">3칸</option></select></label>
+  <button class="primary" id="playMove">기술 재생</button>
+  <select id="move" style="display:none"></select>
+</div>
+<p class="note" style="margin:0">목록에서 클릭하면 바로 재생 · ↑↓ 로 넘기며 보기</p>
+</div>
+<div class="card"><h3>타입 · 모양으로 재생</h3>
 <div class="row">
   <label>타입 <select id="type"></select></label>
   <label>위력 <select id="tier"><option value="40">약 (≤50)</option><option value="70" selected>중</option><option value="100">강 (≥90)</option></select></label>
   <label>분류 <select id="cat"><option value="physical">물리</option><option value="special" selected>특수</option></select></label>
   <label>모양 <select id="shape"><option value="single1">단일 (1칸)</option><option value="single2">단일 (원거리)</option><option value="line">직선</option><option value="cone">부채꼴</option><option value="around">주변</option><option value="blast">착탄</option></select></label>
   <button class="primary" id="play">재생</button>
-</div>
-<div class="row">
-  <label>기술 <select id="move"></select></label>
-  <label>거리 <select id="dist"><option value="1" selected>1칸 (근접)</option><option value="2">2칸</option><option value="3">3칸</option></select></label>
-  <button class="primary" id="playMove">기술 재생</button>
-</div>
+</div></div>
+<div class="card"><h3>변화기 · 상태이상</h3>
 <div class="row">
   <label>변화기 효과 <select id="effect"></select></label>
   <button class="primary" id="playEffect">효과 재생</button>
@@ -54,9 +81,11 @@
   <label><input type="checkbox" id="loop"> 반복</label>
   <button id="reroll">포켓몬 바꾸기</button>
   <span id="cast" style="color:var(--muted)"></span>
-</div>
+</div></div>
+</div><div class="stage">
 <canvas id="cv" width="256" height="192"></canvas>
 <div id="info"></div>
+</div></div>
 
 <h2>아직 못 배우는 기술 <span id="leftCount" style="color:var(--muted)"></span></h2>
 <p class="note">동료·적 습득표에 나오지만 아직 효과가 없어 배울 수 없는 기술 (실시간 계산). 열 제목을 누르면 정렬.</p>
@@ -140,7 +169,23 @@ function playAil() {
 }
 // 실제 기술: 게임과 같은 순서 (사용자 쪽 cast → 탄이 0.25초 날아감 → 대상에 hit)
 const attacks = Object.values(MOVES).filter((m) => m.learnable && m.category !== 'status').sort((a, b) => (familyOf(a) ?? 'z').localeCompare(familyOf(b) ?? 'z') || a.name.localeCompare(b.name));
+// 기술 필터: 이름 · 타입 · 분류 · 계열 · 위력 → 목록 (클릭/↑↓ = 바로 재생)
+const catKo = (c) => (c === 'physical' ? '물리' : '특수');
+$('mType').innerHTML += [...new Set(attacks.map((m) => m.type))].sort().map((t) => `<option>${t}</option>`).join('');
+$('mFam').innerHTML += [...new Set(attacks.map((m) => familyOf(m)).filter(Boolean))].sort().map((f) => `<option>${f}</option>`).join('');
+function fillMoves() {
+  const q = $('mFind').value.trim().toLowerCase(), ty = $('mType').value, ca = $('mCat').value, fa = $('mFam').value, pw = $('mPow').value;
+  const [lo, hi] = pw ? pw.split('-').map(Number) : [0, 1e9];
+  const list = attacks.filter((m) => (!q || m.name.toLowerCase().includes(q) || m.id.includes(q)) && (!ty || m.type === ty) && (!ca || m.category === ca) && (!fa || familyOf(m) === fa) && (m.power ?? 0) >= lo && (m.power ?? 0) <= hi);
+  const cur = $('move').value;
+  $('moveList').innerHTML = list.map((m) => `<option value="${m.id}">${m.name} · ${m.type} · ${catKo(m.category)} · ${m.power ?? '-'}${familyOf(m) ? ' · ' + familyOf(m) : ''}</option>`).join('');
+  if (list.some((m) => m.id === cur)) $('moveList').value = cur;
+  $('moveCount').textContent = `${list.length}개`;
+}
+for (const id of ['mFind', 'mType', 'mCat', 'mFam', 'mPow']) $(id).addEventListener('input', fillMoves);
+$('moveList').addEventListener('change', () => { if ($('moveList').value) { $('move').value = $('moveList').value; playMove(); } });
 $('move').innerHTML = attacks.map((m) => `<option value="${m.id}" ${m.id === 'bite' ? 'selected' : ''}>${m.name} · ${m.type} · ${m.category === 'physical' ? '물리' : '특수'}${familyOf(m) ? ' · ' + familyOf(m) : ''}</option>`).join('');
+fillMoves();
 let flying = null, timers = [], lastPlay = null, sky = null; // sky: 날씨 부르기 (펑 → 날씨)
 const later = (fn, ms) => timers.push(setTimeout(fn, ms));
 function reset() { for (const t of timers) clearTimeout(t); timers = []; flying = null; sky = null; fx.clear(); }
