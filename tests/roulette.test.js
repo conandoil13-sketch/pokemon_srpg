@@ -79,3 +79,39 @@ test('the old slot 2 stays on screen until the spin ends', async () => {
   assert.equal(r.mode, 'view');
   assert.equal(r.shownExtra, m.extraAbility);
 });
+
+const rollScreen = (extraSeq, shards = 6) => {
+  const m = { ...newMember('charmander', 30), extraAbility: null };
+  const game = { party: [m], shards: { charmander: shards }, extraSeq };
+  return { m, game };
+};
+const startRoll = async (extraSeq) => {
+  const { createExtraRoll } = await import('../src/game/extraRoll.js');
+  const { m, game } = rollScreen(extraSeq);
+  const r = createExtraRoll({ game, member: m, onClose() {} });
+  r.handle({ type: 'confirm' }); r.update(1); r.handle({ type: 'confirm' });
+  return r;
+};
+
+test('skip during the reel jumps to the result', async () => {
+  const r = await startRoll(65); // B 낚시
+  r.update(1.0);
+  r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'spin');
+  r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'view');
+});
+
+test('effects fire once per step', async () => {
+  const r = await startRoll(17); // S
+  assert.equal(r.result.tier, 'S');
+  for (let i = 0; i < 120; i++) r.update(0.05);
+  const n = (id) => r.fxLog.filter((x) => x === id).length;
+  assert.equal(n('lightning/thunderclap'), 2); // 업그레이드 + 멈춤
+  assert.equal(n('holy/blessing'), 1);
+  assert.equal(n('pickups/collect-burst'), 3); // 멈춤 1 + 공개 양쪽 2
+  r.handle({ type: 'confirm' }); // 결과 닫기
+  r.handle({ type: 'confirm' }); r.update(1); r.handle({ type: 'confirm' }); // 다시 굴림
+  assert.equal(r.mode, 'spin');
+  assert.equal(r.fxLog.length, 0);
+});
