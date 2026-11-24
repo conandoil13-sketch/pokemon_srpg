@@ -165,3 +165,55 @@ test('contrary flips stage changes, but not against a mold breaker', () => {
   applyMove(mb.s, mb.a.id, 'growl', mb.f.id, hit);
   assert.equal(mb.f.stages.atk, -1);
 });
+
+test('moody: at its phase end, one stat +2 and a different one −1, never accuracy or evasion', () => {
+  const { s, a } = duel('remoraid', 'rattata', { ally: { ability: 'moody' } });
+  const seq = [0.1, 0.9]; let k = 0;
+  endPhase(s, () => seq[k++ % 2]);
+  const ch = Object.entries(a.stages).filter(([, v]) => v !== 0);
+  assert.deepEqual(ch.map(([, v]) => v).sort(), [-1, 2]);
+  assert.ok(ch.every(([key]) => key !== 'acc' && key !== 'eva'));
+  assert.notEqual(ch[0][0], ch[1][0]);
+  const full = duel('remoraid', 'rattata', { ally: { ability: 'moody' } });
+  for (const key of ['atk', 'def', 'spa', 'spd', 'spe']) full.a.stages[key] = 6;
+  assert.doesNotThrow(() => endPhase(full.s, () => 0.5));
+});
+
+test('magic bounce: a status move on the holder or a foe next to it goes back to the caster, once', () => {
+  const { s, a, f } = duel('pikachu', 'natu', { foe: { ability: 'magic-bounce' } });
+  const r = applyMove(s, a.id, 'thunder-wave', f.id, hit);
+  assert.equal(a.status, 'paralysis'); assert.equal(f.status, null);
+  assert.ok(r.abilityEvents.some((e) => e.ability === 'magic-bounce'));
+  // 보유자 옆 칸의 적에게 울음소리 → 시전자 공격 −1
+  const n = duel('rattata', 'natu', { extra: [{ species: 'snorlax', x: 2, y: 2, level: 40 }] });
+  const sn = n.s.units.find((u) => u.species === 'snorlax');
+  n.f.ability = 'magic-bounce';
+  applyMove(n.s, n.a.id, 'growl', sn.id, hit);
+  assert.equal(n.a.stages.atk, -1); assert.equal(sn.stages.atk ?? 0, 0);
+  // 두 칸 떨어진 적은 보호 안 됨
+  const far = duel('rattata', 'natu', { extra: [{ species: 'snorlax', x: 1, y: 3, level: 40 }] });
+  const sf = far.s.units.find((u) => u.species === 'snorlax');
+  far.f.ability = 'magic-bounce';
+  applyMove(far.s, far.a.id, 'growl', sf.id, hit);
+  assert.equal(sf.stages.atk, -1);
+});
+
+test('magic bounce: a holder caster does not bounce it again; mold breaker is not bounced; own-side moves are not bounced', () => {
+  const both = duel('natu', 'natu', { ally: { ability: 'magic-bounce' }, foe: { ability: 'magic-bounce' } });
+  applyMove(both.s, both.a.id, 'thunder-wave', both.f.id, hit);
+  assert.equal(both.a.status, 'paralysis');
+  const mb = duel('pikachu', 'natu', { ally: { ability: 'mold-breaker' }, foe: { ability: 'magic-bounce' } });
+  applyMove(mb.s, mb.a.id, 'thunder-wave', mb.f.id, hit);
+  assert.equal(mb.f.status, 'paralysis');
+  const own = duel('natu', 'rattata', { ally: { ability: 'magic-bounce' } });
+  applyMove(own.s, own.a.id, 'swords-dance', own.a.id, hit);
+  assert.equal(own.a.stages.atk, 2);
+});
+
+test('magic bounce: spikes aimed into the protected area land around the caster instead, as the holder side traps', () => {
+  const { s, a, f } = duel('cloyster', 'natu', { foe: { ability: 'magic-bounce' } });
+  f.x = 4; f.y = 1;
+  const r = applyMove(s, a.id, 'spikes', { x: 3, y: 1 }, hit);
+  assert.ok(r.trapsLaid.length > 0);
+  for (const t of s.spikes) { assert.equal(t.side, 'enemy'); assert.ok(Math.abs(t.x - a.x) + Math.abs(t.y - a.y) <= 1); }
+});
