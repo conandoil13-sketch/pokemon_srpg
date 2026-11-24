@@ -46,7 +46,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
   let mode = 'view', msg = null, t = 0, result = null, tl = null;
   // 슬롯 연출 상태: 이번 굴림에서 띄운 이펙트 · 지난 단계 · 전구 시계 · 흔들림
   const makeCanvas = typeof document !== 'undefined' ? (w, h) => Object.assign(document.createElement('canvas'), { width: w, height: h }) : null;
-  let fxm = null, fxLog = [], fired = new Set(), chase = 0, shakeT = 0, shakeAmp = 0, flashT = 0, flashColor = '255,240,180';
+  let fxm = null, fxLog = [], fxSpots = [], fired = new Set(), chase = 0, shakeT = 0, shakeAmp = 0, flashT = 0, flashColor = '255,240,180';
   const enter = (md) => { mode = md; t = 0; };
   const say = (lines) => { msg = lines; enter('msg'); };
   const revealEnd = () => tl.end;
@@ -54,18 +54,26 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
   const shownExtra = () => (mode === 'spin' && result ? result.prev : m.extraAbility ?? null);
 
   const PAY_Y = 92; // 가운데 줄 높이
-  const spawn = (id, { opts, at = { x: W / 2, y: PAY_Y + 18 }, life } = {}) => { fxLog.push(id); fxm?.spawn({ id, ...(opts ? { opts } : {}), ...(life ? { life } : {}) }, at); };
+  const spawn = (id, { opts, at = { x: W / 2, y: PAY_Y + 18 }, life, dir } = {}) => {
+    fxLog.push(id); fxSpots.push({ id, x: at.x, y: at.y });
+    fxm?.spawn({ id, ...(opts ? { opts } : {}), ...(life ? { life } : {}) }, at, dir ? { dir } : undefined);
+  };
+  // 작은 불꽃은 릴 창 뒤에 가려지므로 가운데 줄 화살표 양옆에서 바깥으로 튄다
+  const sideSparks = (opts) => {
+    spawn('impacts/hit-spark', { opts, at: { x: W / 2 - 44, y: PAY_Y + 20 }, dir: 'left' });
+    spawn('impacts/hit-spark', { opts, at: { x: W / 2 + 44, y: PAY_Y + 20 }, dir: 'right' });
+  };
   const GOLD_BURST = ['#2a1405', '#5c3008', '#9a5a0e', '#d48e18', '#f5b92c', '#ffde5e', '#fff4bc', '#ffffff'];
   const shake = (amp, dur) => { shakeAmp = amp; shakeT = dur; };
   const flash = (rgb, dur = 0.35) => { flashColor = rgb; flashT = dur; };
   const BLUE_SPARK = ['#0c1a40', '#183c8c', '#3870d8', '#5c98f0', '#a0c8ff', '#d8ecff', '#ffffff'];
   function fire(kind) { // 단계마다 한 번
     const tier = result.tier;
-    if (kind === 'tease') { spawn('impacts/hit-spark', { opts: { palette: GOLD_BURST.slice(1) } }); flash('255,230,120', 0.12); } // S 에 걸린 척
+    if (kind === 'tease') { sideSparks({ palette: GOLD_BURST.slice(1) }); flash('255,230,120', 0.12); } // S 에 걸린 척
     if (kind === 'upgrade') { spawn('lightning/thunderclap', { life: 0.45 }); shake(2, 0.6); flash('255,240,180', 0.3); }
     if (kind === 'stop') {
-      if (tier === 'C') spawn('impacts/hit-spark');
-      if (tier === 'B') spawn('impacts/hit-spark', { opts: { palette: BLUE_SPARK } });
+      if (tier === 'C') sideSparks();
+      if (tier === 'B') sideSparks({ palette: BLUE_SPARK });
       if (tier === 'A') { spawn('impacts/crit-hit'); shake(2, 0.25); flash('255,150,150', 0.15); }
       if (tier === 'S') { spawn('lightning/thunderclap', { life: 0.5 }); spawn('holy/blessing'); spawn('pickups/collect-burst', { opts: { palette: GOLD_BURST } }); shake(3, 0.45); flash('255,220,90', 0.35); }
     }
@@ -81,7 +89,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
     if (!r.ok) { say([`${lineName(m)} 계열 결정이 모자라다 (${shardsOf(game, m)}/${EXTRA_COST})`]); return; }
     onSave(); // 결과는 연출 전에 이미 저장
     result = r; tl = reelTimeline(r);
-    fxm = createFxManager({ makeCanvas }); fxLog = []; fired = new Set(); chase = 0; shakeT = 0; flashT = 0;
+    fxm = createFxManager({ makeCanvas }); fxLog = []; fxSpots = []; fired = new Set(); chase = 0; shakeT = 0; flashT = 0;
     enter('spin');
   }
 
@@ -221,6 +229,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
       }
     },
     get fxLog() { return fxLog; },
+    get fxSpots() { return fxSpots; },
     update(dt) {
       t += dt;
       if (mode !== 'spin' || !tl) return;

@@ -125,3 +125,13 @@ test('odds bar segments fill the width in S, A, B, C order', async () => {
   assert.equal(seg.at(-1).x + seg.at(-1).w, 200);
   assert.deepEqual(seg.map((s) => s.w), [10, 30, 60, 100]);
 });
+
+test('small sparks sit outside the reel window', async () => {
+  for (const seq of [1, 2, 65]) { // C, B, B 낚시
+    const r = await startRoll(seq);
+    for (let i = 0; i < 100; i++) r.update(0.05);
+    const sparks = r.fxSpots.filter((s) => s.id === 'impacts/hit-spark');
+    assert.ok(sparks.length >= 2, `seq ${seq}`);
+    for (const s of sparks) assert.ok(s.x < 98 || s.x > 158, `seq ${seq} x=${s.x}`);
+  }
+});
