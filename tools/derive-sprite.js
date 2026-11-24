@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, readdirSync, copyFileSync } fro
 import { readPng, writePng } from './png.js';
 import { reshapeCrest, widen } from './sprite-shape.js';
 import * as BOUFFALANT from './sprite-art/0626.js';
+import * as BLITZLE from './sprite-art/0522.js';
 
 const ROOT = new URL('../assets/sprites/pmd/sprite/', import.meta.url);
 
@@ -25,6 +26,7 @@ export const DERIVED = {
     '1f77af': 'c83c34', '174f76': '7c2020', '67a7c7': 'e8705c', 'afd7ff': 'ffc0a8',
     'a4ccc0': 'd8d8d0', '679f8f': '98988e', 'c1f7ef': 'f8f8f0',
   } },
+  '0522': { from: '0077', name: '줄뮤마 (포니타 시트에 흰 번개 갈기·검은 몸·줄무늬·파란 눈을 새로 칠함)', map: {}, art: BLITZLE, anims: ['Idle', 'Walk', 'Attack', 'Shoot', 'Hurt', 'Sleep'] },
   '0626': { from: '0128', name: '버프론 (켄타로스 대기·걷기를 뼈대로 몸 색·아프로·뿔·얼굴을 새로 그림)', map: {}, art: BOUFFALANT, anims: ['Idle', 'Walk'], copies: { Attack: 'Walk' } }, // 공격 = 걷기(돌진) 재사용, 나머지는 게임이 대기로 대신
 };
 
@@ -50,7 +52,7 @@ export function derive(dex) {
   if (anims) xml = xml.replace(/\s*<Anim>[\s\S]*?<\/Anim>/g, (b) => (anims.includes(b.match(/<Name>(\w+)/)[1]) ? b : ''));
   if (copies) xml = xml.replace(/(\s*)<\/Anims>/, (_, ws) => `${Object.entries(copies).map(([a, b]) => `${ws}\t<Anim>${ws}\t\t<Name>${a}</Name>${ws}\t\t<CopyOf>${b}</CopyOf>${ws}\t</Anim>`).join('')}${ws}</Anims>`);
   const sizes = frameSizes(xml);
-  art?.reference(readPng(readFileSync(new URL('Idle-Anim.png', src))));
+  art?.reference?.(readPng(readFileSync(new URL('Idle-Anim.png', src))));
   for (const f of readdirSync(src)) {
     const m = f.match(/^(\w+)-(Anim|Offsets|Shadow)\.png$/), size = m && sizes[m[1]];
     if (m && anims && !anims.includes(m[1])) continue;

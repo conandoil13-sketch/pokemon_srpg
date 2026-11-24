@@ -1,0 +1,4 @@
+2020-10-07 17:58:43.554821	CHUNSOFT	CUR	Unspecified	Walk,Attack,Strike,Shoot,RearUp,Sleep,Hurt,Idle,Swing,Double,Hop,Charge,Rotate
+2025-03-11 05:13:10.454377	<@!702275233125630042>	CUR	CC_BY-NC_4	EventSleep,Wake,Eat,Tumble,Pose,Pull,Pain,Float,DeepBreath,Nod,Sit,LookUp,Sink,Trip,Laying,LeapForth,Head,Cringe,LostBalance,TumbleBack,HitGround,Faint
+2025-03-18 05:33:22.818298	<@!702275233125630042>	CUR	CC_BY-NC_4	Wake,Nod,HitGround,Faint
+# 파생: 줄뮤마 (포니타 시트에 흰 번개 갈기·검은 몸·줄무늬·파란 눈을 새로 칠함) — 원본 0077 시트에서 그림을 새로 그림 (포켓몬 택틱스 도구 tools/derive-sprite.js)
