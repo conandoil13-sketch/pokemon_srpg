@@ -24,6 +24,16 @@ export function extraMenuItem(game, m) {
   return { label: '특성 각성', enabled: n >= EXTRA_COST, act: 'extra', why: [`${lineName(m)} 계열 결정이 모자라다 (${n}/${EXTRA_COST})`] };
 }
 
+// 확률 막대: S·A·B·C 순서로 폭을 나눔 (마지막 칸이 남은 폭을 채워 합이 정확히 width)
+export function oddsSegments(width) {
+  const order = ['S', 'A', 'B', 'C'];
+  let x = 0;
+  return order.map((tier, i) => {
+    const w = i === order.length - 1 ? width - x : Math.round(width * TIER_ODDS[tier]);
+    const seg = { tier, x, w }; x += w; return seg;
+  });
+}
+
 // 등급 배지 (작은 색 칸 + 글자)
 export function drawTierBadge(ctx, tier, x, y) {
   if (!tier) return 0;
@@ -75,16 +85,29 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
     enter('spin');
   }
 
-  function drawAbilityRow(ctx, label, id, y, { tier = null, faded = false, note = null } = {}) {
-    drawText(ctx, label, 10, y, '#7080a0', null, 'small');
-    const ab = id ? ABILITIES[id] : null;
-    if (!ab) { drawText(ctx, '없음', 34, y - 2, '#909090'); return; }
-    const color = faded ? '#a0a0a0' : '#383838';
-    drawText(ctx, ab.name, 34, y - 2, color, '#d8d8d0');
-    let x = 38 + textWidth(ab.name);
-    x += drawTierBadge(ctx, tier, x, y - 1);
-    if (note) drawText(ctx, note, x + 2, y, '#a0a0a0', null, 'small');
-    ui.wrapWords(ab.desc, W - 44, 'small').slice(0, 2).forEach((l, k) => drawText(ctx, l, 34, y + 13 + k * 11, faded ? '#b0b0b0' : '#606060', null, 'small'));
+  // 특성 카드: 왼쪽 색 띠(2칸은 등급색) + 칸 이름 + 특성 + 설명 2줄. 빈 2칸은 점선 상자
+  function drawAbilityCard(ctx, label, id, y, h, { tier = null, faded = false, note = null, stripe = '#7080a0' } = {}) {
+    const x = 4, w = W - 8, ab = id ? ABILITIES[id] : null;
+    if (!ab) {
+      ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = '#56607c';
+      for (let i = x; i < x + w; i += 6) { ctx.fillRect(i, y, 3, 1); ctx.fillRect(i, y + h - 1, 3, 1); }
+      for (let j = y; j < y + h; j += 6) { ctx.fillRect(x, j, 1, 3); ctx.fillRect(x + w - 1, j, 1, 3); }
+      drawText(ctx, label, x + 8, y + 5, '#8090b8', null, 'small');
+      const q = '?'; drawText(ctx, q, W / 2 - textWidth(q) / 2, y + h / 2 - 8, '#8090b8', null);
+      const hint = `비어 있음 · 결정 ${EXTRA_COST}개로 각성`;
+      drawText(ctx, hint, W / 2 - textWidth(hint, 'small') / 2, y + h - 14, '#8090b8', null, 'small');
+      return;
+    }
+    ui.drawWindow(ctx, x, y, w, h);
+    ctx.fillStyle = faded ? '#b0b0b0' : stripe; ctx.fillRect(x + 3, y + 3, 4, h - 6);
+    drawText(ctx, label, x + 11, y + 5, '#7080a0', null, 'small');
+    const nx = x + 11 + textWidth(label, 'small') + 6;
+    drawText(ctx, ab.name, nx, y + 3, faded ? '#a0a0a0' : '#383838', '#d8d8d0');
+    let ex = nx + 4 + textWidth(ab.name);
+    ex += drawTierBadge(ctx, tier, ex, y + 4);
+    if (note) drawText(ctx, note, ex + 2, y + 5, '#a0a0a0', null, 'small');
+    ui.wrapWords(ab.desc, w - 20, 'small').slice(0, 2).forEach((l, k) => drawText(ctx, l, x + 11, y + 19 + k * 11, faded ? '#b0b0b0' : '#606060', null, 'small'));
   }
 
   // 릴 칸 하나 (등급색 타일 + 큰 글자)
@@ -214,21 +237,26 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
       drawText(ctx, who, 8, 5);
       drawText(ctx, '특성 각성', 14 + textWidth(who), 7, '#c06010', null, 'small');
       drawText(ctx, back, W - 10 - textWidth(back, 'small'), 7, '#7080a0', null, 'small');
-      ui.drawWindow(ctx, 2, 24, W - 4, 92);
-      const one = abilityOf(m), two = shownExtra(), same = two && two === one;
-      drawAbilityRow(ctx, '1칸', one, 32);
-      drawAbilityRow(ctx, '2칸', two, 74, { tier: extraTier(two), faded: same, note: same ? '1칸과 같음' : null });
-      ui.drawWindow(ctx, 2, 118, W - 4, H - 120);
-      const have = `${lineName(m)} 계열 결정 ${shardsOf(game, m)}개`;
-      drawText(ctx, have, 10, 124, shardsOf(game, m) >= EXTRA_COST ? '#383838' : '#a04040', '#d8d8d0');
-      drawText(ctx, `확인: 결정 ${EXTRA_COST}개로 굴리기 · 취소: 닫기`, 10, 142, '#606060', null, 'small');
-      let x = 10;
-      x += textWidth('확률 ', 'small'); drawText(ctx, '확률', 10, 158, '#7080a0', null, 'small');
-      for (const tier of ['S', 'A', 'B', 'C']) {
-        x += drawTierBadge(ctx, tier, x, 157);
-        const p = `${Math.round(TIER_ODDS[tier] * 100)}%`;
-        drawText(ctx, p, x, 158, '#606060', null, 'small'); x += textWidth(p, 'small') + 8;
+      const one = abilityOf(m), two = shownExtra(), same = two && two === one, tier2 = extraTier(two);
+      drawAbilityCard(ctx, '1칸', one, 25, 44);
+      drawAbilityCard(ctx, '2칸', two, 72, 44, { tier: tier2, faded: same, note: same ? '1칸과 같음' : null, stripe: TIER_COLOR[tier2] ?? '#7080a0' });
+      ui.drawWindow(ctx, 2, 120, W - 4, H - 122);
+      const n = shardsOf(game, m), have = `${lineName(m)} 계열 결정 ${n}개`, cost = `1회 ${EXTRA_COST}개`;
+      drawText(ctx, have, 10, 125, n >= EXTRA_COST ? '#383838' : '#a04040', '#d8d8d0');
+      drawText(ctx, cost, W - 12 - textWidth(cost, 'small'), 127, '#7080a0', null, 'small');
+      // 확률 막대 (칸 폭 = 확률) + 아래 글자
+      const bx = 10, by = 143, bw = W - 20, bh = 9;
+      ctx.fillStyle = '#383838'; ctx.fillRect(bx - 1, by - 1, bw + 2, bh + 2);
+      let labEnd = bx - 6; // 글자는 왼쪽부터 겹치지 않게
+      for (const sg of oddsSegments(bw)) {
+        ctx.fillStyle = TIER_COLOR[sg.tier]; ctx.fillRect(bx + sg.x, by, sg.w, bh);
+        ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.fillRect(bx + sg.x, by, sg.w, 2);
+        if (sg.x > 0) { ctx.fillStyle = '#383838'; ctx.fillRect(bx + sg.x, by, 1, bh); }
+        const lab = `${sg.tier} ${Math.round(TIER_ODDS[sg.tier] * 100)}%`, lw = textWidth(lab, 'small');
+        const lx = Math.min(bx + bw - lw, Math.max(labEnd + 6, bx + sg.x + sg.w / 2 - lw / 2));
+        drawText(ctx, lab, lx, by + bh + 3, sg.tier === 'S' ? '#b08000' : '#606060', null, 'small'); labEnd = lx + lw;
       }
+      drawText(ctx, `확인: 굴리기 · 취소: 닫기`, 10, 172, '#7080a0', null, 'small');
       const blink = Math.floor(time * 3) % 2 === 0;
       if (mode === 'confirm') ui.drawMessage(ctx, [two ? `지금 2칸 ${josa(ABILITIES[two].name, '은/는')} 사라진다. 굴릴까?` : `결정 ${EXTRA_COST}개로 굴릴까?`, YN], null, blink);
       if (mode === 'msg') ui.drawMessage(ctx, msg, null, blink);

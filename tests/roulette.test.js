@@ -115,3 +115,13 @@ test('effects fire once per step', async () => {
   assert.equal(r.mode, 'spin');
   assert.equal(r.fxLog.length, 0);
 });
+
+test('odds bar segments fill the width in S, A, B, C order', async () => {
+  const { oddsSegments } = await import('../src/game/extraRoll.js');
+  const seg = oddsSegments(200);
+  assert.deepEqual(seg.map((s) => s.tier), ['S', 'A', 'B', 'C']);
+  assert.equal(seg[0].x, 0);
+  for (let i = 1; i < seg.length; i++) assert.equal(seg[i].x, seg[i - 1].x + seg[i - 1].w);
+  assert.equal(seg.at(-1).x + seg.at(-1).w, 200);
+  assert.deepEqual(seg.map((s) => s.w), [10, 30, 60, 100]);
+});
