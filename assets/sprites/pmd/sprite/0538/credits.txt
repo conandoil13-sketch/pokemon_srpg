@@ -1,0 +1,3 @@
+2026-05-30 03:50:25.493943	<@!356635814668664832>	CUR	CC_BY-NC_4	Idle,Walk,Sleep,Hurt,Attack,Charge,Shoot,Strike,Chop,Swing,Double,Rotate,Hop,Cringe
+2026-05-30 04:27:21.566439	<@!356635814668664832>	CUR	CC_BY-NC_4	Walk,Attack,Strike
+# 파생: 던지미 (타격귀 색 바꿈 → 빨간 몸·흰 도복) — 원본 0539 시트에서 색을 바꿈 (포켓몬 택틱스 도구 tools/derive-sprite.js)

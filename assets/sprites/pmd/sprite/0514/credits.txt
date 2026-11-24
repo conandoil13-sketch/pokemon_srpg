@@ -1,0 +1,2 @@
+2025-07-06 17:04:55.691802	<@!544245909639397378>	CUR	CC_BY-NC_4	Idle,Walk,Sleep,Hurt,Attack,Charge,Shoot,Strike,Sound,Swing,Double,Rotate,Hop
+# 파생: 바오키 (야나키 색 바꿈 → 바오프 빨강) — 원본 0512 시트에서 색·머리 모양을 바꿈 (포켓몬 택틱스 도구 tools/derive-sprite.js)
