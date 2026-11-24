@@ -86,3 +86,82 @@ test('save v11 keeps the hidden unlock; a v10 save loads with it off', () => {
   st.setItem('pokemon-tactics-save', JSON.stringify(bad));
   assert.equal(loadGame(st).party.find((x) => x.species === 'turtwig').hiddenOn, false);
 });
+
+import { createBattle, applyMove, endPhase, refreshAbilityFlags } from '../src/core/battle.js';
+import { expectedDamage } from '../src/core/damage.js';
+import { weightOf } from '../src/core/individual.js';
+import { MOVES } from '../src/data/moves.js';
+import { createRng } from '../src/core/rng.js';
+const hit = () => 0.01;
+const duel = (allySp, foeSp, { ally = {}, foe = {}, allies = [], extra = [] } = {}) => {
+  const map = { tiles: Array.from({ length: 6 }, () => '......'), allySlots: [{ x: 1, y: 1 }, ...allies.map((a) => a.at)], enemies: [{ species: foeSp, x: 2, y: 1, level: 40 }, { species: 'rattata', x: 5, y: 5, level: 40 }, ...extra] };
+  const s = createBattle(map, [newMember(allySp, 40, createRng(1)), ...allies.map((a, i) => newMember(a.sp, 40, createRng(i + 2)))]);
+  const a = s.units[0], f = s.units.find((u) => u.side === 'enemy');
+  Object.assign(a, ally); Object.assign(f, foe);
+  return { s, a, f };
+};
+const ratio = (a, f, move, change) => { const base = expectedDamage(a, f, MOVES[move], '.'); change(); return expectedDamage(a, f, MOVES[move], '.') / base; };
+const near = (x, y) => Math.abs(x - y) < 1e-6;
+
+test('analytic: ×1.3 when the holder is the slowest on the field', () => {
+  const { s, a, f } = duel('magnemite', 'rattata');
+  refreshAbilityFlags(s);
+  assert.ok(near(ratio(a, f, 'thunderbolt', () => { a.ability = 'analytic'; refreshAbilityFlags(s); }), 1.3));
+  a.stats.spe = 999; refreshAbilityFlags(s);
+  assert.equal(a.analyticActive, false);
+});
+
+test('flare boost ×1.5 special while burned; toxic boost ×1.5 physical while poisoned', () => {
+  const { a, f } = duel('drifloon', 'snorlax', { ally: { status: 'burn' } });
+  assert.ok(near(ratio(a, f, 'thunderbolt', () => { a.ability = 'flare-boost'; }), 1.5));
+  assert.ok(near(ratio(a, f, 'tackle', () => { a.ability = 'flare-boost'; }), 1));
+  const z = duel('zangoose', 'snorlax', { ally: { status: 'poison' } });
+  assert.ok(near(ratio(z.a, z.f, 'tackle', () => { z.a.ability = 'toxic-boost'; }), 1.5));
+});
+
+test('heavy metal doubles weight, light metal halves it', () => {
+  const { a } = duel('bronzor', 'rattata');
+  const w = weightOf({ ...a, ability: null });
+  assert.equal(weightOf({ ...a, ability: 'heavy-metal' }), w * 2);
+  assert.equal(weightOf({ ...a, ability: 'light-metal' }), w / 2);
+});
+
+test('multiscale halves damage only at full HP', () => {
+  const { a, f } = duel('rattata', 'dratini');
+  assert.ok(near(ratio(a, f, 'tackle', () => { f.ability = 'multiscale'; }), 0.5));
+  f.hp -= 1;
+  assert.ok(near(expectedDamage(a, f, MOVES.tackle, '.') / expectedDamage(a, { ...f, ability: null }, MOVES.tackle, '.'), 1));
+});
+
+test('friend guard: 30% off for an ally next to one holder, 36% next to two, holder itself unguarded', () => {
+  const { s, a, f } = duel('rattata', 'snorlax', { allies: [{ sp: 'clefairy', at: { x: 1, y: 2 } }, { sp: 'clefairy', at: { x: 0, y: 1 } }] });
+  const [, h1, h2] = s.units;
+  refreshAbilityFlags(s);
+  const plain = expectedDamage(f, a, MOVES.tackle, '.');
+  h1.ability = 'friend-guard'; refreshAbilityFlags(s);
+  assert.ok(near(expectedDamage(f, a, MOVES.tackle, '.') / plain, 0.7));
+  h2.ability = 'friend-guard'; refreshAbilityFlags(s);
+  assert.ok(near(expectedDamage(f, a, MOVES.tackle, '.') / plain, 0.64));
+  assert.equal(h1.friendGuards, 0);
+});
+
+test('rattled: a dark, bug or ghost hit raises speed by 1', () => {
+  const { s, a, f } = duel('poochyena', 'snorlax', { foe: { ability: 'rattled' } });
+  applyMove(s, a.id, 'bite', f.id, () => 0.5);
+  assert.equal(f.stages.spe, 1);
+  const n = duel('rattata', 'snorlax', { foe: { ability: 'rattled' } });
+  applyMove(n.s, n.a.id, 'tackle', n.f.id, hit);
+  assert.equal(n.f.stages.spe ?? 0, 0);
+});
+
+test('contrary flips stage changes, but not against a mold breaker', () => {
+  const { s, a, f } = duel('rattata', 'snivy', { foe: { ability: 'contrary' } });
+  applyMove(s, a.id, 'growl', f.id, hit);
+  assert.equal(f.stages.atk, 1);
+  const self = duel('snivy', 'rattata', { ally: { ability: 'contrary' } });
+  applyMove(self.s, self.a.id, 'swords-dance', self.a.id, hit);
+  assert.equal(self.a.stages.atk, -2);
+  const mb = duel('rattata', 'snivy', { ally: { ability: 'mold-breaker' }, foe: { ability: 'contrary' } });
+  applyMove(mb.s, mb.a.id, 'growl', mb.f.id, hit);
+  assert.equal(mb.f.stages.atk, -1);
+});

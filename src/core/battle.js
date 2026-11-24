@@ -554,6 +554,14 @@ export function chargeRoute(state, unit) {
 }
 
 // aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
+// 주변·전장을 보는 특성 플래그 (데미지 계산이 읽음): 애널라이즈 = 전장에서 가장 느림(공동 포함), 프렌드가드 = 상하좌우 다른 아군 보유자 수
+export function refreshAbilityFlags(state) {
+  for (const u of state.units) {
+    u.analyticActive = has(u, 'analytic') && state.units.every((o) => o === u || speedOf(o) >= speedOf(u));
+    u.friendGuards = state.units.filter((o) => o !== u && o.side === u.side && dist(o, u) === 1 && has(o, 'friend-guard')).length;
+  }
+}
+
 export function applyMove(state, userId, moveId, aim, rng) {
   const outer = moxieQueue;
   moxieQueue = [];
@@ -574,6 +582,7 @@ function runMove(state, userId, moveId, aim, rng) {
     u.plusActive = (has(u, 'plus') || has(u, 'minus')) && nextTo(u, (o) => has(o, 'plus') || has(o, 'minus'));
     u.flowerActive = W === 'sun' && (has(u, 'flower-gift') || nextTo(u, (o) => has(o, 'flower-gift')));
   }
+  refreshAbilityFlags(state);
   const rod = redirectTarget(state, userId, moveId, aim);
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = moveFor(a, moveId); // 저주: 쓰는 유닛 타입에 따라
@@ -846,6 +855,7 @@ function runMove(state, userId, moveId, aim, rng) {
       bound.push({ unitId: d.id, moveId: move.id });
     }
     if (landed && !fainted && last?.damage > 0) {
+      if (has(d, 'rattled') && ['dark', 'bug', 'ghost'].includes(moveTypeOf(a, move))) { changeStats(d, [{ stat: 'speed', change: 1 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'rattled' }); } // 주눅
       if (has(d, 'justified') && moveTypeOf(a, move) === 'dark') { changeStats(d, [{ stat: 'attack', change: 1 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'justified' }); } // 정의의마음
       if (has(d, 'weak-armor') && move.category === 'physical') { changeStats(d, [{ stat: 'defense', change: -1 }, { stat: 'speed', change: 2 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'weak-armor' }); } // 깨어진갑옷
       if (has(d, 'color-change') && d.typeOverride !== moveTypeOf(a, move)) { d.typeOverride = moveTypeOf(a, move); abilityEvents.push({ unitId: d.id, ability: 'color-change' }); }
