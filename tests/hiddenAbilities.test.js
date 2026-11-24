@@ -73,7 +73,7 @@ test('save v11 keeps the hidden unlock; a v10 save loads with it off', () => {
   m.hiddenUnlocked = true; m.hiddenOn = true;
   saveGame(st, g);
   const back = loadGame(st);
-  assert.equal(back.version, 11);
+  assert.equal(back.version, 12);
   const bm = back.party.find((x) => x.species === 'turtwig');
   assert.equal(bm.hiddenUnlocked, true); assert.equal(bm.hiddenOn, true);
   const old = JSON.parse(st.data['pokemon-tactics-save']);

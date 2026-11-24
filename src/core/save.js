@@ -6,6 +6,7 @@ import { isHeldItem } from '../data/heldItems.js';
 import { IV_KEYS, IV_MAX, maxIvs, hashIvs, hashGender, genderFits } from './individual.js';
 import { cleanBuild, cleanCapsule, cleanPowders, emptyPowders, CAPSULE_BAG_MAX } from './dittoBuild.js';
 import { SPECIES } from '../data/species.js';
+import { ABILITIES } from '../data/abilities.js';
 import { defaultSlot } from './progress.js';
 import { MOVES } from '../data/moves.js';
 import { expForLevel, MAX_LEVEL } from './stats.js';
@@ -17,7 +18,7 @@ import { memberKey, unifyLines } from './members.js';
 import { lineRoot } from './gacha.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 11;
+const VERSION = 12;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -25,7 +26,7 @@ const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg
 // GameState = { version, party, items: { evoStone }, unlocked: string[], best: { [dungeonId]: floor }, cleared: string[], run: Run|null }
 export const newGame = () => {
   const party = newParty().map((m, i) => ({ uid: i + 1, ...m })); // uid 1..5
-  return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {}, nextUid: party.length + 1, shop: { seq: 0, stock: rollStock(0) } };
+  return { version: VERSION, party, items: { evoStone: 0, powders: emptyPowders(), capsules: [] }, unlocked: [FIRST_DUNGEON], best: {}, cleared: [], run: null, coins: 0, shards: {}, sortie: cleanSortie([], party), eggs: {}, nextUid: party.length + 1, shop: { seq: 0, stock: rollStock(0) }, extraSeq: 0 };
 };
 
 const clampInt = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v) || 0)));
@@ -54,7 +55,7 @@ function cleanMember(m) {
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES, m.species);
   const slot = Number.isInteger(m.abilitySlot) && m.abilitySlot >= 0 && m.abilitySlot < s.abilities.length ? m.abilitySlot : m.abilitySlot === undefined ? defaultSlot(m.species) : 0;
   const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
-  const out = { ...(Number.isInteger(m.uid) && m.uid > 0 ? { uid: m.uid } : {}), species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked, hiddenUnlocked: m.hiddenUnlocked === true, hiddenOn: m.hiddenUnlocked === true && m.hiddenOn === true };
+  const out = { ...(Number.isInteger(m.uid) && m.uid > 0 ? { uid: m.uid } : {}), species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked, hiddenUnlocked: m.hiddenUnlocked === true, hiddenOn: m.hiddenUnlocked === true && m.hiddenOn === true, extraAbility: typeof m.extraAbility === 'string' && own(ABILITIES, m.extraAbility) ? m.extraAbility : null };
   if (m.species === 'ditto') out.build = cleanBuild(m.build, level); // 메타몽만 빌드
   else if (Array.isArray(m.learned)) out.learned = [...new Set(m.learned.filter((mv) => typeof mv === 'string' && own(MOVES, mv)))]; // 익혔던 기술 (떠올리기)
   if (isHeldItem(m.held)) out.held = m.held; // 지닌 도구 (없으면 칸 없음)
@@ -167,6 +168,7 @@ export function loadGame(storage) {
   if (data?.version === 8) { data = { ...data, version: 9 }; speciesRun = true; } // v8 → v9: uid 는 아래서 붙이고, 종 이름 출전·기절 기록은 uid 로
   if (data?.version === 9) data = { ...data, version: 10 }; // v9 → v10: 9세대 기준 데이터 (2026-11-24) — 타입·종족값·특성은 새 데이터로, 특성 슬롯·해금·배운 기술은 그대로
   if (data?.version === 10) data = { ...data, version: 11 }; // v10 → v11: 숨겨진 특성 (2026-11-24) — 동료는 잠긴 채로
+  if (data?.version === 11) data = { ...data, version: 12 }; // v11 → v12: 2칸 특성 (2026-11-24) — 동료는 2칸 없이, 굴림 카운터 0
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   data = renameDungeons(data, RENAMED);
   try {
@@ -199,6 +201,7 @@ export function loadGame(storage) {
       eggs: Object.fromEntries(['turtwig', 'water'].filter((k) => data.eggs?.[k] === true).map((k) => [k, true])), // 이스터에그 받은 기록
       nextUid,
       shop: cleanShop(data.shop),
+      extraSeq: Number.isInteger(data.extraSeq) && data.extraSeq >= 0 ? data.extraSeq : 0, // 2칸 특성 굴림 카운터 (시드)
     };
     const shakes = clampInt(data.eggs?.treeShakes, 0, TREE_SHAKES);
     if (shakes) game.eggs.treeShakes = shakes;
