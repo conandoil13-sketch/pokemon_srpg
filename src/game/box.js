@@ -299,8 +299,8 @@ function drawPanel(ctx, m, isOut) {
   drawText(ctx, isOut(m) ? '출전 중' : '대기', 56, 24, isOut(m) ? '#2860c8' : '#808080', null, 'small');
   ui.drawNameWithGender(ctx, m.species, m.gender, 8, 56);
   typesOfMember(m).forEach((t, k) => ui.drawTypeBadge(ctx, t, 8 + k * 34, 72)); // 메타몽은 빌드 타입
-  const ab = ABILITIES[abilityOf(m)];
-  fitLines(`특성 ${ab?.name ?? '-'}`, PANEL_W - 14).slice(0, 2).forEach((l, k) => drawText(ctx, l, 8, 90 + k * 11, ab?.inactive ? '#909090' : '#305830', null, 'small'));
+  const ab = ABILITIES[abilityOf(m)], ex = m.extraAbility ? ABILITIES[m.extraAbility] : null; // 2칸 특성도
+  fitLines(`특성 ${ab?.name ?? '-'}${ex ? ` · ${ex.name}` : ''}`, PANEL_W - 14).slice(0, 2).forEach((l, k) => drawText(ctx, l, 8, 90 + k * 11, ab?.inactive ? '#909090' : '#305830', null, 'small'));
   drawText(ctx, '확인: 메뉴 · S: 정렬', 8, 120, '#909090', null, 'small');
 }
 

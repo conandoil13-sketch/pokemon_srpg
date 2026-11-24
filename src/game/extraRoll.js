@@ -36,6 +36,8 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
   const enter = (md) => { mode = md; t = 0; };
   const say = (lines) => { msg = lines; enter('msg'); };
   const revealEnd = () => tl.steps.at(-1).t + 0.6;
+  // 룰렛이 도는 동안 뒤 화면은 예전 2칸 (결과를 미리 보여 주지 않게)
+  const shownExtra = () => (mode === 'spin' && result ? result.prev : m.extraAbility ?? null);
 
   function start() {
     const r = rollExtra(game, m.uid ?? m.species);
@@ -96,6 +98,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
   return {
     get mode() { return mode; },
     get result() { return result; },
+    get shownExtra() { return shownExtra(); },
     handle(ev) {
       const pick = ev.type === 'confirm' || ev.type === 'click';
       if (mode === 'msg') { if ((pick || ev.type === 'cancel') && t >= CHOICE_LOCK) { msg = null; mode = 'view'; } return; }
@@ -125,7 +128,7 @@ export function createExtraRoll({ game, member: m, onSave = () => {}, onClose })
       drawText(ctx, '특성 각성', 14 + textWidth(who), 7, '#c06010', null, 'small');
       drawText(ctx, back, W - 10 - textWidth(back, 'small'), 7, '#7080a0', null, 'small');
       ui.drawWindow(ctx, 2, 24, W - 4, 92);
-      const one = abilityOf(m), two = m.extraAbility ?? null, same = two && two === one;
+      const one = abilityOf(m), two = shownExtra(), same = two && two === one;
       drawAbilityRow(ctx, '1칸', one, 32);
       drawAbilityRow(ctx, '2칸', two, 74, { tier: extraTier(two), faded: same, note: same ? '1칸과 같음' : null });
       ui.drawWindow(ctx, 2, 118, W - 4, H - 120);

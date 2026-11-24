@@ -67,3 +67,17 @@ test('member menu offers 특성 각성', () => {
   const d = newMember('ditto', 30);
   assert.equal(extraMenuItem({ shards: { ditto: 5 } }, d).enabled, true);
 });
+
+test('the old slot 2 stays on screen until the spin ends', async () => {
+  const { createExtraRoll } = await import('../src/game/extraRoll.js');
+  const m = { ...newMember('charmander', 30), extraAbility: 'run-away' };
+  const game = { party: [m], shards: { charmander: 4 }, extraSeq: 17 };
+  const r = createExtraRoll({ game, member: m, onClose() {} });
+  r.handle({ type: 'confirm' }); r.update(1); r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'spin');
+  assert.notEqual(m.extraAbility, 'run-away');
+  assert.equal(r.shownExtra, 'run-away');
+  r.handle({ type: 'confirm' }); r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'view');
+  assert.equal(r.shownExtra, m.extraAbility);
+});

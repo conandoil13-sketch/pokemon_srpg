@@ -148,17 +148,19 @@ export function drawUnitInfo(ctx, unit, onLeftHalf, { hidden = false, warn = nul
     return;
   }
   const w = 140, inner = w - 12;
-  const ab = ABILITIES[unit.ability], it = unit.held ? HELD_ITEMS[unit.held] : null;
-  const abText = ab ? `특성 ${ab.name}` : '', itText = it?.name ?? '';
+  const ab = ABILITIES[unit.ability], ab2 = unit.ability2 && unit.ability2 !== unit.ability ? ABILITIES[unit.ability2] : null, it = unit.held ? HELD_ITEMS[unit.held] : null;
+  const oneLine = ab ? `특성 ${ab.name}${ab2 ? ` · ${ab2.name}` : ''}` : ab2 ? `특성 ${ab2.name}` : '', itText = it?.name ?? '';
+  const abLines = ab && ab2 && textWidth(oneLine, 'small') > inner ? [`특성 ${ab.name}`, `2칸 ${ab2.name}`] : [oneLine]; // 2칸 특성이 길면 다음 줄
+  const abText = abLines.at(-1), abShift = (abLines.length - 1) * 12;
   const itOwnLine = itText && textWidth(abText, 'small') + 8 + textWidth(itText, 'small') > inner; // 특성 줄에 도구가 안 들어가면 다음 줄
   const stages = wrapWords(stageLine(unit), inner, 'small'), warns = wrapWords(warn ?? '', inner, 'small'); // 버프·디버프·효과가 많으면 여러 줄
-  const extra = (itOwnLine ? 1 : 0) + stages.length + warns.length;
+  const extra = abLines.length - 1 + (itOwnLine ? 1 : 0) + stages.length + warns.length;
   const h = 64 + extra * 12;
   const x = onLeftHalf ? W - w - 2 : 2, y = 2;
   drawWindow(ctx, x, y, w, h);
-  if (ab) drawText(ctx, abText, x + 6, y + 51, ab.inactive ? '#909090' : '#305830', null, 'small');
-  if (it) drawText(ctx, itText, x + w - 6 - textWidth(itText, 'small'), y + 51 + (itOwnLine ? 12 : 0), '#8a5418', null, 'small'); // 지닌 도구 (오른쪽)
-  let row = y + 63 + (itOwnLine ? 12 : 0);
+  abLines.forEach((l, k) => { if (l) drawText(ctx, l, x + 6, y + 51 + k * 12, ab?.inactive && k === 0 ? '#909090' : '#305830', null, 'small'); });
+  if (it) drawText(ctx, itText, x + w - 6 - textWidth(itText, 'small'), y + 51 + abShift + (itOwnLine ? 12 : 0), '#8a5418', null, 'small'); // 지닌 도구 (오른쪽)
+  let row = y + 63 + abShift + (itOwnLine ? 12 : 0);
   stages.forEach((l) => { drawText(ctx, l, x + 6, row, '#5848a0', null, 'small'); row += 12; });
   warns.forEach((l) => { drawText(ctx, l, x + 6, row, '#e03030', '#f8d0d0', 'small'); row += 12; });
   ctx.fillStyle = unit.side === 'ally' ? '#3870f8' : '#f83838';
