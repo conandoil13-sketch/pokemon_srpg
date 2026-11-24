@@ -1011,7 +1011,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         fxm.expire(1); // 남은 연기·잔해는 1초 뒤 정리
         // 다음 행동 전 대기(pause) 동안 'anim' 에 머물지 않도록 먼저 모드를 되돌린다
         mode = st.result ? 'result' : st.phase === 'enemy' ? 'enemy' : 'idle';
-        const lines = [...strikeLines(animResult), ...abilityNotices(animAbility, (id) => everyone.get(id))], back = mode;
+        const shown = animResult?.kind === 'status' ? (animAbility ?? []).filter((e) => e.ability !== 'magic-bounce') : animAbility; // 변화기 연출이 매직미러를 먼저 말함
+        const lines = [...strikeLines(animResult), ...abilityNotices(shown, (id) => everyone.get(id))], back = mode;
         animAbility = null; animResult = null;
         if (!st.result) noticeChain(lines, () => { mode = back; animThen(); });
         else noticeChain(lines, () => { mode = 'result'; });

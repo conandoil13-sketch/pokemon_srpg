@@ -554,6 +554,7 @@ export function chargeRoute(state, unit) {
 }
 
 // aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
+const NO_BOUNCE = new Set(['memento']); // 되돌리지 않는 변화기 (추억의선물: 쓰는 쪽이 쓰러지는 기술)
 // 매직미러: 그 칸(또는 유닛) 자신이나 상하좌우에 있는 같은 편 보유자
 function magicBouncer(state, t) {
   return state.units.find((h) => h.side === t.side && h.hp > 0 && Math.abs(h.x - t.x) + Math.abs(h.y - t.y) <= 1 && has(h, 'magic-bounce')) ?? null;
@@ -696,9 +697,9 @@ function runMove(state, userId, moveId, aim, rng) {
     let bounced = false;
     for (let t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
       let src = a; // 매직미러로 되돌리면 시전자 = 보유자, 대상 = 원래 시전자
-      const mirror = !breaker && t.side !== a.side ? magicBouncer(state, t) : null;
+      const mirror = !breaker && t.side !== a.side && !NO_BOUNCE.has(move.id) ? magicBouncer(state, t) : null;
       if (mirror) {
-        if (bounced) { protectedIds.push(t.id); continue; } // 한 기술은 한 번만 되돌림
+        if (bounced) continue; // 한 기술은 한 번만 되돌림 (나머지 보호받는 대상은 조용히 아무 일 없음)
         bounced = true;
         abilityEvents.push({ unitId: mirror.id, ability: 'magic-bounce', target: a.id });
         src = mirror; t = a;

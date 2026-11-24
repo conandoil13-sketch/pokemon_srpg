@@ -31,7 +31,8 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
   // 특성 페이지: 행 = 일반 특성들 + 숨겨진 특성. 위아래로 고르고 확인 = 그 특성으로 (잠겼으면 해금)
   const ROW_Y = 84, ROW_H = 15;
   const abilityRows = (m) => [...SPECIES[m.species].abilities.map((id, slot) => ({ id, slot })), ...(SPECIES[m.species].hidden ? [{ id: SPECIES[m.species].hidden, slot: 'hidden' }] : [])];
-  const isCurrent = (m, row) => (row.slot === 'hidden' ? !!m.hiddenOn : !m.hiddenOn && row.slot === (m.abilitySlot ?? 0));
+  const hiddenUsed = (m) => !!m.hiddenOn && !!SPECIES[m.species].hidden; // 지금 모습에 숨겨진 특성이 없으면 일반 칸이 쓰임
+  const isCurrent = (m, row) => (row.slot === 'hidden' ? hiddenUsed(m) : !hiddenUsed(m) && row.slot === (m.abilitySlot ?? 0));
   const defaultRow = (m) => Math.max(0, abilityRows(m).findIndex((r) => !isCurrent(m, r)));
   let ac = null; // 특성 커서 (null = 기본: 지금 것이 아닌 첫 행)
   const abilityCursor = () => { const n = abilityRows(member()).length; return ac === null || ac >= n ? defaultRow(member()) : ac; };

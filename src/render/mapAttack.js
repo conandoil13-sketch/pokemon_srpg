@@ -321,7 +321,9 @@ function createStatusAnim({ attacker, defender, move, result, lookup, fx }) {
   const push = result.pushed ? [{ k: 'push', d: 0.3 }] : []; // 밀려나며 미끄러짐
   const nothing = !healed.length && !efx.length && !result.stageChanges.length && !result.statusChanges?.length && !missed.length ? [{ k: 'msg', d: AUTO, text: '그러나 아무 일도 일어나지 않았다!', who: attacker, emo: 'Normal' }] : [];
   const DANCE = move.id === 'teeter-dance'; // 흔들흔들댄스: 빙글빙글 춤춘 뒤 혼란
-  const steps = [{ k: 'act', d: DANCE ? 1.2 : 0.45 }, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
+  const bounce = (result.abilityEvents ?? []).filter((e) => e.ability === 'magic-bounce' && get(e.unitId) && get(e.target)) // 매직미러: 되돌린 결과보다 먼저
+    .map((e) => ({ k: 'msg', d: AUTO, text: wrapMessage(`${label(get(e.unitId))}의 매직미러! ${label(get(e.target))}에게 기술을 되돌렸다!`), who: get(e.unitId), emo: 'Determined' }));
+  const steps = [{ k: 'act', d: DANCE ? 1.2 : 0.45 }, ...bounce, ...weatherSteps, ...push, ...healed, ...missed, ...efx, ...stageSteps(result.stageChanges, get), ...statusSteps(result, get, true), ...nothing];
   let i = 0, t = 0, total = 0;
   let text = wrapMessage(`${label(attacker)}의 ${move.name}!`), who = attacker, emo = 'Determined';
   const step = () => steps[i];

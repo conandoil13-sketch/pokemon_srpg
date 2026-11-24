@@ -226,3 +226,24 @@ test('the 11 new gen 5 abilities carry their SRPG text and are active; item / fo
   }
   for (const id of ['harvest', 'pickpocket', 'zen-mode', 'imposter']) assert.ok(ABILITIES[id].inactive, id);
 });
+
+test('magic bounce review: later protected targets are skipped quietly (not "protected"), memento is not bounced', () => {
+  const { s, a, f } = duel('oddish', 'natu', { extra: [{ species: 'snorlax', x: 3, y: 1, level: 40 }] });
+  f.ability = 'magic-bounce';
+  const sn = s.units.find((u) => u.species === 'snorlax');
+  const r = applyMove(s, a.id, 'growl', sn.id, hit);
+  assert.deepEqual(r.protectedIds, []);
+  const m = duel('rattata', 'natu', { foe: { ability: 'magic-bounce' } });
+  applyMove(m.s, m.a.id, 'memento', m.f.id, hit);
+  assert.ok(m.s.units.includes(m.f)); // 보유자는 쓰러지지 않음
+  assert.equal(m.f.stages.atk, -2);
+});
+
+test('normal unlock while on the hidden ability moves the member off it', async () => {
+  const { unlockAbility } = await import('../src/core/progress.js');
+  const g = gameWith('geodude', 7), m = g.party[0];
+  unlockHidden(g, 'geodude');
+  unlockAbility(g, 'geodude');
+  assert.equal(m.hiddenOn, false);
+  assert.equal(abilityOf(m), SPECIES.geodude.abilities[m.abilitySlot]);
+});

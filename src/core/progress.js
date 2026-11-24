@@ -48,6 +48,7 @@ export function unlockAbility(game, key) {
   game.shards[root] -= ABILITY_UNLOCK_COST;
   m.abilityUnlocked = true;
   m.abilitySlot = (m.abilitySlot ?? 0) === 0 ? 1 : 0;
+  m.hiddenOn = false; // 숨겨진 칸에 있었어도 새로 연 일반 특성으로
   return { ok: true };
 }
 
