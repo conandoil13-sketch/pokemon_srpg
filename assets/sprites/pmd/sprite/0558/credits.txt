@@ -1,0 +1,1 @@
+# nayakoko.com 아이언비즈 걷기 도안(앞·왼·오른·뒤)을 옮김 — https://nayakoko.com/pokemon-perler-beads-558-crustle/ (작품 공개 허용, 판매 금지). 대각 방향은 옆모습 재사용. 도구 tools/bead-sprite.js

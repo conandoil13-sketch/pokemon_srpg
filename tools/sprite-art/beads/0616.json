@@ -1,0 +1,156 @@
+{
+ "dex": "0616",
+ "source": "https://nayakoko.com/pokemon-perler-beads-616-shelmet/",
+ "palette": {
+  "a": "5a5a7b",
+  "b": "c5c5d5",
+  "c": "9494ac",
+  "d": "29315a",
+  "e": "101010",
+  "f": "620020",
+  "g": "398341",
+  "h": "ff4a7b",
+  "i": "313131",
+  "j": "b4204a"
+ },
+ "views": {
+  "front": [
+   [
+    "...aa...",
+    "..abba..",
+    ".accbca.",
+    ".acccca.",
+    "acdddda.",
+    "adcbbcd.",
+    "ecdccdce",
+    "ecdccdce",
+    "decbbced",
+    "afdccdfa",
+    "abeddeba",
+    "aeghhgea",
+    "dceiiecd",
+    ".d.ee.d."
+   ],
+   [
+    "...aa...",
+    "..abba..",
+    ".acbcca.",
+    ".acccca.",
+    ".addddca",
+    ".dcbbcda",
+    "ecdccdce",
+    "ecdccdce",
+    "decbbced",
+    "afdccdfa",
+    "abeddeba",
+    "aeghhgea",
+    ".deiied.",
+    "..deed.."
+   ]
+  ],
+  "left": [
+   [
+    "..........aaaaa...",
+    ".........abbbbba..",
+    "ad......abbbbbbba.",
+    "dbad..addcbaaabbbe",
+    "dcbbadbbbddcccabbe",
+    ".dccbbadbbbdbcdbce",
+    "..edccbbbbcdccdbce",
+    ".effedcccccdadbcce",
+    ".ehhjbeeeddbbbcca.",
+    "..efhe.gbbcccccce.",
+    "....fggbccccccee..",
+    "...dbcaccaeeee....",
+    "....deacee........",
+    "......ee.........."
+   ],
+   [
+    "..........aaaaa...",
+    ".........abbbbba..",
+    "........abbbbbbba.",
+    "ad......dcbaaabbbe",
+    "dbad..addcacccabbe",
+    "dcbbadbbbddcbcdbce",
+    ".dccbbadbbbdccdbce",
+    "..edccbbbbcdadbcce",
+    ".effedcccccdbbcca.",
+    ".ehhjbeeeddbcccce.",
+    "..efhe.gbbccccce..",
+    "....fggbcccacee...",
+    "...dbbccaccee.....",
+    "....dddeace.......",
+    "........ee........"
+   ]
+  ],
+  "right": [
+   [
+    "...aaaaa..........",
+    "..abbbbba.........",
+    ".abbbbbbba......da",
+    "ebbbaaabcdda..dabd",
+    "ebbacccddbbbdabbcd",
+    "ecbdcbdbbbdabbccd.",
+    "ecbdccdcbbbbccde..",
+    "eccbdadcccccdeffe.",
+    ".accbbbddeeebjhhe.",
+    ".eccccccbbg.ehfe..",
+    "..eeccccccbggf....",
+    "....eeeeaccacbd...",
+    "........eecaed....",
+    "..........ee......"
+   ],
+   [
+    "...aaaaa..........",
+    "..abbbbba.........",
+    ".abbbbbbba........",
+    "ebbbaaabcd......da",
+    "ebbacccacdda..dabd",
+    "ecbdcbcddbbbdabbcd",
+    "ecbdccdbbbdabbccd.",
+    "eccbdadcbbbbccde..",
+    ".accbbdcccccdeffe.",
+    ".eccccbddeeebjhhe.",
+    "..ecccccbbg.ehfe..",
+    "...eecacccbggf....",
+    ".....eeccaccbbd...",
+    ".......ecaeddd....",
+    "........ee........"
+   ]
+  ],
+  "back": [
+   [
+    "....aa...",
+    "...abba..",
+    "..abbbba.",
+    "..dbbbba.",
+    "aedbbbba.",
+    "eadbbbba.",
+    "edcbbbbbd",
+    "jdcbbbbbd",
+    "edccbbbcd",
+    "edccccccd",
+    ".dccccccd",
+    ".dccccacd",
+    ".eceeeece",
+    "..ed..de."
+   ],
+   [
+    "...aa....",
+    "..abba...",
+    ".abbbba..",
+    ".abbbbd..",
+    ".abbbbdea",
+    "dbbbbbdae",
+    "dbbbbbcde",
+    "dbbbbbcdj",
+    "dcbbbccde",
+    "dccccccde",
+    "dccccccd.",
+    "ecacccce.",
+    ".eceece..",
+    "..edde..."
+   ]
+  ]
+ }
+}
