@@ -6,6 +6,7 @@ import { createRng } from './rng.js';
 import { findMember } from './individual.js';
 import { lineRoot } from './gacha.js';
 import { abilityOf } from './progress.js';
+import { free } from './freeCost.js';
 
 export const EXTRA_COST = 2; // 그 계열 결정
 export const TIER_ODDS = { C: 0.5, B: 0.3, A: 0.15, S: 0.05 };
@@ -43,10 +44,10 @@ export function rollExtra(game, key) {
   const m = findMember(game, key);
   if (!m) return { ok: false, reason: 'missing' };
   const root = lineRoot(m.species);
-  if ((game.shards?.[root] ?? 0) < EXTRA_COST) return { ok: false, reason: 'shards' };
+  if ((game.shards?.[root] ?? 0) < free(game, EXTRA_COST)) return { ok: false, reason: 'shards' };
   const seq = Number.isInteger(game.extraSeq) && game.extraSeq >= 0 ? game.extraSeq : 0;
   const r = rollExtraAbility(seq, abilityOf(m));
-  game.shards[root] -= EXTRA_COST;
+  game.shards[root] = (game.shards[root] ?? 0) - free(game, EXTRA_COST);
   game.extraSeq = seq + 1;
   const prev = m.extraAbility ?? null;
   m.extraAbility = r.id;

@@ -32,6 +32,8 @@ import { createEvolutionChoice } from './game/evolutionChoice.js';
 import { createBox } from './game/box.js';
 import { createRng } from './core/rng.js';
 import { newGame, loadGame, saveGame } from './core/save.js';
+import { checkKey, topUp } from './core/superAccount.js';
+import { free } from './core/freeCost.js';
 import { shakeGiftTree, TREE_SHAKES } from './core/shards.js';
 import { SPECIES, validateData } from './data/species.js';
 import { TOWN } from './data/town.js';
@@ -50,7 +52,21 @@ const storage = {
   setItem: (k, v) => localStorage.setItem(k, v), // 예외는 saveGame 이 처리
 };
 let game = loadGame(storage);
-const save = () => saveGame(storage, game);
+let verifiedKey = null; // 테스트 계정 키 (확인된 것만)
+const save = () => { if (game?.superActive) topUp(game); saveGame(storage, game); };
+const applySuper = () => { if (!game || !verifiedKey) return; game.superKey = verifiedKey; game.superActive = true; save(); };
+// 테스트 계정: 주소 ?k=<키> 로 켜고 ?k=off 로 끈다. 주소창의 키는 바로 지우고, 저장된 키는 시작할 때마다 다시 확인
+(async () => {
+  let q = null;
+  try {
+    const u = new URL(location.href); q = u.searchParams.get('k');
+    if (q !== null) { u.searchParams.delete('k'); history.replaceState(null, '', u); }
+  } catch { /* 주소를 못 읽으면 저장된 키만 */ }
+  if (q === 'off') { if (game) { delete game.superKey; game.superActive = false; save(); } return; }
+  const k = q ?? game?.superKey;
+  if (k && (await checkKey(k))) { verifiedKey = k; applySuper(); }
+  else if (game?.superKey) { delete game.superKey; save(); } // 틀린 키는 지움
+})();
 const rng = createRng(Date.now() & 0xffffffff);
 let scene;
 
@@ -63,7 +79,7 @@ function evolveChain(list, done) {
   const options = first.options ?? [first.to];
   const evolveTo = (to) => {
     if (!to) { evolveChain(rest, done); return; }
-    if (first.stone) game.items.evoStone -= 1; // 진화의돌은 실제로 진화할 때만 소모
+    if (first.stone) game.items.evoStone -= free(game, 1); // 진화의돌은 실제로 진화할 때만 소모
     requestSprites([to]);
     sound.bgm('evolution');
     scene = createEvolution({ member, to, onDone: () => { sound.bgm('route1'); evolveChain(rest, done); } }); // 출전 목록은 uid 라 진화해도 같은 자리
@@ -192,7 +208,7 @@ const go = {
     scene = createTitle({
       hasSave: !!game,
       onContinue: () => (game.run ? go.resume() : go.town()),
-      onNew: () => { game = newGame(); save(); go.town(); },
+      onNew: () => { game = newGame(); applySuper(); save(); go.town(); },
     });
   },
   resume: () => {

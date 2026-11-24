@@ -3,6 +3,7 @@ import { MOVES } from '../data/moves.js';
 import { ABILITIES } from '../data/abilities.js';
 import { TYPES } from '../data/types.js';
 import { SPECIES } from '../data/species.js';
+import { free } from './freeCost.js';
 
 export const STATS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];
 export const POWDER_KO = { hp: '체력파우더', atk: '공격파우더', def: '방어파우더', spa: '특공파우더', spd: '특방파우더', spe: '스피드파우더' };
@@ -39,7 +40,7 @@ export function applyPowder(game, stat) {
   if (!(game.items.powders?.[stat] > 0)) return { ok: false, reason: 'none' };
   const r = canPowder(d, stat);
   if (!r.ok) return r;
-  game.items.powders[stat] -= 1;
+  game.items.powders[stat] -= free(game, 1);
   d.build.bonus[stat] += POWDER_STEP;
   return { ok: true };
 }

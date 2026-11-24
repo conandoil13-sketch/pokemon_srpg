@@ -202,6 +202,7 @@ export function loadGame(storage) {
       nextUid,
       shop: cleanShop(data.shop),
       extraSeq: Number.isInteger(data.extraSeq) && data.extraSeq >= 0 ? data.extraSeq : 0, // 2칸 특성 굴림 카운터 (시드)
+      ...(typeof data.superKey === 'string' && data.superKey.length > 0 && data.superKey.length <= 64 ? { superKey: data.superKey } : {}), // 테스트 계정 키 (켜짐 여부는 불러올 때 다시 확인)
     };
     const shakes = clampInt(data.eggs?.treeShakes, 0, TREE_SHAKES);
     if (shakes) game.eggs.treeShakes = shakes;

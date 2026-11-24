@@ -2,6 +2,7 @@
 // 스펙 docs/superpowers/specs/2026-11-17-town-shop-design.md
 import { HELD_ITEMS, HELD_IDS } from '../data/heldItems.js';
 import { createRng } from './rng.js';
+import { free } from './freeCost.js';
 
 const SHOP_SALT = 0x5a0b1e;
 const seedOf = (seq) => (SHOP_SALT ^ Math.imul(seq + 1, 0x9e3779b1)) >>> 0;
@@ -29,7 +30,7 @@ export function buy(game, index) {
   const s = game.shop?.stock?.[index];
   if (!s) return { ok: false, reason: 'range' };
   if (s.sold) return { ok: false, reason: 'sold' };
-  const price = HELD_ITEMS[s.id].price;
+  const price = free(game, HELD_ITEMS[s.id].price);
   if ((game.coins ?? 0) < price) return { ok: false, reason: 'coins' };
   game.coins -= price;
   game.items.held ??= {};
