@@ -5,7 +5,7 @@
     <Anim>
       <Name>Idle</Name>
       <FrameWidth>40</FrameWidth>
-      <FrameHeight>40</FrameHeight>
+      <FrameHeight>48</FrameHeight>
       <Durations>
         <Duration>40</Duration>
       </Durations>
@@ -13,7 +13,7 @@
     <Anim>
       <Name>Walk</Name>
       <FrameWidth>40</FrameWidth>
-      <FrameHeight>40</FrameHeight>
+      <FrameHeight>48</FrameHeight>
       <Durations>
         <Duration>8</Duration>
         <Duration>8</Duration>

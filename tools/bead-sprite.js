@@ -64,7 +64,47 @@ export async function fetchBeads(dex, slug) {
 // 시트 줄: 0 아래 · 1 오른아래 · 2 오른 · 3 오른위 · 4 위 · 5 왼위 · 6 왼 · 7 왼아래 (대각은 옆모습으로)
 const ROWS = ['front', 'right', 'right', 'right', 'back', 'left', 'left', 'left'];
 
+// 도안 색을 게임 쪽 같은 계열 스프라이트에 맞춘다 (도안 기호 → 색). fetch 를 다시 해도 남도록 json 이 아닌 여기에 둔다
+export const RECOLOR = {
+  '0592': { // 탱그릴: 탁한 도안 파랑 → 탱탱겔 PMD 시트의 밝은 하늘색·남색 테두리
+    a: '4f6fb7', b: '373f8f', c: 'c7efff', d: 'c7efff', e: '77d7ff', f: '2a2f6a', g: '000000', h: 'ffffff', i: '373f8f', j: 'ff6f4f', k: 'c7efff',
+  },
+};
+
+// 진화 단계 크기 맞춤 (PMD 단계별 중앙값과 진화 전후 종 기준). 1 보다 크면 안쪽 줄을 복제, 작으면 뺀다
+export const SCALE = { '0520': 0.9, '0523': 1.2, '0564': 0.92, '0591': 0.9, '0592': 1.1 };
+
+// 도트를 늘이거나 줄이면 테두리가 깨지므로, 이웃과 거의 같은 안쪽 줄(가로·세로)을 골라 복제하거나 뺀다.
+// 한 방향의 두 프레임은 같은 줄을 써서 걸을 때 흔들리지 않게 한다
+const transpose = (g) => (g.length ? [...g[0]].map((_, x) => g.map((r) => r[x]).join('')) : g);
+function pickLines(frames, k) { // frames: 같은 크기 격자들 → 고를 줄 번호 k 개 (줄 i 와 i+1 이 비슷할수록 먼저)
+  const n = frames[0].length, filled = (i) => frames.some((f) => /[^.]/.test(f[i]));
+  const lo = [...Array(n).keys()].find(filled), hi = n - 1 - [...Array(n).keys()].reverse().findIndex((i) => filled(n - 1 - i));
+  const cand = [];
+  for (let i = lo + 2; i < hi - 2; i++) cand.push([frames.reduce((d, f) => d + [...f[i]].filter((c, x) => c !== f[i + 1][x]).length, 0), i]);
+  cand.sort((a, b) => a[0] - b[0] || Math.abs(a[1] - (lo + hi) / 2) - Math.abs(b[1] - (lo + hi) / 2));
+  const gap = Math.max(1, Math.floor((hi - lo) / (k + 1) / 2)), out = [];
+  for (const [, i] of cand) if (out.length < k && out.every((j) => Math.abs(j - i) > gap)) out.push(i);
+  return out;
+}
+function resizeLines(frames, scale) { // 세로 줄(행) 방향만
+  const n = frames[0].length, filled = frames.map((f) => f.filter((r) => /[^.]/.test(r)).length), k = Math.round(Math.max(...filled) * Math.abs(scale - 1));
+  if (!k) return frames;
+  const pick = new Set(pickLines(frames, k));
+  return frames.map((f) => f.flatMap((r, i) => (!pick.has(i) ? [r] : scale > 1 ? [r, r] : [])));
+}
+export function resizeView(frames, scale) {
+  if (!scale || scale === 1) return frames;
+  const h = Math.max(...frames.map((f) => f.length)), w = Math.max(...frames.flatMap((f) => f.map((r) => r.length)));
+  let fs = frames.map((f) => [...f.map((r) => r.padEnd(w, '.')), ...Array(h - f.length).fill('.'.repeat(w))]);
+  fs = resizeLines(fs, scale);
+  fs = resizeLines(fs.map(transpose), scale).map(transpose);
+  return fs;
+}
+
 export function buildSheets(data) {
+  data = { ...data, palette: { ...data.palette, ...RECOLOR[data.dex] } };
+  if (SCALE[data.dex]) data.views = Object.fromEntries(Object.entries(data.views).map(([v, f]) => [v, resizeView(f, SCALE[data.dex])]));
   const all = Object.values(data.views).flat();
   const maxW = Math.max(...all.flatMap((f) => f.map((r) => r.length))), maxH = Math.max(...all.map((f) => f.length));
   const FW = Math.max(24, Math.ceil((maxW + 4) / 8) * 8);
