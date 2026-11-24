@@ -247,3 +247,14 @@ test('normal unlock while on the hidden ability moves the member off it', async 
   assert.equal(m.hiddenOn, false);
   assert.equal(abilityOf(m), SPECIES.geodude.abilities[m.abilitySlot]);
 });
+
+import { stageMessages } from '../src/render/mapAttack.js';
+test('contrary at +6 hit by growl says the stat will not rise (not "will not fall")', () => {
+  const { s, a, f } = duel('rattata', 'snivy', { foe: { ability: 'contrary' } });
+  applyMove(s, a.id, 'growl', f.id, hit);
+  for (let i = 0; i < 6; i++) applyMove(s, a.id, 'growl', f.id, hit);
+  const r = applyMove(s, a.id, 'growl', f.id, hit);
+  const c = r.stageChanges.find((x) => x.unitId === f.id);
+  assert.equal(c.applied, 0);
+  assert.match(stageMessages([c], (id) => s.units.find((u) => u.id === id))[0], /오르지 않는다/);
+});

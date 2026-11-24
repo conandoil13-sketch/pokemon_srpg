@@ -277,7 +277,7 @@ function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false, br
     const key = API_STAT[stat];
     if (!key) continue;
     const r = applyStageChange(unit, key, change, turns, { fromOther, breaker });
-    out.push({ unitId: unit.id, key, change, applied: r.applied, after: r.after });
+    out.push({ unitId: unit.id, key, change: r.change || change, applied: r.applied, after: r.after }); // 심술꾸러기면 뒤집힌 방향 (막혀 0이면 원래 방향)
     if (fromOther && r.applied < 0 && has(unit, 'defiant')) { const d = applyStageChange(unit, 'atk', 2, turns); out.push({ unitId: unit.id, key: 'atk', change: 2, applied: d.applied, after: d.after }); } // 오기
   }
   if (itemOf(unit)?.whiteHerb && !unit.whiteUsed && Object.values(unit.stages ?? {}).some((n) => n < 0)) { // 하얀허브: 떨어진 랭크 되돌림 (층마다 1번)
