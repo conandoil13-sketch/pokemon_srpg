@@ -2,12 +2,14 @@
 import { SPECIES } from '../data/species.js';
 import { typeMultiplier } from '../data/types.js';
 import { itemAttackMult, itemDefMult, itemCritBonus, itemAcc } from './items.js';
+import { abilitiesOf, has } from './abilitySlots.js';
 
 export const PUNCH = ['ice-punch', 'fire-punch', 'thunder-punch', 'mach-punch', 'mega-punch', 'comet-punch', 'dizzy-punch', 'dynamic-punch', 'focus-punch', 'hammer-arm', 'meteor-mash', 'drain-punch', 'bullet-punch', 'shadow-punch', 'sky-uppercut'];
 export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell', 'echoed-voice', 'round', 'relic-song', 'snarl'];
 const PINCH = { overgrow: 'grass', blaze: 'fire', torrent: 'water', swarm: 'bug' };
 
-export const has = (u, id) => u?.ability === id && !u.abilityOff; // 위액: 특성 꺼짐
+// 켜진 특성 목록(1칸 + 2칸, 위액이면 없음)과 has 는 abilitySlots.js (스펙 2026-11-24 2칸 특성)
+export { abilitiesOf, has };
 export const moldBreaker = (u) => has(u, 'mold-breaker') || has(u, 'teravolt') || has(u, 'turboblaze'); // 틀깨기·테라볼티지·터보블레이즈
 const breaks = moldBreaker; // 방어 쪽 특성 무시
 // 우격다짐: 부가효과가 있는 공격기 (선공기 제외). 자기 능력이 떨어지는 반동(오버히트 등)은 부가효과가 아님
@@ -49,9 +51,8 @@ export function stabMult(attacker, move, weather = null) {
 export function attackMult(attacker, defender, move, { typeMult, weather }) {
   const physical = move.category === 'physical', type = moveTypeOf(attacker, move);
   let m = 1;
-  const pinch = PINCH[attacker.ability];
-  if (pinch && type === pinch && attacker.hp <= attacker.maxHp / 3) m *= 1.5;
-  if (attacker.ability === 'rivalry' && attacker.gender && defender.gender) m *= attacker.gender === defender.gender ? 1.25 : 0.75; // 투쟁심
+  for (const a of abilitiesOf(attacker)) if (PINCH[a] && type === PINCH[a] && attacker.hp <= attacker.maxHp / 3) m *= 1.5;
+  if (has(attacker, 'rivalry') && attacker.gender && defender.gender) m *= attacker.gender === defender.gender ? 1.25 : 0.75; // 투쟁심
   if (has(attacker, 'technician') && move.power <= 60) m *= 1.5;
   if (has(attacker, 'tinted-lens') && typeMult > 0 && typeMult < 1) m *= 2;
   if ((has(attacker, 'huge-power') || has(attacker, 'pure-power')) && physical) m *= 2;
@@ -92,7 +93,11 @@ export function defendMult(attacker, defender, move, { typeMult }) {
 // 무효·흡수: null 또는 { ability, heal?(최대 HP 비율), boost?(랭크), flashFire? }
 export function immunity(attacker, defender, move, typeMult = 1) {
   if (breaks(attacker) || attacker === defender) return null;
-  const type = moveTypeOf(attacker, move), a = defender.ability;
+  for (const a of abilitiesOf(defender)) { const r = immunityBy(a, attacker, defender, move, typeMult); if (r) return r; }
+  return null;
+}
+function immunityBy(a, attacker, defender, move, typeMult) {
+  const type = moveTypeOf(attacker, move);
   if (a === 'levitate' && type === 'ground' && !defender.grounded) return { ability: a };
   if (a === 'volt-absorb' && type === 'electric') return { ability: a, heal: 1 / 4 };
   if (a === 'water-absorb' && type === 'water') return { ability: a, heal: 1 / 4 };
@@ -140,7 +145,7 @@ const STATUS_IMMUNE = {
 };
 const PRIMARY = ['paralysis', 'burn', 'poison', 'toxic', 'sleep', 'freeze'];
 export function blocksAilment(unit, ailment, weather = null) {
-  if (STATUS_IMMUNE[unit.ability]?.includes(ailment)) return true;
+  if (abilitiesOf(unit).some((a) => STATUS_IMMUNE[a]?.includes(ailment))) return true;
   return has(unit, 'leaf-guard') && weather === 'sun' && PRIMARY.includes(ailment);
 }
 
@@ -185,7 +190,11 @@ export function weatherChipImmune(unit, weather) {
 }
 // 차례 끝 특성 HP 변화: 양수 회복, 음수 피해 (최대 HP 비율)
 export function phaseEndHp(unit, weather) {
-  const a = unit.ability;
+  return abilitiesOf(unit).reduce((sum, a) => sum + phaseEndHpBy(a, weather), 0);
+}
+// 차례 끝 HP 를 바꾼 특성 (발동 대사용): 첫 번째로 0 이 아닌 칸
+export const phaseEndAbility = (unit, weather) => abilitiesOf(unit).find((a) => phaseEndHpBy(a, weather) !== 0) ?? null;
+function phaseEndHpBy(a, weather) {
   if (a === 'rain-dish' && weather === 'rain') return 1 / 16;
   if (a === 'ice-body' && weather === 'hail') return 1 / 16;
   if (a === 'dry-skin' && weather === 'rain') return 1 / 8;
@@ -213,7 +222,7 @@ export function pickupLoot(members, rng) {
   const out = [];
   for (const m of members) {
     const a = m.build?.ability ?? ((m.hiddenOn && SPECIES[m.species].hidden) || SPECIES[m.species].abilities[m.abilitySlot ?? 0] || SPECIES[m.species].abilities[0]); // 메타몽은 빌드 특성 · 숨겨진 칸
-    if ((a === 'pickup' || a === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'pickupCoins' : 'candy');
+    if ([a, m.extraAbility].some((x) => x === 'pickup' || x === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'pickupCoins' : 'candy'); // 2칸도
   }
   return out;
 }
