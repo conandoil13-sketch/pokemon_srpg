@@ -1,0 +1,2 @@
+2020-10-07 17:58:43.695446	CHUNSOFT	CUR	Unspecified	Walk,Attack,Stomp,Shoot,Twirl,Sleep,Hurt,Idle,Swing,Double,Hop,Charge,Rotate
+# 파생: 버프론 (켄타로스 대기·걷기를 뼈대로 몸 색·아프로·뿔·얼굴을 새로 그림) — 원본 0128 시트에서 그림을 새로 그림 (포켓몬 택틱스 도구 tools/derive-sprite.js)
