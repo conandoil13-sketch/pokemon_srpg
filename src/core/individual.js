@@ -9,9 +9,10 @@ export function weightPower(kg) {
 export function heavyPower(ratio) {
   return ratio >= 5 ? 120 : ratio >= 4 ? 100 : ratio >= 3 ? 80 : ratio >= 2 ? 60 : 40;
 }
-export const weightOf = (unit) => (unit.weight ?? SPECIES[unit.species]?.weight ?? 50) * (unit.abilityOff ? 1 : unit.ability === 'heavy-metal' ? 2 : unit.ability === 'light-metal' ? 0.5 : 1); // 헤비메탈·라이트메탈
+export const weightOf = (unit) => (unit.weight ?? SPECIES[unit.species]?.weight ?? 50) * (has(unit, 'heavy-metal') ? 2 : 1) * (has(unit, 'light-metal') ? 0.5 : 1); // 헤비메탈·라이트메탈
 
 import { hash } from '../render/pixels.js';
+import { has } from './abilitySlots.js';
 
 // ---- 개체값 ----
 export const IV_KEYS = ['hp', 'atk', 'def', 'spa', 'spd', 'spe'];

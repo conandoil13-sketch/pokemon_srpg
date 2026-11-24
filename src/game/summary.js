@@ -17,10 +17,19 @@ import { W, H } from '../render/screen.js';
 import { evolutionHint, fitLines } from './memberText.js';
 import { CATEGORY_KO, moveStatLine } from './moveInfo.js';
 import { CHOICE_LOCK } from './learnFlow.js';
+import { drawTierBadge } from './extraRoll.js';
+import { extraTier } from '../core/extraAbility.js';
 
 export const PAGES = ['정보', '능력치', '기술', '특성'];
 const TAB_W = Math.floor((W - 4) / PAGES.length);
 const STAT_ROWS = [['hp', 'HP'], ['atk', '공격'], ['def', '방어'], ['spa', '특공'], ['spd', '특방'], ['spe', '스피드']];
+
+// 특성 페이지 오른쪽 2칸 글자 (짧게: 왼쪽 "특성 X" 와 안 겹치게)
+export function slot2Note(m) {
+  const ex = m.extraAbility ? ABILITIES[m.extraAbility] : null, same = !!ex && m.extraAbility === abilityOf(m);
+  const label = !ex ? '2칸 없음' : same ? '2칸 (1칸과 같음)' : `2칸 ${ex.name}`;
+  return { label, x: W - 12 - textWidth(label, 'small') - (ex ? 13 : 0), ex, same };
+}
 
 export function createSummary({ game, list, index = 0, page = 0, onSave = () => {}, onClose }) {
   let i = Math.max(0, Math.min(list.length - 1, index)), pg = page, msg = null, t = 0;
@@ -147,6 +156,11 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       } else {
         const cur = ABILITIES[abilityOf(m)];
         drawText(ctx, `특성 ${cur?.name ?? '-'}`, 10, y0, cur?.inactive ? '#909090' : '#305830');
+        { // 2칸 (보기만 — 굴리기는 편성소 특성 각성)
+          const { label, x, ex, same } = slot2Note(m);
+          small(label, x, y0 + 2, !ex || same ? '#a0a0a0' : '#383838');
+          if (ex) drawTierBadge(ctx, extraTier(m.extraAbility), W - 12 - 11, y0 + 1);
+        }
         if (m.build) { fitLines(cur?.desc ?? '', W - 24).slice(0, 2).forEach((l, k) => small(l, 10, y0 + 14 + k * 11, '#505050')); small('메타몽 빌드에서 특성 캡슐로 바꾼다.', 10, y0 + 46, '#808080'); }
         else {
           const rows = abilityRows(m), cursor = abilityCursor();

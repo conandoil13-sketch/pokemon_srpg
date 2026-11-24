@@ -2,6 +2,7 @@
 // aim: { unitId } (단일) | { dir } (직선·부채꼴) | { self: true } (주변) | { x, y } (착탄·단일 칸)
 import { hiddenFrom } from './stealth.js';
 import { DASH, dashPath } from './dash.js';
+import { has } from './abilitySlots.js';
 export const DIRS = ['up', 'down', 'left', 'right'];
 const VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
 
@@ -9,7 +10,7 @@ const inMap = (state, x, y) => x >= 0 && y >= 0 && x < state.width && y < state.
 const dist = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const aimRangeOf = (move) => move.aimRange ?? move.shape?.range ?? move.range ?? [1, 1];
 // 스나이퍼: 사거리 2 이상 기술은 1칸 더
-export const sniperBonus = (user, hi) => (user && user.ability === 'sniper' && !user.abilityOff && hi >= 2 ? 1 : 0);
+export const sniperBonus = (user, hi) => (has(user, 'sniper') && hi >= 2 ? 1 : 0);
 
 // 직선·부채꼴에 대상 유닛으로 조준하면(옛 호출 방식) 그 유닛 쪽 방향으로 바꾼다
 function dirToward(state, user, aim) {

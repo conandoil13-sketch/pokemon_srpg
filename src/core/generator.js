@@ -3,6 +3,7 @@
 // 그 라운드 내내 범위가 예고됨 (pulsePreview). 붙어 선 전기 타입의 전기 기술 ×1.2 (charged). 스펙 docs/superpowers/specs/2026-11-23-power-plant-design.md
 import { typesOf, magicGuard } from './abilities.js';
 import { typeMultiplier } from '../data/types.js';
+import { abilitiesOf } from './abilitySlots.js';
 
 export const GEN = 'G';
 export const GEN_RANGE = 2;
@@ -35,7 +36,7 @@ const ABSORB = { 'volt-absorb': 'heal', 'motor-drive': 'spe', 'lightning-rod': '
 // 한 유닛이 받는 방출 효과: { damage, kind } · { heal, ability } · { boost, ability } · null(면역)
 export function shockDamage(unit) {
   if (unit.burrow) return null; // 숨기 중(땅속·공중·물속·그림자)엔 닿지 않음
-  const ab = unit.abilityOff ? null : unit.ability;
+  const ab = abilitiesOf(unit).find((a) => ABSORB[a]) ?? null; // 두 칸 중 흡수 특성
   if (ABSORB[ab] === 'heal') return { heal: Math.max(1, Math.floor(unit.maxHp / 4)), ability: ab }; // 전기 타입이라도 회복
   if (ABSORB[ab]) return { boost: ABSORB[ab], ability: ab };
   const t = typesOf(unit);

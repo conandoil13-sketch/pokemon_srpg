@@ -1,6 +1,7 @@
 // 이동 범위 / 사거리 (순수 함수)
 import { SPECIES } from '../data/species.js';
 import { moveBudget } from './status.js';
+import { has } from './abilitySlots.js';
 
 export const TILE_COST = { '.': 1, '"': 1, '^': 2, '~': 1, ',': 1, '#': Infinity, '>': 1, '*': Infinity, B: 1, '%': 1, G: Infinity, ':': 2, '=': 1, o: 1, '@': 1, L: 1, v: 1, V: Infinity, _: 1, Y: Infinity, T: Infinity, H: 1, '|': 1, X: 1 }; // '*' = 열리지 않은 낙엽더미 · 'B' = 건물(옥상, 시티) · '%' = 독 웅덩이(하수도) · 'G' = 발전기(발전소) · ':' 깊은 모래 '=' 흐르는 모래 'o'/'@' 모래지옥(사막) · 'L' 용암 'v' 현무암 'V' 분출구(화산동굴) · '_' 빙판 'Y' 고드름(얼음동굴) · 'T' 묘비(묘지) · 'H' 고지 '|' 덩굴 'X' 낭떠러지(협곡)
 
@@ -9,7 +10,7 @@ const typesOfWho = (who) => (typeof who === 'string' ? SPECIES[who].types : who.
 const typed = (who, t) => typesOfWho(who).includes(t);
 // 비행(중력 아닐 때)·드래곤: 나무·벽·낙엽더미를 비용 3 으로 넘음 (멈출 수 없음)
 const soars = (who) => typeof who === 'object' && ((typed(who, 'flying') && !who.grounded) || typed(who, 'dragon'));
-const climbs = (who, trees) => trees && (ab(who) === 'limber' || typed(who, 'bug')); // 유연·벌레: 나무를 비용 1 로
+const climbs = (who, trees) => trees && (hasAb(who, 'limber') || typed(who, 'bug')); // 유연·벌레: 나무를 비용 1 로
 export function tileCost(tile, who, trees = false) {
   if (tile === '#' || tile === '*') return tile === '#' && climbs(who, trees) ? 1 : 3;
   if (tile === 'T') return typed(who, 'ghost') ? 1 : 3; // 묘비: 고스트는 스며 지나감, 비행·드래곤은 넘음
@@ -21,17 +22,17 @@ export function tileCost(tile, who, trees = false) {
 // 떠 있음 (abilities.airborne 과 같은 기준 — 순환 import 를 피해 여기 둠)
 export const floats = (who) => {
   if (typeof who === 'object' && who.grounded) return false;
-  return typesOfWho(who).includes('flying') || ab(who) === 'levitate' || (typeof who === 'object' && who.magnetRise > 0);
+  return typesOfWho(who).includes('flying') || hasAb(who, 'levitate') || (typeof who === 'object' && who.magnetRise > 0);
 };
 
 // 얼음동굴: 빙판에서 끝까지 미끄러지는 포켓몬 = 지상 && 얼음 타입 아님 (얼음 타입·떠 있음은 빙판을 평지처럼)
 export const slides = (who) => typeof who === 'object' && !floats(who) && !typed(who, 'ice');
 // 부딪혀 밀 수 있는 포켓몬 (battle.pushAway 면역과 같게: 보스·뿌리박기·흡반)
-export const shovable = (o) => !o.boss && !o.rooted && ab(o) !== 'suction-cups';
+export const shovable = (o) => !o.boss && !o.rooted && !hasAb(o, 'suction-cups');
 
 // who: 유닛(타입은 유닛 기준 — 메타몽 빌드) 또는 종 키
 // trees: 벽(#)이 나무인 맵 (유연은 나무를 지나갈 수 있음 — 멈추지는 못함, reachable 이 뺀다)
-const ab = (who) => (typeof who === 'object' && !who.abilityOff ? who.ability : null);
+const hasAb = (who, id) => has(who, id); // 종 키(문자열)는 특성 없음 — 두 칸 다 봄
 // pass: 지나가기만 하는 경로 계산 (비행·드래곤 장애물 넘기)
 export function canEnter(tile, who, trees = false, pass = false) {
   if (tile === undefined) return false;
@@ -52,7 +53,7 @@ export function canEnter(tile, who, trees = false, pass = false) {
     const t = typeof who === 'string' ? SPECIES[who].types : who.types ?? SPECIES[who.species].types;
     if (t.includes('water') || t.includes('dragon') || t.includes('ice')) return true; // 드래곤: 물 위 이동 · 얼음: 물을 얼리며 걸음 (battle.moveUnit)
     if (typeof who === 'object' && who.grounded) return false; // 중력: 땅에 붙어 물 위로 못 감
-    return t.includes('flying') || ab(who) === 'levitate' || (typeof who === 'object' && who.magnetRise > 0); // 부유·전자부유: 비행처럼 물 위로
+    return t.includes('flying') || hasAb(who, 'levitate') || (typeof who === 'object' && who.magnetRise > 0); // 부유·전자부유: 비행처럼 물 위로
   }
   return true;
 }

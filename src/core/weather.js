@@ -1,6 +1,7 @@
 // 날씨 (순수). 층마다 하나, 층 고정. 본가 4세대 효과 + 안개 정보 가리기.
 import { SPECIES } from '../data/species.js';
 import { createRng } from './rng.js';
+import { has } from './abilitySlots.js';
 
 export const WEATHER_KO = { rain: '비', sun: '쾌청', sand: '모래바람', hail: '싸라기눈', fog: '안개' };
 export const FOG_SIGHT = 5;     // 아군 누구에게서든 이 거리 이상이면 안개 속 (정체 숨김)
@@ -46,7 +47,7 @@ export function phaseEndWeather(unit, weather) {
 
 // 안개: 보는 쪽 유닛 누구와도 FOG_SIGHT 이상 떨어져 있으면 숨겨진다
 export const ILLUMINATE_SIGHT = 2; // 발광: 안개 속 시야 +2
-export const isHidden = (target, viewers) => viewers.every((v) => Math.abs(v.x - target.x) + Math.abs(v.y - target.y) >= FOG_SIGHT + (v.ability === 'illuminate' ? ILLUMINATE_SIGHT : 0));
+export const isHidden = (target, viewers) => viewers.every((v) => Math.abs(v.x - target.x) + Math.abs(v.y - target.y) >= FOG_SIGHT + (has(v, 'illuminate') ? ILLUMINATE_SIGHT : 0));
 
 // 에어록·날씨부정이 전장에 있으면 비·쾌청·모래바람·싸라기눈 효과 없음 (안개는 그대로)
-export const effectiveWeather = (state) => (state.weather && state.weather !== 'fog' && state.units.some((u) => u.ability === 'air-lock' || u.ability === 'cloud-nine') ? null : state.weather ?? null);
+export const effectiveWeather = (state) => (state.weather && state.weather !== 'fog' && state.units.some((u) => has(u, 'air-lock') || has(u, 'cloud-nine')) ? null : state.weather ?? null);

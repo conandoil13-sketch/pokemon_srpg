@@ -2,6 +2,7 @@
 // 보이는 칸 = 그대로 (시야 끝 칸은 살짝 어둡게) · 기억 칸 = 짙은 남색 · 처음 칸 = 검정. 아군 발밑 따뜻한 빛, 보스 주변 붉은 빛,
 // 새로 보인 칸은 잠깐 밝아짐. 스펙 docs/superpowers/specs/2026-11-22-deep-cave-design.md
 import { seenCells, sightOf, BOSS_LIGHT } from '../core/vision.js';
+import { has } from '../core/abilitySlots.js';
 
 const T = 24, B = 3, N = T / B; // 3px 블록
 const DARK = '#070916';
@@ -94,7 +95,7 @@ export function drawDarkness(ctx, state, time, camX, camY, viewW, viewH) {
       ctx.fillRect(bx * B, by * B, B, B);
     }
   };
-  for (const v of viewers) glow(v.x * T + T / 2, v.y * T + T - 4, T * (v.ability === 'illuminate' ? 2.2 : 1.4), '#ffb060', 0.035);
+  for (const v of viewers) glow(v.x * T + T / 2, v.y * T + T - 4, T * (has(v, 'illuminate') ? 2.2 : 1.4), '#ffb060', 0.035);
   if (boss) glow(boss.x * T + T / 2, boss.y * T + T / 2, T * 2, '#ff3828', 0.03);
   ctx.restore();
 }

@@ -29,7 +29,7 @@ export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
   const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
   const moves = startingMoves(s.learnset, level, MOVES, species);
-  return { species, level, exp: expForLevel(s.growth, level), moves, ...(species === 'ditto' ? {} : { learned: [...moves] }), abilitySlot, abilityUnlocked: false, hiddenUnlocked: false, hiddenOn: false, ...individualOf(species, rng), ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
+  return { species, level, exp: expForLevel(s.growth, level), moves, ...(species === 'ditto' ? {} : { learned: [...moves] }), abilitySlot, abilityUnlocked: false, hiddenUnlocked: false, hiddenOn: false, extraAbility: null, ...individualOf(species, rng), ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
 }
 
 // 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)

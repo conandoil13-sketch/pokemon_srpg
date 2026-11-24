@@ -1,0 +1,137 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { reelTimeline, reelAt } from '../src/game/roulette.js';
+import { extraMenuItem } from '../src/game/extraRoll.js';
+import { newMember } from '../src/core/progress.js';
+
+const hasS = (ring) => ring.includes('S');
+const kinds = (tl) => tl.steps.map((s) => s.kind);
+const stepT = (tl, k) => tl.steps.find((s) => s.kind === k).t;
+const sweep = (tl, f) => { for (let t = 0; t <= tl.end; t += 0.02) f(reelAt(tl, t), t); };
+
+test('plain roll never shows S', () => {
+  const tl = reelTimeline({ tier: 'B', tease: false });
+  assert.equal(tl.upgrade, false);
+  assert.ok(!kinds(tl).includes('upgrade'));
+  sweep(tl, (at) => assert.ok(!hasS(at.ring)));
+});
+
+test('S always upgrades', () => {
+  const tl = reelTimeline({ tier: 'S', tease: false }), up = stepT(tl, 'upgrade');
+  assert.equal(tl.upgrade, true);
+  sweep(tl, (at, t) => assert.equal(hasS(at.ring), t >= up, `t=${t}`));
+});
+
+test('reel lands on the result tier', () => {
+  for (const r of [{ tier: 'S', tease: false }, { tier: 'A', tease: true }, { tier: 'A', tease: false }, { tier: 'B', tease: false }, { tier: 'C', tease: false }, { tier: 'B', tease: true }]) {
+    const tl = reelTimeline(r), stop = stepT(tl, 'stop');
+    assert.equal(tl.stopTier, r.tier);
+    assert.equal(reelAt(tl, stop + 0.31).symbol, r.tier, JSON.stringify(r));
+    assert.equal(reelAt(tl, tl.end).symbol, r.tier);
+    assert.ok(tl.end <= 4.5, `end ${tl.end}`);
+  }
+});
+
+test('tease pauses on S first', () => {
+  for (const tier of ['A', 'B']) {
+    const tl = reelTimeline({ tier, tease: true }), at = reelAt(tl, stepT(tl, 'tease') + 0.2);
+    assert.equal(at.symbol, 'S');
+    assert.equal(at.speed, 0);
+  }
+  assert.ok(!kinds(reelTimeline({ tier: 'A', tease: false })).includes('tease'));
+});
+
+test('steps in order', () => {
+  for (const r of [{ tier: 'S' }, { tier: 'A', tease: true }, { tier: 'C' }]) {
+    const tl = reelTimeline(r), k = kinds(tl);
+    assert.equal(k[0], 'spin');
+    assert.deepEqual(k.slice(-2), ['stop', 'reveal']);
+    for (let i = 1; i < tl.steps.length; i++) assert.ok(tl.steps[i].t > tl.steps[i - 1].t);
+    assert.ok(reelAt(tl, 0.06).pos < 0, 'kicks up first');
+    assert.ok(reelAt(tl, 0.5).speed > 10, 'spins fast');
+  }
+});
+
+test('member menu offers 특성 각성', () => {
+  const game = { shards: { charmander: 2 } }, m = newMember('charmander', 30);
+  const ok = extraMenuItem(game, m);
+  assert.equal(ok.label, '특성 각성');
+  assert.equal(ok.enabled, true);
+  assert.equal(ok.act, 'extra');
+  game.shards.charmander = 1;
+  const no = extraMenuItem(game, m);
+  assert.equal(no.enabled, false);
+  assert.ok(no.why.join(' ').includes('결정이 모자라다 (1/2)'));
+  const d = newMember('ditto', 30);
+  assert.equal(extraMenuItem({ shards: { ditto: 5 } }, d).enabled, true);
+});
+
+test('the old slot 2 stays on screen until the spin ends', async () => {
+  const { createExtraRoll } = await import('../src/game/extraRoll.js');
+  const m = { ...newMember('charmander', 30), extraAbility: 'run-away' };
+  const game = { party: [m], shards: { charmander: 4 }, extraSeq: 17 };
+  const r = createExtraRoll({ game, member: m, onClose() {} });
+  r.handle({ type: 'confirm' }); r.update(1); r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'spin');
+  assert.notEqual(m.extraAbility, 'run-away');
+  assert.equal(r.shownExtra, 'run-away');
+  r.handle({ type: 'confirm' }); r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'view');
+  assert.equal(r.shownExtra, m.extraAbility);
+});
+
+const rollScreen = (extraSeq, shards = 6) => {
+  const m = { ...newMember('charmander', 30), extraAbility: null };
+  const game = { party: [m], shards: { charmander: shards }, extraSeq };
+  return { m, game };
+};
+const startRoll = async (extraSeq) => {
+  const { createExtraRoll } = await import('../src/game/extraRoll.js');
+  const { m, game } = rollScreen(extraSeq);
+  const r = createExtraRoll({ game, member: m, onClose() {} });
+  r.handle({ type: 'confirm' }); r.update(1); r.handle({ type: 'confirm' });
+  return r;
+};
+
+test('skip during the reel jumps to the result', async () => {
+  const r = await startRoll(65); // B 낚시
+  r.update(1.0);
+  r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'spin');
+  r.handle({ type: 'confirm' });
+  assert.equal(r.mode, 'view');
+});
+
+test('effects fire once per step', async () => {
+  const r = await startRoll(17); // S
+  assert.equal(r.result.tier, 'S');
+  for (let i = 0; i < 120; i++) r.update(0.05);
+  const n = (id) => r.fxLog.filter((x) => x === id).length;
+  assert.equal(n('lightning/thunderclap'), 2); // 업그레이드 + 멈춤
+  assert.equal(n('holy/blessing'), 1);
+  assert.equal(n('pickups/collect-burst'), 3); // 멈춤 1 + 공개 양쪽 2
+  r.handle({ type: 'confirm' }); // 결과 닫기
+  r.handle({ type: 'confirm' }); r.update(1); r.handle({ type: 'confirm' }); // 다시 굴림
+  assert.equal(r.mode, 'spin');
+  assert.equal(r.fxLog.length, 0);
+});
+
+test('odds bar segments fill the width in S, A, B, C order', async () => {
+  const { oddsSegments } = await import('../src/game/extraRoll.js');
+  const seg = oddsSegments(200);
+  assert.deepEqual(seg.map((s) => s.tier), ['S', 'A', 'B', 'C']);
+  assert.equal(seg[0].x, 0);
+  for (let i = 1; i < seg.length; i++) assert.equal(seg[i].x, seg[i - 1].x + seg[i - 1].w);
+  assert.equal(seg.at(-1).x + seg.at(-1).w, 200);
+  assert.deepEqual(seg.map((s) => s.w), [10, 30, 60, 100]);
+});
+
+test('small sparks sit outside the reel window', async () => {
+  for (const seq of [1, 2, 65]) { // C, B, B 낚시
+    const r = await startRoll(seq);
+    for (let i = 0; i < 100; i++) r.update(0.05);
+    const sparks = r.fxSpots.filter((s) => s.id === 'impacts/hit-spark');
+    assert.ok(sparks.length >= 2, `seq ${seq}`);
+    for (const s of sparks) assert.ok(s.x < 98 || s.x > 158, `seq ${seq} x=${s.x}`);
+  }
+});

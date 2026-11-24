@@ -61,7 +61,7 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
     const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W, terrainCtx(sim, ghost, t));
     const ko = e >= t.hp;
     if (t.side !== unit.side && unseen.has(t.id)) continue; // 안 보이는 상대는 노리지 않는다
-    if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0) + (ko ? 0 : bindValue(move, t)) + (t.ability === 'illuminate' && e > 0 ? ILLUMINATE_LURE : 0); } // 발광: 먼저 노림
+    if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0) + (ko ? 0 : bindValue(move, t)) + (has(t, 'illuminate') && e > 0 ? ILLUMINATE_LURE : 0); } // 발광: 먼저 노림
     else { mates++; score -= e * FRIENDLY_WEIGHT + (ko ? KO_BONUS : 0); }
   }
   if (!enemies) return null;
@@ -70,9 +70,9 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   if (move.drain) {
     const dealt = hit.filter((t) => t.side !== unit.side).reduce((s, t) => s + Math.min(t.hp, expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W, terrainCtx(sim, ghost, t))), 0);
     const amt = dealt * Math.abs(move.drain) / 100;
-    if (move.drain > 0 && hit.some((t) => t.ability === 'liquid-ooze')) { if (amt >= unit.hp) return null; score -= amt; } // 해감액: 흡수가 피해
+    if (move.drain > 0 && hit.some((t) => has(t, 'liquid-ooze'))) { if (amt >= unit.hp) return null; score -= amt; } // 해감액: 흡수가 피해
     else if (move.drain > 0) score += Math.min(amt, unit.maxHp - unit.hp) * 0.5;
-    else if (unit.ability !== 'rock-head' && unit.ability !== 'magic-guard') { if (amt >= unit.hp) return null; score -= amt; }
+    else if (!has(unit, 'rock-head') && !has(unit, 'magic-guard')) { if (amt >= unit.hp) return null; score -= amt; }
   }
   if (SELF_KO.includes(move.id)) {
     const sig = SIGNATURE_MOVES[unit.species] === move.id;

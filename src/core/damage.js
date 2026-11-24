@@ -71,8 +71,8 @@ function baseDamage(attacker, defender, move, defTile, weather = null, ctx = {})
   const user = move.foulPlay ? defender : attacker; // 속임수: 상대 공격으로
   // 천진: 상대 랭크를 무시 (틀깨기면 천진도 무시)
   const aKey = physical ? 'atk' : 'spa', dKey = physical || move.hitsDef ? 'def' : 'spd'; // 사이코쇼크·사이코브레이크·신비의칼: 방어로 받음
-  const A = defender.ability === 'unaware' && !moldBreaker(attacker) ? user.stats[aKey] : effectiveStat(user, aKey);
-  let D = attacker.ability === 'unaware' || move.ignoreDefStages ? defender.stats[dKey] : effectiveStat(defender, dKey); // 야금야금·성스러운칼: 상대 랭크 무시
+  const A = has(defender, 'unaware') && !moldBreaker(attacker) ? user.stats[aKey] : effectiveStat(user, aKey);
+  let D = has(attacker, 'unaware') || move.ignoreDefStages ? defender.stats[dKey] : effectiveStat(defender, dKey); // 야금야금·성스러운칼: 상대 랭크 무시
   if (defTile === '^') D *= isType(defender, 'steel') ? 1.35 : 1.2; // 강철: 바위 칸 ×1.35
   else if (defTile === '#') D *= 1.1; // 나무 위(벌레)
   const base = Math.floor(Math.floor((2 * attacker.level / 5 + 2) * move.power * A / D) / 50) + 2;

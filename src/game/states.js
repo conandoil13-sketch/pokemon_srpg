@@ -66,7 +66,7 @@ export function forecastFor(a, d, mv, tile, weather = null, spread = 1, ctx = {}
   const min = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0]), defTile: tile, spread, weather, ...ctx });
   const max = calcDamage(a, d, mv, { rng: seqRng([0, 0.99, 0.99999]), defTile: tile, spread, weather, ...ctx });
   // 연속 공격: 최소 타수 × 최소, 최대 타수 × 최대 (스킬링크면 최대 타수)
-  const lo = !mv.minHits || mv.maxHits <= 1 ? 1 : a.ability === 'skill-link' ? mv.maxHits : mv.minHits, hi = !mv.maxHits || mv.maxHits <= 1 ? 1 : mv.maxHits;
+  const lo = !mv.minHits || mv.maxHits <= 1 ? 1 : hasAbility(a, 'skill-link') ? mv.maxHits : mv.minHits, hi = !mv.maxHits || mv.maxHits <= 1 ? 1 : mv.maxHits;
   return { hit: hitChance(a, d, mv, tile, weather, ctx), min: min.damage * lo, max: max.damage * hi, typeMult: min.typeMult };
 }
 
