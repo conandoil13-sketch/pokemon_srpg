@@ -7,7 +7,7 @@ export const DASH = {
   'double-edge': { n: 2 }, 'flame-wheel': { n: 2 }, 'head-smash': { n: 2 },
   'extreme-speed': { n: 2 }, 'quick-attack': { n: 1 }, 'aqua-jet': { n: 1 },
   waterfall: { n: 1, water: true },
-  'jump-kick': { n: 2, jump: true },
+  'jump-kick': { n: 2, jump: true }, 'fusion-bolt': { n: 1 },
   'drill-peck': { n: 1, back: true }, 'u-turn': { n: 2, back: true },
   'volt-switch': { n: 2, back: true, reach: 2 }, // 볼트체인지: 2칸 달려가 사거리 2에서 쏘고 돌아옴
 };

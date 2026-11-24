@@ -502,7 +502,13 @@ function createAttack({ attacker, defender, defenders: ds, move, result, hpBefor
     return u;
   };
   const at = (u) => { const p = posOf(u); return p === u ? u : { ...u, x: p.x, y: p.y }; };
-  const slideOff = (u) => { const p = posOf(u); return p === u ? null : { dx: (p.x - u.x) * TILE, dy: (p.y - u.y) * TILE }; };
+  const slideOff = (u) => {
+    const p = posOf(u);
+    if (p === u) return null;
+    const jump = move.id === 'fusion-bolt' && u.id === attacker.id && step()?.k === 'dash';
+    const lift = jump ? Math.sin(Math.PI * Math.min(1, t / step().d)) * TILE / 2 : 0;
+    return { dx: (p.x - u.x) * TILE, dy: (p.y - u.y) * TILE - lift };
+  };
   // pixelfx: 단계에 들어갈 때 한 번씩
   const dist0 = defenders[0] ? Math.abs(defenders[0].x - attacker.x) + Math.abs(defenders[0].y - attacker.y) : 1;
   const spec = fx ? fxForMove(move, { distance: dist0 }) : null;

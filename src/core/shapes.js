@@ -39,15 +39,21 @@ export function tilesOf(state, user, move, aim) {
     case 'cone': {
       const [dx, dy] = VEC[aim.dir];
       const f = { x: user.x + dx, y: user.y + dy };
-      return keep([f, { x: f.x + dy, y: f.y + dx }, { x: f.x - dy, y: f.y - dx }, { x: user.x + dx * 2, y: user.y + dy * 2 }]);
+      const front = [f, { x: f.x + dy, y: f.y + dx }, { x: f.x - dy, y: f.y - dx }];
+      if (s.depth !== 1) front.push({ x: user.x + dx * 2, y: user.y + dy * 2 });
+      return keep(front);
     }
     case 'around': {
       const r = s.radius ?? 1, out = [];
       for (let y = user.y - r; y <= user.y + r; y++) for (let x = user.x - r; x <= user.x + r; x++) if (x !== user.x || y !== user.y) out.push({ x, y });
       return keep(out);
     }
-    case 'blast':
-      return keep([{ x: aim.x, y: aim.y }, { x: aim.x + 1, y: aim.y }, { x: aim.x - 1, y: aim.y }, { x: aim.x, y: aim.y + 1 }, { x: aim.x, y: aim.y - 1 }]);
+    case 'blast': {
+      const center = aim.unitId ? state.units.find((u) => u.id === aim.unitId) : aim;
+      if (!center) return [];
+      const { x, y } = center;
+      return keep([{ x, y }, { x: x + 1, y }, { x: x - 1, y }, { x, y: y + 1 }, { x, y: y - 1 }]);
+    }
     default: { // single
       if (aim.unitId) { const u = state.units.find((o) => o.id === aim.unitId); return u ? [{ x: u.x, y: u.y }] : []; }
       return [{ x: aim.x, y: aim.y }];
@@ -67,6 +73,19 @@ export function unitsHit(state, user, move, aim) {
   return state.units.filter((u) => u !== user && u.hp > 0 && keys.has(`${u.x},${u.y}`) && (u.side !== user.side || move.friendlyFire) && canTarget(move, u));
 }
 
+export const beatUpAllies = (state, user, target) =>
+  state.units.filter((u) => u.hp > 0 && u.side === user.side && dist(u, target) === 1);
+
+export function singleInReach(state, user, move, target, lo, hi) {
+  const dx = Math.abs(user.x - target.x), dy = Math.abs(user.y - target.y);
+  switch (move.shape?.aim) {
+    case 'allies': return beatUpAllies(state, user, target).length > 0;
+    case 'neighbors': return Math.max(dx, dy) === 1;
+    case 'straight': return (!dx || !dy) && dx + dy >= lo && dx + dy <= hi;
+  }
+  return (dx + dy >= lo && dx + dy <= hi) || (DASH[move.id] && dashPath(state, user, move, target));
+}
+
 export function aimsOf(state, user, move) {
   const type = move.shape?.type ?? 'single';
   if (type === 'around') return [{ self: true }];
@@ -81,7 +100,7 @@ export function aimsOf(state, user, move) {
     }
     return out;
   }
-  return state.units.filter((u) => u.side !== user.side && u.hp > 0 && ((dist(u, user) >= lo && dist(u, user) <= hi) || (DASH[move.id] && dashPath(state, user, move, u)))).map((u) => ({ unitId: u.id })); // 대시: 곧게 달려가 닿는 상대도
+  return state.units.filter((u) => u.side !== user.side && u.hp > 0 && singleInReach(state, user, move, u, lo, hi)).map((u) => ({ unitId: u.id })); // 대시: 곧게 달려가 닿는 상대도
 }
 
 // 기억으로 겨냥 (악 수풀 숨기): 쓰는 쪽에게 숨은 상대가 하나라도 있으면, 비어 보이는 수풀 칸(숨은 상대 칸 포함)을 덮는 조준
@@ -95,9 +114,11 @@ export function guessAims(state, user, move) {
   if (type === 'around') return covers({ self: true }) ? [{ self: true }] : [];
   if (type === 'line' || type === 'cone') return DIRS.filter((dir) => covers({ dir })).map((dir) => ({ dir }));
   const [lo, hi0] = aimRangeOf(move), hi = hi0 + sniperBonus(user, hi0), out = [];
-  for (let y = user.y - hi; y <= user.y + hi; y++) for (let x = user.x - hi; x <= user.x + hi; x++) {
+  const reach = move.shape?.aim === 'allies' ? Math.max(state.width, state.height) : hi + (move.id === 'fusion-bolt' ? 1 : 0);
+  for (let y = Math.max(0, user.y - reach); y <= Math.min(state.height - 1, user.y + reach); y++) for (let x = Math.max(0, user.x - reach); x <= Math.min(state.width - 1, user.x + reach); x++) {
     const d = dist(user, { x, y });
-    if (d < lo || d > hi || !inMap(state, x, y)) continue;
+    const shaped = move.shape?.aim || move.id === 'fusion-bolt';
+    if (shaped ? !singleInReach(state, user, move, { x, y }, lo, hi) : d < lo || d > hi) continue;
     if (type === 'blast' ? covers({ x, y }) : looksEmpty({ x, y })) out.push({ x, y });
   }
   return out;
@@ -122,6 +143,6 @@ export function coverage(move) {
     case 'cone': return [1, 2];
     case 'around': return [1, 2 * (s.radius ?? 1)];
     case 'blast': { const [lo, hi] = s.range ?? [2, 3]; return [Math.max(1, lo - 1), hi + 1]; }
-    default: return s.range ?? move.range ?? [1, 1];
+    default: return s.aim === 'neighbors' ? [1, 2] : s.range ?? move.range ?? [1, 1];
   }
 }

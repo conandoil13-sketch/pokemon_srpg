@@ -313,10 +313,15 @@ export function shapeLabel(move) {
   const span = (r) => (r[0] === r[1] ? `${r[0]}` : `${r[0]}~${r[1]}`);
   switch (s.type) {
     case 'line': return `직선 ${s.length ?? 3}`;
-    case 'cone': return '앞 부채꼴';
+    case 'cone': return s.depth === 1 ? '전방 가로 3칸' : '앞 부채꼴';
     case 'around': return move.friendlyFire ? '주변 (아군도)' : '주변';
     case 'blast': return `착탄 ${span(s.range ?? [2, 3])} 십자`;
-    default: return `단일 ${span(s.range ?? move.range)}`;
+    default:
+      if (s.aim === 'neighbors') return '인접 8방향 단일';
+      if (s.aim === 'straight') return `전방 ${span(s.range)} 단일`;
+      if (s.aim === 'allies') return '아군 인접 협공';
+      if (move.id === 'fusion-bolt') return '전방 1~2 점프';
+      return `단일 ${span(s.range ?? move.range)}`;
   }
 }
 

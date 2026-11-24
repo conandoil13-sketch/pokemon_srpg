@@ -52,9 +52,9 @@ for (const id of PLAIN_MOVES) if (MOVES[id]) MOVES[id].learnable = true;
 // 기술 밸런스 조정 1차 (codex-reviews/2026-11-20-move-balance-decisions.md): 조건부 위력 (실제 위력은 damage.js varPower, 웨더볼·솔라빔은 situationalMove)
 const SITUATIONAL = { brine: 'brine', facade: 'facade', eruption: 'hpRatio', 'water-spout': 'hpRatio', 'wake-up-slap': 'wake', 'smelling-salts': 'wake', assurance: 'assurance', revenge: 'revenge', avalanche: 'revenge', punishment: 'punishment' };
 for (const [id, varPower] of Object.entries(SITUATIONAL)) if (MOVES[id]) Object.assign(MOVES[id], { varPower, learnable: true });
-// 9세대 데이터에서 위력이 비어 있는 기술 (2026-11-24): 혼내기 = 기본 60 (위력 판정·사거리 감쇠용), 집단구타 = 예전처럼 10 (전용 규칙 전까지)
+// 9세대 데이터에서 위력이 비어 있는 기술 (2026-11-24): 혼내기 = 기본 60 (위력 판정·사거리 감쇠용), 집단구타 = 인접 아군마다 위력 10
 if (MOVES.punishment) MOVES.punishment.power = 60;
-if (MOVES['beat-up']) Object.assign(MOVES['beat-up'], { power: 10, learnable: true });
+if (MOVES['beat-up']) Object.assign(MOVES['beat-up'], { power: 10, learnable: true, minHits: null, maxHits: null });
 if (MOVES['wake-up-slap']) MOVES['wake-up-slap'].wakes = 'sleep';
 if (MOVES['smelling-salts']) MOVES['smelling-salts'].wakes = 'paralysis';
 // 2·3차: 연속 사용 (battle.js STREAK_MAX) · 난동 (rampage)

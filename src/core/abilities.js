@@ -203,7 +203,7 @@ function phaseEndHpBy(a, weather) {
   return 0;
 }
 
-// ---- 접촉 반격 (접촉 = 거리 1 의 물리 기술) ----
+// ---- 접촉 기술의 반격 상태이상 ----
 export const CONTACT_AILMENT = { static: ['paralysis'], 'poison-point': ['poison'], 'flame-body': ['burn'], 'effect-spore': ['paralysis', 'poison', 'sleep'] };
 
 // ---- SRPG 재해석 (스펙 §4-③) ----

@@ -1,5 +1,24 @@
 {
+  "attack-order": { "type": "single", "range": [1, 3] },
   "aura-sphere": { "type": "single", "range": [2, 3] },
+  "barrage": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "beat-up": { "type": "single", "range": [1, 1], "aim": "allies" },
+  "bonemerang": { "type": "single", "range": [1, 2] },
+  "bullet-seed": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "gunk-shot": { "type": "single", "range": [1, 2] },
+  "ice-shard": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "icicle-crash": { "type": "cone", "depth": 1 },
+  "icicle-spear": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "magnet-bomb": { "type": "single", "range": [1, 2] },
+  "pin-missile": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "poison-sting": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "psycho-cut": { "type": "single", "range": [1, 2] },
   "razor-leaf": { "type": "single", "range": [1, 2] },
-  "shadow-ball": { "type": "single", "range": [2, 3] }
+  "rock-blast": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "rock-throw": { "type": "single", "range": [1, 1], "aim": "neighbors" },
+  "rock-wrecker": { "type": "single", "range": [1, 2] },
+  "sacred-fire": { "type": "blast", "range": [1, 2] },
+  "shadow-ball": { "type": "single", "range": [2, 3] },
+  "spike-cannon": { "type": "single", "range": [1, 2], "aim": "straight" },
+  "twineedle": { "type": "single", "range": [1, 2] }
 }

@@ -227,7 +227,7 @@ test('regenerated data keeps every existing value (only new fields added) — go
   const sha = (o) => createHash('sha1').update(JSON.stringify(o)).digest('hex');
   // 2단계 리뷰: 모래두지·찌리리공·야돈→야도란·달막화가 돌 → 원작 레벨 (다른 값은 그대로)
   assert.equal(sha(keep), 'd9d051b14d92b434a6cc2de7250827116cf40c16');
-  const NEW = ['drain', 'healing', 'minHits', 'maxHits', 'critRate', 'flinchChance', 'priority']; // 기술 효과 메타 (2026-11-15 추가)
+  const NEW = ['drain', 'healing', 'minHits', 'maxHits', 'critRate', 'flinchChance', 'priority', 'contact'];
   const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
   const oldOnly = Object.fromEntries(Object.entries(oldMoves).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).filter(([f]) => !NEW.includes(f)))]));
   assert.equal(sha(oldOnly), '0e8dc7ce099d399f6d7d11fea4fc16dd035d81c6');

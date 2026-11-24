@@ -8,7 +8,7 @@ import { moveBlock, moveFor, BIND_MOVES, BIND_TURNS } from '../core/volatile.js'
 import { refreshField, lethalTrapCut } from '../core/field.js';
 import { sound } from '../audio/sound.js';
 import { reachable, tilesInRange, manhattan, pathTo, pathCost, slides } from '../core/pathfind.js';
-import { aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims } from '../core/shapes.js';
+import { beatUpAllies, singleInReach, aimsOf, unitsHit, tilesOf, bestAim, canTarget, sniperBonus, guessAims } from '../core/shapes.js';
 import { hiddenFrom, seenOnly } from '../core/stealth.js';
 import { enemyTurnOrder, planEnemyAction, retreatSpot } from '../core/ai.js';
 import { huntPlan } from '../core/hunt.js';
@@ -404,13 +404,31 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   }
 
   function attackTilesFrom(unit, tiles) {
-    const maxR = Math.max(1, ...unit.moves.filter((m) => MOVES[m].category !== 'status').map((m) => MOVES[m].range[1] + sniperBonus(unit, MOVES[m].range[1]))); // 공격 범위만 (스나이퍼 +1)
+    const attacks = unit.moves.map((id) => MOVES[id]).filter((mv) => mv.category !== 'status');
     const set = new Map();
+    const add = (t) => {
+      const key = `${t.x},${t.y}`;
+      if (!tiles.has(key)) set.set(key, t);
+    };
+    if (attacks.some((mv) => mv.shape?.aim === 'allies')) {
+      for (const ally of st.units.filter((o) => o !== unit && o.hp > 0 && o.side === unit.side)) {
+        tilesInRange(ally.x, ally.y, [1, 1], st.width, st.height).forEach(add);
+      }
+    }
+    const shaped = attacks.filter((mv) => ['straight', 'neighbors'].includes(mv.shape?.aim) || mv.id === 'fusion-bolt');
+    const other = attacks.filter((mv) => !shaped.includes(mv));
+    const maxR = Math.max(attacks.length ? 0 : 1, ...other.map((mv) => mv.range[1] + sniperBonus(unit, mv.range[1])));
     for (const k of tiles.keys()) {
       const [x, y] = k.split(',').map(Number);
-      for (const t of tilesInRange(x, y, [1, maxR], st.width, st.height)) {
-        const tk = `${t.x},${t.y}`;
-        if (!tiles.has(tk)) set.set(tk, t);
+      tilesInRange(x, y, [1, maxR], st.width, st.height).forEach(add);
+      const ghost = { ...unit, x, y };
+      for (const mv of shaped) {
+        const [lo, base] = mv.aimRange;
+        const hi = base + sniperBonus(unit, base);
+        const reach = mv.id === 'fusion-bolt' || mv.shape.aim === 'neighbors' ? 2 : hi;
+        for (const t of tilesInRange(x, y, [1, reach], st.width, st.height)) {
+          if (singleInReach(st, ghost, mv, t, lo, hi)) add(t);
+        }
       }
     }
     return [...set.values()];
@@ -1165,7 +1183,9 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
   function drawForecast(ctx, a, d, moveId) {
     const mv = MOVES[moveId];
     const tile = st.grid[d.y][d.x];
-    const fc = forecastFor(a, d, mv, tile, effectiveWeather(st), 1, terrainCtx(st, a, d));
+    const attackers = moveId === 'beat-up' ? beatUpAllies(st, a, d) : [a];
+    const parts = attackers.map((by) => forecastFor(by, d, mv, tile, effectiveWeather(st), 1, terrainCtx(st, by, d)));
+    const fc = { ...parts[0], min: parts.reduce((sum, f) => sum + f.min, 0), max: parts.reduce((sum, f) => sum + f.max, 0) };
     const hit = fc.hit, min = { damage: fc.min, typeMult: fc.typeMult }, max = { damage: fc.max };
     const y = (d.y * TILE - cam.y) > H / 2 ? 2 : H - 54;
     ui.drawWindow(ctx, 2, y, W - 4, 52);

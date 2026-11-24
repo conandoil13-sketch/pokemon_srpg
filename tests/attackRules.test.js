@@ -85,7 +85,7 @@ test('rapid spin frees bind and leech seed and clears nearby foe spikes', () => 
 });
 
 // ---- 숨는 기술 ----
-import { unitsHit, canTarget } from '../src/core/shapes.js';
+import { unitsHit, canTarget, aimsOf, tilesOf } from '../src/core/shapes.js';
 test('a hidden unit cannot be targeted until the foe phase ends, then it is sealed', () => {
   const { s, a, f } = duel('diglett', 'pidgey');
   applyMove(s, a.id, 'dig', f.id, hit);
@@ -382,4 +382,47 @@ test('splash rarely summons an ally gyarados bot', () => {
   const r = applyMove(s, a.id, 'splash', a.id, () => 0.01);
   const g = s.units.find((u) => u.id === r.summoned);
   assert.ok(g && g.bot && g.side === 'ally' && g.species === 'gyarados' && g.moves.length);
+});
+
+test('single shots distinguish straight, eight adjacent and radius targeting', () => {
+  const { s, a, f } = duel('pidgey', 'geodude');
+  const canAim = (id) => aimsOf(s, a, MOVES[id]).some((aim) => aim.unitId === f.id);
+  f.x = 2; f.y = 2;
+  assert.ok(canAim('rock-throw'));
+  for (const id of ['rock-wrecker', 'bonemerang', 'twineedle', 'gunk-shot', 'magnet-bomb', 'psycho-cut']) assert.ok(canAim(id), id);
+  for (const id of ['rock-blast', 'barrage', 'spike-cannon', 'pin-missile', 'ice-shard', 'icicle-spear', 'poison-sting', 'bullet-seed']) {
+    f.x = 2; f.y = 2; assert.ok(!canAim(id), id);
+    f.x = 3; f.y = 1; assert.ok(canAim(id), id);
+  }
+  assert.ok(!canAim('rock-throw'));
+  f.x = 3; f.y = 2;
+  assert.ok(canAim('attack-order'));
+  assert.ok(!canAim('bonemerang'));
+  assert.deepEqual(tilesOf(s, a, MOVES['icicle-crash'], { dir: 'right' }),
+    [{ x: 2, y: 1 }, { x: 2, y: 2 }, { x: 2, y: 0 }]);
+  const impact = { x: 3, y: 1 };
+  assert.ok(aimsOf(s, a, MOVES['sacred-fire']).some((aim) => aim.x === impact.x && aim.y === impact.y));
+  assert.equal(tilesOf(s, a, MOVES['sacred-fire'], impact).length, 5);
+});
+
+test('beat up uses each adjacent ally once, including the user only when adjacent', () => {
+  const { s, a, f } = duel('pidgey', 'geodude', { fx: 5, fy: 4 });
+  f.hp = f.maxHp = 5000;
+  const ally = { ...a, id: 'helper', x: 5, y: 5 };
+  s.units.push(ally);
+  assert.ok(aimsOf(s, a, MOVES['beat-up']).some((aim) => aim.unitId === f.id));
+  assert.deepEqual(applyMove(s, a.id, 'beat-up', f.id, hit).hits.map(h => h.attackerId), [ally.id]);
+  a.x = 4; a.y = 4;
+  assert.deepEqual(applyMove(s, a.id, 'beat-up', f.id, hit).hits.map(h => h.attackerId), [a.id, ally.id]);
+});
+
+test('fusion bolt lands in the open square before the target', () => {
+  const { s, a, f } = duel('pidgey', 'psyduck', { fx: 3 });
+  const targetable = () => aimsOf(s, a, MOVES['fusion-bolt']).some((aim) => aim.unitId === f.id);
+  s.grid[1] = '..........'.split('');
+  s.grid[1][2] = '#'; assert.ok(!targetable());
+  s.grid[1][2] = '.'; assert.ok(targetable());
+  const r = applyMove(s, a.id, 'fusion-bolt', f.id, hit);
+  assert.deepEqual(r.dashed.to, { x: 2, y: 1 });
+  assert.ok(r.hits[0].damage > 0);
 });

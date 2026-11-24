@@ -165,7 +165,7 @@ test('sand veil and tangled feet lower accuracy against them', () => {
   assert.equal(hitChance(a, tf, M('tackle'), '.'), hitChance(a, d2, M('tackle'), '.') - 20);
 });
 
-test('contact abilities hit back only on adjacent physical moves', () => {
+test('contact abilities react to moves that make contact', () => {
   const st = duel(null, 'static');
   applyMove(st.s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.5, 0.1]));
   assert.equal(st.c.status, 'paralysis');
@@ -181,6 +181,17 @@ test('contact abilities hit back only on adjacent physical moves', () => {
   const mg = duel('magic-guard', 'rough-skin'); const hp3 = mg.c.hp;
   applyMove(mg.s, 'ally-chimchar', 'scratch', 'enemy-riolu', seq([0.5, 0.99, 0.5]));
   assert.equal(mg.c.hp, hp3);
+});
+
+test('contact depends on the move flag across damage categories and distances', () => {
+  for (const [id, distance, contact] of [['rock-throw', 1, false], ['grass-knot', 2, true]]) {
+    const { s, c, r } = duel(null, 'rough-skin');
+    r.x = c.x + distance;
+    const hp = c.hp, targetHp = r.hp;
+    applyMove(s, c.id, id, r.id, () => 0.5);
+    assert.ok(r.hp < targetHp, id);
+    assert.equal(c.hp, contact ? hp - Math.max(1, Math.floor(c.maxHp / 8)) : hp, id);
+  }
 });
 
 test('serene grace, shield dust, color change, anger point, damp', () => {

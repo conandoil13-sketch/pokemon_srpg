@@ -14,7 +14,7 @@ import { effectiveStat, stageMultiplier, API_STAT } from './stages.js';
 import { AREA_RADIUS } from '../data/moveTargets.js';
 import { canInflict, canInfatuate } from './status.js';
 import { immunity, has, moldBreaker } from './abilities.js';
-import { aimsOf, unitsHit } from './shapes.js';
+import { beatUpAllies, aimsOf, unitsHit } from './shapes.js';
 import { SIGNATURE_MOVES } from './learn.js';
 import { moveBlock, moveFor, isHealMove, BIND_MOVES } from './volatile.js';
 import { typesOf } from './abilities.js';
@@ -58,7 +58,8 @@ function aimScore(state, unit, ghost, move, aim, foes, unseen = new Set()) {
   const spread = hit.length >= 2 ? 0.75 : 1;
   let score = 0, enemies = 0, kos = 0, mates = 0;
   for (const t of hit) {
-    const e = expectedDamage(ghost, t, move, state.grid[t.y][t.x], spread, W, terrainCtx(sim, ghost, t));
+    const attackers = move.id === 'beat-up' ? beatUpAllies(sim, ghost, t) : [ghost];
+    const e = attackers.reduce((sum, by) => sum + expectedDamage(by, t, move, state.grid[t.y][t.x], spread, W, terrainCtx(sim, by, t)), 0);
     const ko = e >= t.hp;
     if (t.side !== unit.side && unseen.has(t.id)) continue; // 안 보이는 상대는 노리지 않는다
     if (t.side !== unit.side) { if (e > 0) enemies++; if (ko) kos++; score += e + (ko ? KO_BONUS : 0) + (ko ? 0 : bindValue(move, t)) + (has(t, 'illuminate') && e > 0 ? ILLUMINATE_LURE : 0); } // 발광: 먼저 노림

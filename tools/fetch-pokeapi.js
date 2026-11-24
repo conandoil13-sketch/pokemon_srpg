@@ -43,7 +43,7 @@ async function fetchCached(full) {
       try {
         const res = await fetch(full);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json = await res.json();
+        const json = full.endsWith('.csv') ? await res.text() : await res.json();
         await writeFile(file, JSON.stringify(json));
         return json;
       } catch (e) {
@@ -166,6 +166,11 @@ async function main() {
   for (const m of oldMoves) moveNames.add(m);
   const moves = {};
   const moveGen = {};
+  // REST 기술 응답에 없는 접촉 여부는 PokeAPI 원본 표의 contact 플래그(1)로 가져온다.
+  const flagMap = await get('https://raw.githubusercontent.com/PokeAPI/pokeapi/master/data/v2/csv/move_flag_map.csv');
+  const contactIds = new Set(flagMap.trim().split(/\r?\n/).slice(1)
+    .map((row) => row.split(',')).filter(([, flag]) => flag === '1').map(([id]) => Number(id)));
+  if (!contactIds.has(1)) throw new Error('PokeAPI contact flags missing');
   await Promise.all([...moveNames].map(async (name) => {
     const mv = await get(`move/${name}`);
     moveGen[name] = genNum(mv.generation.name);
@@ -186,7 +191,7 @@ async function main() {
       ? !!TARGET_KIND[target] && ((effectKind === 'net-good-stats' && statChanges.length > 0) || (effectKind === 'ailment' && !!ailment))
       : power !== null;
     moves[name] = {
-      api: name, name: ko(mv.names) ?? name, type, category, power, accuracy: accuracy ?? 100, learnable,
+      api: name, name: ko(mv.names) ?? name, type, category, contact: contactIds.has(mv.id), power, accuracy: accuracy ?? 100, learnable,
       target, statChanges, statChance: mv.meta?.stat_chance ?? 0, effectKind, ailment, ailmentChance: mv.meta?.ailment_chance ?? 0,
       // 특수 효과 메타: 흡수(+)·반동(−) %, 회복 %, 연속 타수, 급소 단계, 풀죽음 %, 우선도
       drain: mv.meta?.drain ?? 0, healing: mv.meta?.healing ?? 0, minHits: mv.meta?.min_hits ?? null, maxHits: mv.meta?.max_hits ?? null,
