@@ -19,6 +19,7 @@ import { expForLevel, levelForExp, statsAt, MAX_LEVEL } from './stats.js';
 import { startingMoves, movesLearnedBetween, learnOutcome } from './learn.js';
 import { remember } from './relearn.js';
 import { levelEvolutionOptions, stoneEvolutionOptions, pickEvolution } from './evolution.js';
+import { free } from './freeCost.js';
 
 export const STARTERS = ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']; // 메타몽 = 주인공 (항상 맨 앞)
 
@@ -44,8 +45,8 @@ export function unlockAbility(game, key) {
   if (SPECIES[m.species].abilities.length < 2) return { ok: false, reason: 'single' };
   if (m.abilityUnlocked) return { ok: false, reason: 'already' };
   const root = lineRoot(m.species);
-  if ((game.shards[root] ?? 0) < ABILITY_UNLOCK_COST) return { ok: false, reason: 'shards' };
-  game.shards[root] -= ABILITY_UNLOCK_COST;
+  if ((game.shards[root] ?? 0) < free(game, ABILITY_UNLOCK_COST)) return { ok: false, reason: 'shards' };
+  game.shards[root] = (game.shards[root] ?? 0) - free(game, ABILITY_UNLOCK_COST);
   m.abilityUnlocked = true;
   m.abilitySlot = (m.abilitySlot ?? 0) === 0 ? 1 : 0;
   m.hiddenOn = false; // 숨겨진 칸에 있었어도 새로 연 일반 특성으로
@@ -78,8 +79,8 @@ export function unlockHidden(game, key) {
   if (m.hiddenUnlocked) return { ok: false, reason: 'already' };
   if (hiddenPending(m.species)) return { ok: false, reason: 'pending' };
   const root = lineRoot(m.species);
-  if ((game.shards?.[root] ?? 0) < HIDDEN_UNLOCK_COST) return { ok: false, reason: 'shards' };
-  game.shards[root] -= HIDDEN_UNLOCK_COST;
+  if ((game.shards?.[root] ?? 0) < free(game, HIDDEN_UNLOCK_COST)) return { ok: false, reason: 'shards' };
+  game.shards[root] = (game.shards[root] ?? 0) - free(game, HIDDEN_UNLOCK_COST);
   m.hiddenUnlocked = true;
   m.hiddenOn = true;
   return { ok: true };

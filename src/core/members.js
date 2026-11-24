@@ -3,6 +3,7 @@ import { SPECIES } from '../data/species.js';
 import { lineRoot } from './gacha.js';
 import { IV_KEYS, genderFits, findMember } from './individual.js';
 import { newMember } from './progress.js';
+import { free } from './freeCost.js';
 
 // 동료를 가리키는 열쇠: uid (없는 테스트용 멤버는 종 이름)
 export const memberKey = (m) => m.uid ?? m.species;
@@ -62,7 +63,7 @@ export function copyMember(game, key, rng) {
   if (src.species === 'ditto') return { ok: false, reason: 'ditto' };
   const root = lineRoot(src.species);
   if (lineMembers(game, root).length >= lineLimit(root)) return { ok: false, reason: 'limit' };
-  if ((game.shards?.[root] ?? 0) < COPY_COST) return { ok: false, reason: 'shards' };
+  if ((game.shards?.[root] ?? 0) < free(game, COPY_COST)) return { ok: false, reason: 'shards' };
   const m = newMember(root, copyLevel(src.level), rng); // 특성 슬롯 무작위·잠김
   const genders = [...(src.genders ?? [])];
   // 성별: 원본 지금 성별이 첫 단계에 맞으면 그대로, 아니면 얻은 성별 중 맞는 것, 없으면 새로 정한 값(계열 기록에 추가)
@@ -71,7 +72,7 @@ export function copyMember(game, key, rng) {
   else if (m.gender && !genders.includes(m.gender)) genders.push(m.gender);
   m.ivs = { ...src.ivs };
   m.genders = genders;
-  game.shards[root] -= COPY_COST;
+  game.shards[root] = (game.shards[root] ?? 0) - free(game, COPY_COST);
   giveUid(game, m);
   game.party.push(m);
   syncLine(game, root, { ivs: src.ivs, genders }); // 새 성별이 생겼다면 계열 모두에

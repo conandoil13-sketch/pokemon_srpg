@@ -7,6 +7,7 @@ import { deployed } from './roster.js';
 import { giveUid, syncLine } from './members.js';
 
 import { addShards } from './shards.js';
+import { free } from './freeCost.js';
 
 const DUPLICATE_SHARDS = { common: 1, rare: 2, epic: 3 };
 export const GACHA_COST = 100, GACHA_TEN_COST = 900; // 10연속은 10% 할인
@@ -71,16 +72,16 @@ export const rollBalls = (rng, n = 3) => Array.from({ length: n }, () => rollBal
 
 // 고른 볼 받기: 코인 차감 + 동료 합류(이미 있는 계열이면 결정)
 export function claimBall(game, ball, rng) {
-  if ((game.coins ?? 0) < GACHA_COST) return { ok: false, reason: 'coins' };
-  game.coins -= GACHA_COST;
+  if ((game.coins ?? 0) < free(game, GACHA_COST)) return { ok: false, reason: 'coins' };
+  game.coins -= free(game, GACHA_COST);
   return applyBall(game, ball, rng);
 }
 
 // 10연속: 한 번에 결제하고 순서대로 받는다 (같은 계열 두 번째부터 결정)
 export function claimBalls(game, balls, rng) {
-  if ((game.items?.tenVoucher ?? 0) > 0) { game.items.tenVoucher -= 1; return { ok: true, voucher: true, results: balls.map((b) => applyBall(game, b, rng)) }; } // 바우처가 있으면 코인 대신
-  if ((game.coins ?? 0) < GACHA_TEN_COST) return { ok: false, reason: 'coins' };
-  game.coins -= GACHA_TEN_COST;
+  if ((game.items?.tenVoucher ?? 0) > 0) { game.items.tenVoucher -= free(game, 1); return { ok: true, voucher: true, results: balls.map((b) => applyBall(game, b, rng)) }; } // 바우처가 있으면 코인 대신
+  if ((game.coins ?? 0) < free(game, GACHA_TEN_COST)) return { ok: false, reason: 'coins' };
+  game.coins -= free(game, GACHA_TEN_COST);
   return { ok: true, results: balls.map((b) => applyBall(game, b, rng)) };
 }
 
