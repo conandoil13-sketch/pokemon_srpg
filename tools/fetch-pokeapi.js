@@ -72,6 +72,19 @@ function abilityCandidates(pokemon, genOf) {
   return out;
 }
 
+// 숨겨진 특성: 9세대 숨겨진 슬롯. GEN_LIMIT 이후 것이면 past_abilities 의 숨겨진 슬롯 중 가장 최근 허용 특성, 없으면 null. 일반 특성과 같으면 null
+function hiddenCandidate(pokemon, genOf, normal) {
+  const h = pokemon.abilities.find((x) => x.is_hidden);
+  let name = h && genOf[h.ability.name] <= GEN_LIMIT ? h.ability.name : null;
+  if (h && !name) {
+    const past = (pokemon.past_abilities ?? []).sort((x, y) => genNum(y.generation.name) - genNum(x.generation.name))
+      .map((p) => p.abilities.find((pa) => pa.is_hidden && pa.ability))
+      .find((pa) => pa && genOf[pa.ability.name] <= GEN_LIMIT);
+    name = past?.ability.name ?? null;
+  }
+  return name && !normal.includes(name) ? name : null;
+}
+
 const EXTRA_KEYS = ['held_item', 'known_move', 'known_move_type', 'location', 'min_affection', 'min_beauty', 'party_species', 'party_type', 'relative_physical_stats', 'trade_species', 'gender'];
 const toDetail = (x) => ({
   trigger: x.trigger.name,
@@ -197,9 +210,10 @@ async function main() {
   for (const s of Object.values(species)) {
     s.abilities = abilityCandidates(s.pk, abilityGen);
     if (!s.abilities.length) throw new Error(`${s.api}: no ability within gen ${GEN_LIMIT}`);
+    s.hidden = hiddenCandidate(s.pk, abilityGen, s.abilities);
     delete s.pk;
   }
-  const used = new Set(Object.values(species).flatMap((s) => s.abilities));
+  const used = new Set(Object.values(species).flatMap((s) => [...s.abilities, ...(s.hidden ? [s.hidden] : [])]));
   for (const name of Object.keys(abilities)) if (!used.has(name)) delete abilities[name];
 
   // 결정적 출력 (키 정렬)

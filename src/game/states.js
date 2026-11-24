@@ -247,6 +247,7 @@ export function abilityNotices(events = [], get) {
     else if (e.ability === 'cursed-body' && t) text = `${who}의 저주받은바디! ${unitLabel(t)}의 기술이 사슬묶기됐다!`;
     else if (e.ability === 'mummy') text = `${who}의 미라! 상대의 특성이 미라가 됐다!`;
     else if (e.ability === 'healer' && t) { text = `${who}의 치유의마음! ${josa(unitLabel(t), '이/가')} 나았다!`; at = { x: t.x, y: t.y }; }
+    else if (e.ability === 'magic-bounce' && t) text = `${who}의 매직미러! ${unitLabel(t)}에게 기술을 되돌렸다!`;
     else if (e.ability === 'synchronize') text = `${who}의 싱크로! 상태이상이 상대에게도 옮았다!`;
     else if (HEAL_ABILITIES.includes(e.ability) && !e.damage) text = `${josa(who, '은/는')} ${josa(name, '으로/로')} HP를 회복했다!`;
     else text = `${who}의 ${name}!`;
@@ -1010,7 +1011,8 @@ export function createGame({ rng, map, party, hpRatio, theme = 'field', floorLab
         fxm.expire(1); // 남은 연기·잔해는 1초 뒤 정리
         // 다음 행동 전 대기(pause) 동안 'anim' 에 머물지 않도록 먼저 모드를 되돌린다
         mode = st.result ? 'result' : st.phase === 'enemy' ? 'enemy' : 'idle';
-        const lines = [...strikeLines(animResult), ...abilityNotices(animAbility, (id) => everyone.get(id))], back = mode;
+        const shown = animResult?.kind === 'status' ? (animAbility ?? []).filter((e) => e.ability !== 'magic-bounce') : animAbility; // 변화기 연출이 매직미러를 먼저 말함
+        const lines = [...strikeLines(animResult), ...abilityNotices(shown, (id) => everyone.get(id))], back = mode;
         animAbility = null; animResult = null;
         if (!st.result) noticeChain(lines, () => { mode = back; animThen(); });
         else noticeChain(lines, () => { mode = 'result'; });

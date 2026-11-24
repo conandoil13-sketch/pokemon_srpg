@@ -5,7 +5,7 @@ import { MOVES } from '../data/moves.js';
 import { ABILITIES } from '../data/abilities.js';
 import { josa } from '../data/text.js';
 import { statsAt, expForLevel, MAX_LEVEL } from '../core/stats.js';
-import { typesOfMember, abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST } from '../core/progress.js';
+import { typesOfMember, abilityOf, unlockAbility, setAbilitySlot, ABILITY_UNLOCK_COST, unlockHidden, hiddenPending, HIDDEN_UNLOCK_COST } from '../core/progress.js';
 import { lineRoot } from '../core/gacha.js';
 import { memberKey } from '../core/members.js';
 import { effectiveBase } from '../core/dittoBuild.js';
@@ -28,16 +28,34 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
   const shards = (m) => game.shards?.[lineRoot(m.species)] ?? 0;
   const say = (lines) => { msg = lines; t = 0; };
 
-  // 특성 페이지 확인: 잠김 → 해금(바로 바뀜), 해금됨 → 공짜로 다른 특성
+  // 특성 페이지: 행 = 일반 특성들 + 숨겨진 특성. 위아래로 고르고 확인 = 그 특성으로 (잠겼으면 해금)
+  const ROW_Y = 84, ROW_H = 15;
+  const abilityRows = (m) => [...SPECIES[m.species].abilities.map((id, slot) => ({ id, slot })), ...(SPECIES[m.species].hidden ? [{ id: SPECIES[m.species].hidden, slot: 'hidden' }] : [])];
+  const hiddenUsed = (m) => !!m.hiddenOn && !!SPECIES[m.species].hidden; // 지금 모습에 숨겨진 특성이 없으면 일반 칸이 쓰임
+  const isCurrent = (m, row) => (row.slot === 'hidden' ? hiddenUsed(m) : !hiddenUsed(m) && row.slot === (m.abilitySlot ?? 0));
+  const defaultRow = (m) => Math.max(0, abilityRows(m).findIndex((r) => !isCurrent(m, r)));
+  let ac = null; // 특성 커서 (null = 기본: 지금 것이 아닌 첫 행)
+  const abilityCursor = () => { const n = abilityRows(member()).length; return ac === null || ac >= n ? defaultRow(member()) : ac; };
   function abilityAction() {
-    const m = member(), name = SPECIES[m.species].name;
+    const m = member(), name = SPECIES[m.species].name, key = memberKey(m);
     if (m.build) { say(['메타몽의 특성은', '박스 메뉴의 메타몽 빌드에서 바꾼다.']); return; }
-    if (SPECIES[m.species].abilities.length < 2) { say([`${name}의 특성은 하나뿐이다.`]); return; }
-    if (!m.abilityUnlocked) {
-      const r = unlockAbility(game, memberKey(m));
+    const rows = abilityRows(m);
+    if (rows.length < 2) { say([`${name}의 특성은 하나뿐이다.`]); return; }
+    const row = rows[abilityCursor()];
+    if (isCurrent(m, row)) { say([`이미 ${josa(ABILITIES[row.id].name, '이다/다')}.`]); return; }
+    if (row.slot === 'hidden') {
+      if (!m.hiddenUnlocked) {
+        const r = unlockHidden(game, key);
+        if (r.reason === 'pending') { say(['아직 이 게임에서 효과가 없어', '해금할 수 없다.']); return; }
+        if (!r.ok) { say([`${name}의 결정이 모자란다.`, `(${shards(m)}/${HIDDEN_UNLOCK_COST})`]); return; }
+      } else setAbilitySlot(game, key, 'hidden');
+    } else if (row.slot !== (m.abilitySlot ?? 0) && !m.abilityUnlocked) {
+      const r = unlockAbility(game, key);
       if (!r.ok) { say([`${name}의 결정이 모자란다.`, `(${shards(m)}/${ABILITY_UNLOCK_COST})`]); return; }
-    } else setAbilitySlot(game, memberKey(m), (m.abilitySlot ?? 0) === 0 ? 1 : 0);
+      setAbilitySlot(game, key, row.slot);
+    } else setAbilitySlot(game, key, row.slot);
     onSave();
+    ac = null; // 연타하면 다음 특성으로 (왕복)
     say([`${name}의 특성이`, `${josa(ABILITIES[abilityOf(m)].name, '으로/로')} 바뀌었다!`]);
   }
 
@@ -62,8 +80,15 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       if (msg) { if ((pick || ev.type === 'cancel') && t >= CHOICE_LOCK) msg = null; return; }
       if (ev.type === 'cancel') { onClose(member()); return; }
       if (ev.type === 'dir' && ev.dx) pg = (pg + ev.dx + PAGES.length) % PAGES.length;
-      if (ev.type === 'dir' && ev.dy && list.length) i = (i + ev.dy + list.length) % list.length;
+      if (ev.type === 'dir' && ev.dx) ac = null;
+      if (ev.type === 'dir' && ev.dy && pg === 3 && !member().build && abilityRows(member()).length > 1) { const n = abilityRows(member()).length; ac = (abilityCursor() + ev.dy + n) % n; return; } // 특성 페이지: 위아래 = 특성 고르기
+      if (ev.type === 'dir' && ev.dy && list.length) { i = (i + ev.dy + list.length) % list.length; ac = null; }
       if (ev.type === 'click' && ev.py !== undefined && ev.py < 16) { pg = Math.max(0, Math.min(PAGES.length - 1, Math.floor((ev.px - 2) / TAB_W))); return; } // 탭
+      if (ev.type === 'click' && pg === 3 && ev.py !== undefined) { // 특성 행을 누르면 그 행을 고르고 실행
+        const k = Math.floor((ev.py - ROW_Y) / ROW_H);
+        if (k < 0 || k >= abilityRows(member()).length) return;
+        ac = k;
+      }
       if (pick && pg === 3) abilityAction();
       if (ev.type === 'confirm' && pg === 0) genderAction();
       if (ev.type === 'click' && pg === 0 && !genderFixed(member().species) && ev.py >= 146 && ev.py < 160) genderAction(); // 성별 줄을 눌렀을 때만
@@ -83,7 +108,7 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
       const nameEnd = ui.drawNameWithGender(ctx, m.species, m.gender, 54, 23);
       drawText(ctx, `Lv.${m.level}`, nameEnd + 8, 23);
       typesOfMember(m).forEach((ty, k) => ui.drawTypeBadge(ctx, ty, 54 + k * 34, 39)); // 메타몽은 빌드 타입
-      const sub = `${i + 1}/${list.length}  ▲▼ 다른 동료`;
+      const sub = pg === 3 && !m.build && abilityRows(m).length > 1 ? `${i + 1}/${list.length}` : `${i + 1}/${list.length}  ▲▼ 다른 동료`; // 특성 페이지에선 위아래 = 특성
       drawText(ctx, sub, W - 10 - textWidth(sub, 'small'), 52, '#909090', null, 'small');
       const y0 = 68, small = (text, x, y, c = '#383838') => drawText(ctx, text, x, y, c, null, 'small');
       if (pg === 0) {
@@ -120,18 +145,23 @@ export function createSummary({ game, list, index = 0, page = 0, onSave = () => 
           small(moveStatLine(mv), 10, y + 13, '#606060'); // 흡수·반동·연속 등
         });
       } else {
-        const cur = ABILITIES[abilityOf(m)], slots = s.abilities;
+        const cur = ABILITIES[abilityOf(m)];
         drawText(ctx, `특성 ${cur?.name ?? '-'}`, 10, y0, cur?.inactive ? '#909090' : '#305830');
-        fitLines(cur?.desc ?? '', W - 24).slice(0, 2).forEach((l, k) => small(l, 10, y0 + 14 + k * 11, '#505050'));
-        if (m.build) small('메타몽 빌드에서 특성 캡슐로 바꾼다.', 10, y0 + 46, '#808080');
-        else if (slots.length < 2) small('특성은 하나뿐이다.', 10, y0 + 46, '#808080');
+        if (m.build) { fitLines(cur?.desc ?? '', W - 24).slice(0, 2).forEach((l, k) => small(l, 10, y0 + 14 + k * 11, '#505050')); small('메타몽 빌드에서 특성 캡슐로 바꾼다.', 10, y0 + 46, '#808080'); }
         else {
-          const other = ABILITIES[slots[(m.abilitySlot ?? 0) === 0 ? 1 : 0]];
-          drawText(ctx, `다른 특성 ${other?.name ?? '-'}`, 10, y0 + 42, m.abilityUnlocked ? '#305830' : '#808080');
-          fitLines(other?.desc ?? '', W - 24).slice(0, 2).forEach((l, k) => small(l, 10, y0 + 56 + k * 11, '#707070'));
-          const action = m.abilityUnlocked ? '확인: 이 특성으로 바꾸기' : `확인: 해금 (결정 ${shards(m)}/${ABILITY_UNLOCK_COST})`;
-          const ok = m.abilityUnlocked || shards(m) >= ABILITY_UNLOCK_COST;
-          small(action, 10, y0 + 82, ok ? '#c06010' : '#a0a0a0');
+          const rows = abilityRows(m), cursor = abilityCursor();
+          rows.forEach((row, k) => {
+            const y = ROW_Y + k * ROW_H, a = ABILITIES[row.id], here = isCurrent(m, row), hidden = row.slot === 'hidden';
+            if (rows.length > 1 && k === cursor) small('▶', 10, y, '#c06010');
+            small(`${a?.name ?? '-'}${hidden ? ' (숨겨진)' : ''}`, 20, y, here ? '#305830' : '#383838');
+            const pend = hidden && !m.hiddenUnlocked && hiddenPending(m.species);
+            const state = here ? '사용 중' : hidden ? (m.hiddenUnlocked ? '' : pend ? '준비 중' : `해금 결정 ${shards(m)}/${HIDDEN_UNLOCK_COST}`)
+              : row.slot !== (m.abilitySlot ?? 0) && !m.abilityUnlocked ? `해금 결정 ${shards(m)}/${ABILITY_UNLOCK_COST}` : '';
+            if (state) small(state, W - 14 - textWidth(state, 'small'), y, here ? '#2860c8' : pend ? '#a0a0a0' : '#c06010');
+          });
+          const pick = ABILITIES[rows[rows.length > 1 ? cursor : 0].id];
+          fitLines(pick?.desc ?? '', W - 24).slice(0, 3).forEach((l, k) => small(l, 10, ROW_Y + rows.length * ROW_H + 6 + k * 11, '#505050'));
+          small(rows.length > 1 ? '▲▼ 특성 고르기 · 확인: 바꾸기/해금' : '특성은 하나뿐이다.', 10, H - 18, '#808080');
         }
       }
       if (msg) ui.drawMessage(ctx, msg, null, Math.floor(time * 3) % 2 === 0);

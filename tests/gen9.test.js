@@ -46,11 +46,11 @@ test('a version 9 (gen 4 era) save loads into version 10, keeping ability slots,
   const store = new Map(); const storage = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) };
   saveGame(storage, g);
   const raw = JSON.parse(store.get('pokemon-tactics-save'));
-  assert.equal(raw.version, 10);
+  assert.equal(raw.version, 11);
   store.set('pokemon-tactics-save', JSON.stringify({ ...raw, version: 9 }));
   const back = loadGame(storage);
   assert.ok(back, 'v9 save is not thrown away');
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   assert.deepEqual(back.party.find((x) => x.uid === m.uid).moves, m.moves);
   assert.equal(back.party.find((x) => x.uid === m.uid).abilitySlot, 0);
 });

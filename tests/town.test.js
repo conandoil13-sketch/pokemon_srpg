@@ -761,3 +761,25 @@ test('clicking the body or roof of a building walks to its door and opens it; cl
     assert.equal(shop, 1);
   }
 });
+
+test('summary: the hidden row unlocks for 4 shards, then rows switch freely', async () => {
+  const { newMember, abilityOf } = await import('../src/core/progress.js');
+  const game = newGame();
+  game.party.push(newMember('bulbasaur', 8, () => 0));
+  const { box } = await boxScene(0, { game });
+  while (box.cursorMember.species !== 'bulbasaur') box.handle({ type: 'dir', dx: 1, dy: 0 });
+  box.handle({ type: 'confirm' });
+  for (let i = 0; i < 3; i++) box.handle({ type: 'dir', dx: 0, dy: 1 }); // 특성
+  box.handle({ type: 'confirm' });
+  const sm = box.summary, b = game.party.find((m) => m.species === 'bulbasaur');
+  const pass = () => { for (let i = 0; i < 5; i++) box.update(0.1); if (sm.mode === 'msg') box.handle({ type: 'confirm' }); };
+  box.handle({ type: 'dir', dx: 0, dy: 1 }); box.handle({ type: 'dir', dx: 0, dy: 1 }); // 2행(심록·엽록소) 한 바퀴: 숨겨진 행으로 돌아옴
+  assert.equal(sm.member.species, 'bulbasaur'); // 위아래는 동료를 바꾸지 않음
+  game.shards.bulbasaur = 4;
+  box.handle({ type: 'confirm' });
+  assert.equal(abilityOf(b), 'chlorophyll');
+  assert.equal(game.shards.bulbasaur, 0);
+  pass();
+  box.handle({ type: 'confirm' }); // 기본 커서 = 지금 것이 아닌 첫 행 → 일반 특성
+  assert.equal(abilityOf(b), 'overgrow');
+});

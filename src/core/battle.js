@@ -277,7 +277,7 @@ function changeStats(unit, list, out, turns = STAGE_TURNS, fromOther = false, br
     const key = API_STAT[stat];
     if (!key) continue;
     const r = applyStageChange(unit, key, change, turns, { fromOther, breaker });
-    out.push({ unitId: unit.id, key, change, applied: r.applied, after: r.after });
+    out.push({ unitId: unit.id, key, change: r.change || change, applied: r.applied, after: r.after }); // 심술꾸러기면 뒤집힌 방향 (막혀 0이면 원래 방향)
     if (fromOther && r.applied < 0 && has(unit, 'defiant')) { const d = applyStageChange(unit, 'atk', 2, turns); out.push({ unitId: unit.id, key: 'atk', change: 2, applied: d.applied, after: d.after }); } // 오기
   }
   if (itemOf(unit)?.whiteHerb && !unit.whiteUsed && Object.values(unit.stages ?? {}).some((n) => n < 0)) { // 하얀허브: 떨어진 랭크 되돌림 (층마다 1번)
@@ -554,6 +554,20 @@ export function chargeRoute(state, unit) {
 }
 
 // aim: 대상 id 문자열(단일, 호환) 또는 shapes.js 의 조준 객체
+const NO_BOUNCE = new Set(['memento']); // 되돌리지 않는 변화기 (추억의선물: 쓰는 쪽이 쓰러지는 기술)
+// 매직미러: 그 칸(또는 유닛) 자신이나 상하좌우에 있는 같은 편 보유자
+function magicBouncer(state, t) {
+  return state.units.find((h) => h.side === t.side && h.hp > 0 && Math.abs(h.x - t.x) + Math.abs(h.y - t.y) <= 1 && has(h, 'magic-bounce')) ?? null;
+}
+
+// 주변·전장을 보는 특성 플래그 (데미지 계산이 읽음): 애널라이즈 = 전장에서 가장 느림(공동 포함), 프렌드가드 = 상하좌우 다른 아군 보유자 수
+export function refreshAbilityFlags(state) {
+  for (const u of state.units) {
+    u.analyticActive = has(u, 'analytic') && state.units.every((o) => o === u || speedOf(o) >= speedOf(u));
+    u.friendGuards = state.units.filter((o) => o !== u && o.side === u.side && dist(o, u) === 1 && has(o, 'friend-guard')).length;
+  }
+}
+
 export function applyMove(state, userId, moveId, aim, rng) {
   const outer = moxieQueue;
   moxieQueue = [];
@@ -574,6 +588,7 @@ function runMove(state, userId, moveId, aim, rng) {
     u.plusActive = (has(u, 'plus') || has(u, 'minus')) && nextTo(u, (o) => has(o, 'plus') || has(o, 'minus'));
     u.flowerActive = W === 'sun' && (has(u, 'flower-gift') || nextTo(u, (o) => has(o, 'flower-gift')));
   }
+  refreshAbilityFlags(state);
   const rod = redirectTarget(state, userId, moveId, aim);
   const focusId = typeof aim === 'string' ? aim : aim?.unitId ?? null;
   const a = byId(state, userId), move = moveFor(a, moveId); // 저주: 쓰는 유닛 타입에 따라
@@ -607,15 +622,15 @@ function runMove(state, userId, moveId, aim, rng) {
     if (ab.flashFire) u.flashFire = true;
     abilityEvents.push({ unitId: u.id, ability: ab.ability });
   };
-  const ail = (t) => {
+  const ail = (t, src = a) => { // src: 매직미러로 되돌렸으면 보유자
     if (!move.ailment) return;
-    if (move.ailment === 'infatuation') { statusChanges.push({ unitId: t.id, ailment: 'infatuation', ...infatuate(t, a, { breaker: breaker }) }); return; } // 메로메로
-    const r = inflict(t, move.ailment, rng, move, W, { breaker: t !== a && breaker });
+    if (move.ailment === 'infatuation') { statusChanges.push({ unitId: t.id, ailment: 'infatuation', ...infatuate(t, src, { breaker: src === a && breaker }) }); return; } // 메로메로
+    const r = inflict(t, move.ailment, rng, move, W, { breaker: t !== src && src === a && breaker });
     statusChanges.push({ unitId: t.id, ailment: move.ailment, ...r });
     // 싱크로: 독·마비·화상을 건 상대에게도
-    if (r.ok && has(t, 'synchronize') && t !== a && SYNC_AILMENTS.includes(move.ailment)) {
-      const back = inflict(a, move.ailment, rng, null, W);
-      statusChanges.push({ unitId: a.id, ailment: move.ailment, ...back });
+    if (r.ok && has(t, 'synchronize') && t !== src && SYNC_AILMENTS.includes(move.ailment)) {
+      const back = inflict(src, move.ailment, rng, null, W);
+      statusChanges.push({ unitId: src.id, ailment: move.ailment, ...back });
       if (back.ok) abilityEvents.push({ unitId: t.id, ability: 'synchronize' });
     }
   };
@@ -671,28 +686,39 @@ function runMove(state, userId, moveId, aim, rng) {
   }
   if (kind === 'status' && move.aimTile) { // 압정: 칸 조준 (사거리 1~3)
     const ok = aim && aim.x !== undefined && state.grid[aim.y]?.[aim.x] !== undefined && dist(a, aim) >= TRAP_RANGE[0] && dist(a, aim) <= TRAP_RANGE[1];
-    const r = ok ? layTraps(state, a, move.effect, aim) : { ok: false, tiles: [] };
+    const mirror = ok && !breaker ? [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].map(([dx, dy]) => magicBouncer(state, { x: aim.x + dx, y: aim.y + dy, side: a.side === 'ally' ? 'enemy' : 'ally' })).find(Boolean) : null;
+    if (mirror) abilityEvents.push({ unitId: mirror.id, ability: 'magic-bounce', target: a.id }); // 매직미러: 시전자 주변으로 (보유자 편 압정)
+    const r = !ok ? { ok: false, tiles: [] } : mirror ? layTraps(state, mirror, move.effect, { x: a.x, y: a.y }) : layTraps(state, a, move.effect, aim);
     return { kind, stageChanges, statusChanges, thawed, missed: [], abilityEvents, effects: [{ unitId: a.id, effect: move.effect, ok: r.ok, ...(ok ? {} : { reason: 'range' }) }], protectedIds: [], trapsLaid: r.tiles };
   }
   if (kind === 'status') {
     const missed = [], effects = [], protectedIds = [], out2 = {}; // out2: 밀어내기 pushed · 흑안개 hazed
     const acc = { ...move, accuracy: move.accuracy ?? 100 };
-    for (const t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
-      if (t !== a && t.guard === 'protect') { protectedIds.push(t.id); continue; } // 방어: 다른 유닛의 기술을 막음
-      const ab = t.side !== a.side ? immunity(a, t, move) : null; // 축전에 전기자석파 등
+    let bounced = false;
+    for (let t of targetsOf(state, a, move, focusId ? byId(state, focusId) : null)) {
+      let src = a; // 매직미러로 되돌리면 시전자 = 보유자, 대상 = 원래 시전자
+      const mirror = !breaker && t.side !== a.side && !NO_BOUNCE.has(move.id) ? magicBouncer(state, t) : null;
+      if (mirror) {
+        if (bounced) continue; // 한 기술은 한 번만 되돌림 (나머지 보호받는 대상은 조용히 아무 일 없음)
+        bounced = true;
+        abilityEvents.push({ unitId: mirror.id, ability: 'magic-bounce', target: a.id });
+        src = mirror; t = a;
+      }
+      if (t !== src && t.guard === 'protect') { protectedIds.push(t.id); continue; } // 방어: 다른 유닛의 기술을 막음
+      const ab = t.side !== src.side ? immunity(src, t, move) : null; // 축전에 전기자석파 등
       if (ab) { absorb(t, ab); continue; }
-      if (t.side !== a.side && !(rng() * 100 < hitChance(a, t, acc, state.grid[t.y][t.x], W, terrainCtx(state, a, t)))) { missed.push(t.id); continue; }
-      if (move.id === 'captivate' && !(t.gender && a.gender && t.gender !== a.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
-      if (move.effect === 'push') { effects.push(pushAway(state, a, t, out2)); continue; } // 울부짖기·날려버리기
-      if (SUPPORT.has(move.effect)) { effects.push(supportEffect(state, a, t, move, rng, stageChanges, statusChanges, out2)); continue; } // 회복·상태 조작
+      if (t.side !== src.side && !(rng() * 100 < hitChance(src, t, acc, state.grid[t.y][t.x], W, terrainCtx(state, src, t)))) { missed.push(t.id); continue; }
+      if (move.id === 'captivate' && !(t.gender && src.gender && t.gender !== src.gender)) { statusChanges.push({ unitId: t.id, ailment: null, ok: false, reason: 'immune' }); continue; } // 유혹: 반대 성별만
+      if (move.effect === 'push') { effects.push(pushAway(state, src, t, out2)); continue; } // 울부짖기·날려버리기
+      if (SUPPORT.has(move.effect)) { effects.push(supportEffect(state, src, t, move, rng, stageChanges, statusChanges, out2)); continue; } // 회복·상태 조작
     if (move.effect === 'haze') { // 흑안개: 주변 2칸 모두 (자신 포함) 랭크 초기화
       out2.hazed = state.units.filter((u) => dist(u, a) <= 2).map((u) => { Object.assign(u, newStages()); return u.id; });
       effects.push({ unitId: a.id, effect: 'haze', ok: true });
       continue;
     }
-    if (move.effect) { effects.push(applyEffect(state, a, t, move, rng, W)); continue; } // 포켓몬에 붙는 효과
-      changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== a, t !== a && breaker);
-      ail(t);
+    if (move.effect) { effects.push(applyEffect(state, src, t, move, rng, W)); continue; } // 포켓몬에 붙는 효과
+      changeStats(t, move.statChanges ?? [], stageChanges, move.area ? AREA_STAGE_TURNS : STAGE_TURNS, t !== src, t !== src && breaker);
+      ail(t, src);
     }
     noteChain(state, a, move, false); // 크로스 연계는 끊김
     let selfFainted = null;
@@ -846,6 +872,7 @@ function runMove(state, userId, moveId, aim, rng) {
       bound.push({ unitId: d.id, moveId: move.id });
     }
     if (landed && !fainted && last?.damage > 0) {
+      if (has(d, 'rattled') && ['dark', 'bug', 'ghost'].includes(moveTypeOf(a, move))) { changeStats(d, [{ stat: 'speed', change: 1 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'rattled' }); } // 주눅
       if (has(d, 'justified') && moveTypeOf(a, move) === 'dark') { changeStats(d, [{ stat: 'attack', change: 1 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'justified' }); } // 정의의마음
       if (has(d, 'weak-armor') && move.category === 'physical') { changeStats(d, [{ stat: 'defense', change: -1 }, { stat: 'speed', change: 2 }], stageChanges); abilityEvents.push({ unitId: d.id, ability: 'weak-armor' }); } // 깨어진갑옷
       if (has(d, 'color-change') && d.typeOverride !== moveTypeOf(a, move)) { d.typeOverride = moveTypeOf(a, move); abilityEvents.push({ unitId: d.id, ability: 'color-change' }); }
@@ -1178,6 +1205,14 @@ export function endPhase(state, rng = Math.random) {
       if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
     }
     if (has(u, 'speed-boost')) { applyStageChange(u, 'spe', 1); abilityLog.push({ unitId: u.id, ability: 'speed-boost' }); }
+    if (has(u, 'moody')) { // 변덕쟁이: 명중·회피 뺀 능력 하나 +2, 다른 하나 −1
+      const KEYS = ['atk', 'def', 'spa', 'spd', 'spe'], at = (k) => u.stages?.[k] ?? 0;
+      const ups = KEYS.filter((k) => at(k) < 6), up = ups.length ? ups[Math.floor(rng() * ups.length)] : null;
+      const downs = KEYS.filter((k) => k !== up && at(k) > -6), down = downs.length ? downs[Math.floor(rng() * downs.length)] : null;
+      if (up) applyStageChange(u, up, 2);
+      if (down) applyStageChange(u, down, -1);
+      abilityLog.push({ unitId: u.id, ability: 'moody' });
+    }
     if (u.slowTurns > 0) u.slowTurns -= 1;
     tickEnd(state, u, events, rng); // 도발·이동 불가 … 턴 감소, 지속 회복·저주
     if (u.hp > 0 && has(u, 'natural-cure') && u.status && !u.ncTouched) { cure(u); events.push({ unitId: u.id, kind: 'naturalCure' }); } // 자연회복: 조용한 한 바퀴

@@ -66,6 +66,9 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   if (has(attacker, 'defeatist') && attacker.hp <= attacker.maxHp / 2) m *= 0.5; // 무기력
   if (has(attacker, 'sand-force') && weather === 'sand' && ['rock', 'ground', 'steel'].includes(type)) m *= 1.3; // 모래의힘
   if (sheerForce(attacker, move)) m *= 1.3; // 우격다짐
+  if (attacker.analyticActive) m *= 1.3; // 애널라이즈: 전장에서 가장 느릴 때
+  if (has(attacker, 'flare-boost') && attacker.status === 'burn' && !physical) m *= 1.5; // 열폭주
+  if (has(attacker, 'toxic-boost') && (attacker.status === 'poison' || attacker.status === 'toxic') && physical) m *= 1.5; // 독폭주
   return m * itemAttackMult(attacker, defender, move, typeMult, type); // 지니는 도구
 }
 // 화상의 물리 반감을 무시하는가 (근성)
@@ -81,6 +84,8 @@ export function defendMult(attacker, defender, move, { typeMult }) {
   if (def(attacker, defender, 'marvel-scale') && defender.status && physical) m /= 1.5;
   if (def(attacker, defender, 'dry-skin') && type === 'fire') m *= 1.25;
   if (defender.flowerActive && !physical) m /= 1.5;
+  if (def(attacker, defender, 'multiscale') && defender.hp >= defender.maxHp) m *= 0.5; // 멀티스케일
+  if (defender.friendGuards > 0 && !breaks(attacker)) m *= 1 - (0.3 + 0.06 * (defender.friendGuards - 1)); // 프렌드가드
   return m * itemDefMult(defender, move); // 심해의비늘·메탈파우더
 }
 
@@ -141,6 +146,7 @@ export function blocksAilment(unit, ailment, weather = null) {
 
 // ---- 랭크: 다른 포켓몬 때문에 떨어지는 걸 막음 / 단순 ----
 export function stageGuard(unit, key, change, fromOther) {
+  if (has(unit, 'contrary')) change = -change; // 심술꾸러기 (틀깨기면 부르는 쪽이 이 함수를 건너뜀)
   if (fromOther && change < 0) {
     if (has(unit, 'clear-body') || has(unit, 'white-smoke')) return 0;
     if (has(unit, 'hyper-cutter') && key === 'atk') return 0;
@@ -206,7 +212,7 @@ export function traps(trapper, foe) {
 export function pickupLoot(members, rng) {
   const out = [];
   for (const m of members) {
-    const a = m.build?.ability ?? SPECIES[m.species].abilities[m.abilitySlot ?? 0] ?? SPECIES[m.species].abilities[0]; // 메타몽은 빌드 특성
+    const a = m.build?.ability ?? ((m.hiddenOn && SPECIES[m.species].hidden) || SPECIES[m.species].abilities[m.abilitySlot ?? 0] || SPECIES[m.species].abilities[0]); // 메타몽은 빌드 특성 · 숨겨진 칸
     if ((a === 'pickup' || a === 'honey-gather') && rng() < 0.1) out.push(rng() < 0.5 ? 'pickupCoins' : 'candy');
   }
   return out;

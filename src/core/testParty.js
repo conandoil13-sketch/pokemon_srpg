@@ -21,7 +21,7 @@ export function scaleTestParty(game, dungeonId) {
   game.party = game.party.map((m) => {
     const to = finalForm(m.species, level, m.gender ?? null), n = newMember(to, level);
     const abilitySlot = m.abilitySlot < SPECIES[to].abilities.length ? m.abilitySlot : n.abilitySlot;
-    return { ...n, abilitySlot, uid: m.uid, gender: m.gender ?? n.gender, genders: m.genders ?? n.genders, ...(m.build ? { build: m.build } : {}) };
+    return { ...n, abilitySlot, abilityUnlocked: !!m.abilityUnlocked, hiddenUnlocked: !!m.hiddenUnlocked, hiddenOn: !!m.hiddenOn, uid: m.uid, gender: m.gender ?? n.gender, genders: m.genders ?? n.genders, ...(m.build ? { build: m.build } : {}) };
   });
   const before = DUNGEONS.filter((x) => x.stage < d.stage).map((x) => x.id);
   game.cleared = [...new Set([...game.cleared, ...before])];

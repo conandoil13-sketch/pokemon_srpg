@@ -44,7 +44,7 @@ export function applyStageChange(unit, key, change, turns = STAGE_TURNS, { fromO
   const after = Math.max(-MAX, Math.min(MAX, before + change));
   const applied = after - before;
   if (applied !== 0) { unit.layers.push({ key, amount: applied, turns }); refresh(unit, key); }
-  return { key, before, after, applied };
+  return { key, before, after, applied, change }; // change: 특성(심술꾸러기·단순·클리어바디)을 거친 실제 방향·양
 }
 
 // 페이즈 종료: 층마다 남은 턴 −1, 다 된 층은 사라진다. 값이 바뀐 키 목록 반환

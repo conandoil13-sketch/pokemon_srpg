@@ -231,7 +231,8 @@ test('regenerated data keeps every existing value (only new fields added) — go
   const { 'grass-knot': gk, ...oldMoves } = POKEDEX.moves;
   const oldOnly = Object.fromEntries(Object.entries(oldMoves).map(([k, m]) => [k, Object.fromEntries(Object.entries(m).filter(([f]) => !NEW.includes(f)))]));
   assert.equal(sha(oldOnly), '0e8dc7ce099d399f6d7d11fea4fc16dd035d81c6');
-  assert.equal(sha(POKEDEX.abilities), 'bf158da63794184814dcb798d9df2594ae6deacd');
+  const HIDDEN_ONLY = ['analytic', 'contrary', 'flare-boost', 'friend-guard', 'harvest', 'heavy-metal', 'imposter', 'light-metal', 'magic-bounce', 'moody', 'multiscale', 'pickpocket', 'rattled', 'toxic-boost', 'zen-mode']; // 숨겨진 특성으로 들어온 것 (2026-11-24)
+  assert.equal(sha(Object.fromEntries(Object.entries(POKEDEX.abilities).filter(([k]) => !HIDDEN_ONLY.includes(k)))), 'bf158da63794184814dcb798d9df2594ae6deacd');
   assert.ok(gk);
 });
 

@@ -14,7 +14,7 @@ test('round trip', () => {
   g.party[0].exp = 1000;
   assert.equal(saveGame(st, g), true);
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   assert.deepEqual(back.cleared, ['sinnoh-field']);
   assert.equal(back.items.evoStone, 2);
   assert.equal(back.party.length, 5);
@@ -91,7 +91,7 @@ test('any unexpected shape returns null instead of throwing', () => {
 // ---- v2 ----
 test('v2 new game shape', () => {
   const g = newGame();
-  assert.equal(g.version, 10);
+  assert.equal(g.version, 11);
   assert.deepEqual(g.unlocked, ['sinnoh-field']);
   assert.deepEqual(g.best, {});
   assert.equal(g.run, null);
@@ -116,7 +116,7 @@ test('v1 save migrates: party/items kept, fixed-stage clears dropped', () => {
   v1.party[0].level = 12; v1.party[0].exp = 1000;
   st.setItem(SAVE_KEY, JSON.stringify(v1));
   const g = loadGame(st);
-  assert.equal(g.version, 10);
+  assert.equal(g.version, 11);
   assert.equal(g.party[0].level, 12);
   assert.equal(g.items.evoStone, 3);
   assert.deepEqual(g.cleared, []);
@@ -142,7 +142,7 @@ test('invalid run or unknown dungeons are cleaned', () => {
 // ---- v3: 메타몽 주인공 ----
 test('new game: ditto leads a party of 5', () => {
   const g = newGame();
-  assert.equal(g.version, 10);
+  assert.equal(g.version, 11);
   assert.deepEqual(g.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
 });
 
@@ -152,7 +152,7 @@ test('v2 save gains ditto at the front', () => {
   const v2 = { ...g, version: 2, party: g.party.slice(1) };
   st.setItem(SAVE_KEY, JSON.stringify(v2));
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   assert.deepEqual(back.party.map((m) => m.species), ['ditto', 'chimchar', 'piplup', 'turtwig', 'shinx']);
 });
 
@@ -173,7 +173,7 @@ import { cleanSortie } from '../src/core/save.js';
 test('v4 new game and round trip', () => {
   const st = memStore();
   const g = newGame();
-  assert.equal(g.version, 10);
+  assert.equal(g.version, 11);
   assert.equal(g.coins, 0);
   assert.deepEqual(g.shards, {});
   assert.deepEqual(sortieSpecies(g), ['chimchar', 'piplup', 'turtwig', 'shinx']);
@@ -193,7 +193,7 @@ test('v3 → v4 migration', () => {
   const v3 = { version: 3, party: g.party, items: g.items, unlocked: g.unlocked, best: {}, cleared: [], run: { dungeonId: 'sinnoh-field', floor: 2, seed: 5, faintedLast: [], loot: { evoStone: 0, candy: [] } } };
   st.setItem(SAVE_KEY, JSON.stringify(v3));
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   assert.equal(back.coins, 0);
   assert.deepEqual(back.shards, {});
   assert.deepEqual(sortieSpecies(back), ['chimchar', 'piplup', 'turtwig', 'shinx']);
@@ -216,7 +216,7 @@ test('v4 → v5: every member gets an ability slot that fits its species', () =>
   const v4 = { ...g, version: 4, party: g.party.map(({ abilitySlot, ...m }) => m) };
   st.setItem(SAVE_KEY, JSON.stringify(v4));
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   for (const m of back.party) assert.ok(m.abilitySlot === 0 || m.abilitySlot === 1, m.species);
   const bad = { ...g, version: 5, party: g.party.map((m) => ({ ...m, abilitySlot: 7 })) };
   st.setItem(SAVE_KEY, JSON.stringify(bad));
@@ -230,7 +230,7 @@ test('v5 → v6: every member locked, slots kept; bad unlock flags cleaned', () 
   const v5 = { ...g, version: 5, party: g.party.map(({ abilityUnlocked, ...m }) => m) };
   st.setItem(SAVE_KEY, JSON.stringify(v5));
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   for (const m of back.party) assert.equal(m.abilityUnlocked, false, m.species);
   assert.equal(back.party.find((m) => m.species === 'geodude').abilitySlot, 1);
   const bad = { ...back, party: back.party.map((m) => ({ ...m, abilityUnlocked: m.species === 'geodude' ? 'yes' : m.species === 'shinx' })) };
@@ -249,7 +249,7 @@ test('v6 → v7: ditto gets a default build, bag is empty, a run in progress kee
     run: { dungeonId: 'sinnoh-field', floor: 2, seed: 5, faintedLast: [], loot: { evoStone: 1, candy: [1], coins: 40 } } };
   st.setItem(SAVE_KEY, JSON.stringify(v6));
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   const d = back.party.find((m) => m.species === 'ditto');
   assert.deepEqual(d.build, { types: ['normal'], bonus: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, ability: 'limber' });
   assert.deepEqual(back.items, { evoStone: 2, tenVoucher: 0, powders: { hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0 }, capsules: [] });
@@ -285,7 +285,7 @@ test('v7 → v8: IVs and gender filled; ditto 31 and genderless; bad values fixe
   const v7 = { ...g, version: 7, party: g.party.map(({ ivs, gender, genders, ...m }) => m) };
   st.setItem(SAVE_KEY, JSON.stringify(v7));
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   for (const m of back.party) {
     assert.ok(Object.values(m.ivs).every((v) => Number.isInteger(v) && v >= 0 && v <= 31), m.species);
     if (m.species === 'ditto') { assert.equal(m.gender, null); assert.ok(Object.values(m.ivs).every((v) => v === 31)); }
@@ -307,7 +307,7 @@ test('v8 → v9: uids given, sortie and fainted-last by uid, round trip keeps th
   delete v8.nextUid;
   st.setItem(SAVE_KEY, JSON.stringify(v8));
   const back = loadGame(st);
-  assert.equal(back.version, 10);
+  assert.equal(back.version, 11);
   const uids = back.party.map((m) => m.uid);
   assert.ok(uids.every((u) => Number.isInteger(u) && u > 0));
   assert.equal(new Set(uids).size, uids.length);

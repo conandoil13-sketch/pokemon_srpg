@@ -17,7 +17,7 @@ import { memberKey, unifyLines } from './members.js';
 import { lineRoot } from './gacha.js';
 
 export const SAVE_KEY = 'pokemon-tactics-save';
-const VERSION = 10;
+const VERSION = 11;
 const FIRST_DUNGEON = DUNGEONS[0].id;
 let warned = false;
 const warn = (msg) => { if (!warned) { warned = true; console.warn(`[save] ${msg}`); } };
@@ -54,7 +54,7 @@ function cleanMember(m) {
   if (!moves.length) moves = startingMoves(s.learnset, level, MOVES, m.species);
   const slot = Number.isInteger(m.abilitySlot) && m.abilitySlot >= 0 && m.abilitySlot < s.abilities.length ? m.abilitySlot : m.abilitySlot === undefined ? defaultSlot(m.species) : 0;
   const abilityUnlocked = m.abilityUnlocked === true && s.abilities.length > 1; // 잠김 = 지금 슬롯 특성만
-  const out = { ...(Number.isInteger(m.uid) && m.uid > 0 ? { uid: m.uid } : {}), species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked };
+  const out = { ...(Number.isInteger(m.uid) && m.uid > 0 ? { uid: m.uid } : {}), species: m.species, level, exp: clampInt(m.exp, lo, hi), moves, abilitySlot: slot, abilityUnlocked, hiddenUnlocked: m.hiddenUnlocked === true, hiddenOn: m.hiddenUnlocked === true && m.hiddenOn === true };
   if (m.species === 'ditto') out.build = cleanBuild(m.build, level); // 메타몽만 빌드
   else if (Array.isArray(m.learned)) out.learned = [...new Set(m.learned.filter((mv) => typeof mv === 'string' && own(MOVES, mv)))]; // 익혔던 기술 (떠올리기)
   if (isHeldItem(m.held)) out.held = m.held; // 지닌 도구 (없으면 칸 없음)
@@ -166,6 +166,7 @@ export function loadGame(storage) {
   let speciesRun = false;
   if (data?.version === 8) { data = { ...data, version: 9 }; speciesRun = true; } // v8 → v9: uid 는 아래서 붙이고, 종 이름 출전·기절 기록은 uid 로
   if (data?.version === 9) data = { ...data, version: 10 }; // v9 → v10: 9세대 기준 데이터 (2026-11-24) — 타입·종족값·특성은 새 데이터로, 특성 슬롯·해금·배운 기술은 그대로
+  if (data?.version === 10) data = { ...data, version: 11 }; // v10 → v11: 숨겨진 특성 (2026-11-24) — 동료는 잠긴 채로
   if (data?.version !== VERSION) { warn('save version mismatch ignored'); return null; }
   data = renameDungeons(data, RENAMED);
   try {
