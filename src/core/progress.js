@@ -13,6 +13,7 @@ function individualOf(species, rng) {
 }
 import { lineRoot } from './gacha.js';
 import { MOVES } from '../data/moves.js';
+import { NO_EFFECT } from '../data/abilities.js';
 import { BALANCE } from '../data/balance.js';
 import { expForLevel, levelForExp, statsAt, MAX_LEVEL } from './stats.js';
 import { startingMoves, movesLearnedBetween, learnOutcome } from './learn.js';
@@ -28,11 +29,11 @@ export function newMember(species, level = BALANCE.startLevel, rng = null) {
   const s = SPECIES[species];
   const abilitySlot = s.abilities.length > 1 ? (rng ? Math.floor(rng() * s.abilities.length) : defaultSlot(species)) : 0;
   const moves = startingMoves(s.learnset, level, MOVES, species);
-  return { species, level, exp: expForLevel(s.growth, level), moves, ...(species === 'ditto' ? {} : { learned: [...moves] }), abilitySlot, abilityUnlocked: false, ...individualOf(species, rng), ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
+  return { species, level, exp: expForLevel(s.growth, level), moves, ...(species === 'ditto' ? {} : { learned: [...moves] }), abilitySlot, abilityUnlocked: false, hiddenUnlocked: false, hiddenOn: false, ...individualOf(species, rng), ...(species === 'ditto' ? { build: DEFAULT_BUILD() } : {}) };
 }
 
 // 멤버의 특성 id (진화형에 그 슬롯이 없으면 첫 번째)
-export const abilityOf = (m) => { if (m.build) return m.build.ability; const a = SPECIES[m.species].abilities; return a[m.abilitySlot ?? 0] ?? a[0]; }; // 메타몽은 빌드
+export const abilityOf = (m) => { if (m.build) return m.build.ability; const s = SPECIES[m.species]; if (m.hiddenOn && s.hidden) return s.hidden; return s.abilities[m.abilitySlot ?? 0] ?? s.abilities[0]; }; // 메타몽은 빌드 · 숨겨진 칸 (진화형에 없으면 일반 칸)
 export const typesOfMember = (m) => m.build?.types ?? SPECIES[m.species].types;
 
 // 특성 해금: 계열 뿌리 결정 3개를 한 번 쓰면 다른 특성이 열리고 바로 바뀐다. 그 뒤 전환은 공짜
@@ -54,9 +55,32 @@ export function unlockAbility(game, key) {
 export function setAbilitySlot(game, key, slot) {
   const m = findMember(game, key);
   if (!m) return { ok: false, reason: 'missing' };
+  if (slot === 'hidden') {
+    if (!m.hiddenUnlocked || !SPECIES[m.species].hidden) return { ok: false, reason: 'locked' };
+    m.hiddenOn = true;
+    return { ok: true };
+  }
   if (!Number.isInteger(slot) || slot < 0 || slot >= SPECIES[m.species].abilities.length) return { ok: false, reason: 'slot' };
   if (slot !== (m.abilitySlot ?? 0) && !m.abilityUnlocked) return { ok: false, reason: 'locked' };
-  m.abilitySlot = slot;
+  m.abilitySlot = slot; // 숨겨진 칸에서 자기 일반 칸으로 돌아오는 건 공짜
+  m.hiddenOn = false;
+  return { ok: true };
+}
+
+// 숨겨진 특성: 계열 결정 4개 (일반 해금과 별개). 효과가 아직 없는 특성(NO_EFFECT)은 "준비 중"으로 해금 불가
+export const HIDDEN_UNLOCK_COST = 4;
+export const hiddenPending = (species) => NO_EFFECT.includes(SPECIES[species]?.hidden);
+export function unlockHidden(game, key) {
+  const m = findMember(game, key);
+  if (!m) return { ok: false, reason: 'missing' };
+  if (m.build || !SPECIES[m.species].hidden) return { ok: false, reason: 'none' };
+  if (m.hiddenUnlocked) return { ok: false, reason: 'already' };
+  if (hiddenPending(m.species)) return { ok: false, reason: 'pending' };
+  const root = lineRoot(m.species);
+  if ((game.shards?.[root] ?? 0) < HIDDEN_UNLOCK_COST) return { ok: false, reason: 'shards' };
+  game.shards[root] -= HIDDEN_UNLOCK_COST;
+  m.hiddenUnlocked = true;
+  m.hiddenOn = true;
   return { ok: true };
 }
 
