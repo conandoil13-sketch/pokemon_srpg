@@ -130,11 +130,15 @@ function floorStartAbilities(state) {
   const nearestFoe = (u) => state.units.filter((o) => o.side !== u.side).sort((p, q) => dist(p, u) - dist(q, u))[0];
   for (const u of state.units) if (has(u, 'trace')) {
     const f = nearestFoe(u);
-    if (f && f.ability && !['trace', 'multitype', 'wonder-guard'].includes(f.ability)) { u.ability = f.ability; log.push({ unitId: u.id, ability: 'trace', copied: f.ability }); }
+    if (f && f.ability && !['trace', 'multitype', 'wonder-guard'].includes(f.ability)) { // 트레이스가 있는 칸만 상대 1칸으로
+      if (u.ability === 'trace') u.ability = f.ability; else u.ability2 = f.ability;
+      log.push({ unitId: u.id, ability: 'trace', copied: f.ability });
+    }
   }
   if (state.weather !== 'fog') {
-    const setters = state.units.filter((u) => WEATHER_SETTER[u.ability]).sort((p, q) => effectiveStat(q, 'spe') - effectiveStat(p, 'spe'));
-    for (const u of setters) { state.weather = WEATHER_SETTER[u.ability]; log.push({ unitId: u.id, ability: u.ability }); }
+    const weatherAb = (u) => abilitiesOf(u).find((a) => WEATHER_SETTER[a]); // 날씨 특성이 두 칸이면 1칸 것만
+    const setters = state.units.filter(weatherAb).sort((p, q) => effectiveStat(q, 'spe') - effectiveStat(p, 'spe'));
+    for (const u of setters) { const ab = weatherAb(u); state.weather = WEATHER_SETTER[ab]; log.push({ unitId: u.id, ability: ab }); }
   }
   for (const u of state.units) {
     if (has(u, 'download')) {

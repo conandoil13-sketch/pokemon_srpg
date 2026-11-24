@@ -94,3 +94,51 @@ test('enemies have no slot 2', () => {
   const { f } = duel('charmander', 'geodude');
   assert.equal(f.ability2, null);
 });
+
+// ---- 겹침 규칙 (Task 4) ----
+const field = (members, enemies = [{ species: 'geodude', x: 4, y: 4, level: 40 }]) =>
+  createBattle({ tiles: Array.from({ length: 6 }, () => '.'.repeat(6)), allySlots: members.map((_, i) => ({ x: i, y: 1 })), enemies }, members);
+const dittoWith = (ability, extra) => { const d = newMember('ditto', 40); d.build.ability = ability; d.extraAbility = extra; return d; };
+
+test('gastro acid silences slot 2 everywhere', () => {
+  const { s, a, f } = duel('charmander', 'grimer', { ally: asSlot2('levitate') });
+  applyMove(s, f.id, 'gastro-acid', a.id, () => 0.01);
+  assert.deepEqual(abilitiesOf(a), []);
+  const before = a.hp; applyMove(s, f.id, 'mud-slap', a.id, () => 0.01);
+  assert.ok(a.hp < before, 'ground move lands after gastro acid');
+  const o = duel('oddish', 'tentacool', { foe: asSlot2('liquid-ooze') });
+  applyMove(o.s, o.a.id, 'gastro-acid', o.f.id, () => 0.01);
+  o.a.hp = o.a.maxHp - 30; const hp0 = o.a.hp;
+  applyMove(o.s, o.a.id, 'absorb', o.f.id, () => 0.5);
+  assert.ok(o.a.hp > hp0, 'absorb heals once ooze is off');
+});
+
+test('two weather abilities: slot 1 wins', () => {
+  const s = field([dittoWith('drought', 'drizzle')]);
+  assert.equal(s.weather, 'sun');
+  assert.ok(!s.floorAbilityEvents.some((e) => e.ability === 'drizzle'));
+  const r = field([{ ...newMember('charmander', 40, createRng(1)), extraAbility: 'drizzle' }]);
+  assert.equal(r.weather, 'rain');
+  assert.ok(r.floorAbilityEvents.some((e) => e.ability === 'drizzle'));
+});
+
+test('trace in slot 2 copies into slot 2', () => {
+  const s = field([{ ...newMember('charmander', 40, createRng(1)), extraAbility: 'trace' }], [{ species: 'growlithe', x: 0, y: 3, level: 40, ability: 'intimidate' }]);
+  const a = s.units[0];
+  assert.equal(a.ability, 'blaze');
+  assert.equal(a.ability2, 'intimidate');
+});
+
+test('mummy keeps slot 2', () => {
+  const { s, a, f } = duel('rattata', 'yamask', { ally: { ability: 'guts', ability2: 'technician' }, foe: { ability: 'mummy' } });
+  applyMove(s, a.id, 'bite', f.id, () => 0.01); // 고스트라 노말 접촉기는 안 맞음
+  assert.equal(a.ability, 'mummy');
+  assert.equal(a.ability2, 'technician');
+});
+
+test('worry seed keeps slot 2', () => {
+  const { s, a, f } = duel('charmander', 'sunkern', { ally: { ability: 'blaze', ability2: 'technician' } });
+  applyMove(s, f.id, 'worry-seed', a.id, () => 0.01);
+  assert.equal(a.ability, 'insomnia');
+  assert.equal(a.ability2, 'technician');
+});
