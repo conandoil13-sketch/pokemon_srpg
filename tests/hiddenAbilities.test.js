@@ -217,3 +217,12 @@ test('magic bounce: spikes aimed into the protected area land around the caster 
   assert.ok(r.trapsLaid.length > 0);
   for (const t of s.spikes) { assert.equal(t.side, 'enemy'); assert.ok(Math.abs(t.x - a.x) + Math.abs(t.y - a.y) <= 1); }
 });
+
+import { SRPG_ABILITY_TEXT } from '../src/data/abilities.js';
+test('the 11 new gen 5 abilities carry their SRPG text and are active; item / form ones are pending', () => {
+  for (const id of ['analytic', 'contrary', 'flare-boost', 'toxic-boost', 'friend-guard', 'heavy-metal', 'light-metal', 'multiscale', 'rattled', 'moody', 'magic-bounce']) {
+    assert.equal(ABILITIES[id].desc, SRPG_ABILITY_TEXT[id], id);
+    assert.ok(!ABILITIES[id].inactive, id);
+  }
+  for (const id of ['harvest', 'pickpocket', 'zen-mode', 'imposter']) assert.ok(ABILITIES[id].inactive, id);
+});

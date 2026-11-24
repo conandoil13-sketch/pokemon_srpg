@@ -61,11 +61,24 @@ export const SRPG_ABILITY_TEXT = {
   'wonder-skin': '이 포켓몬을 노리는 변화기의 명중률이 50%를 넘지 않는다.',
   'weak-armor': '물리 공격에 맞으면 방어가 1랭크 떨어지고 스피드가 2랭크 오른다.',
   limber: '마비되지 않는다. 숲에서는 나무 사이를 지나갈 수 있다(나무 위에 멈추지는 못함).',
+  // 숨겨진 특성으로 들어온 5세대 특성 (2026-11-24)
+  analytic: '전장의 모든 포켓몬 중 가장 느리면(같아도) 공격 위력이 1.3배가 된다.',
+  contrary: '능력 랭크 변화가 모두 반대가 된다. 맵 요소로 생기는 변화도 마찬가지다.',
+  'flare-boost': '화상일 때 특수 공격 위력이 1.5배가 된다.',
+  'toxic-boost': '독·맹독일 때 물리 공격 위력이 1.5배가 된다.',
+  'friend-guard': '상하좌우로 붙은 다른 아군이 받는 공격 피해를 30% 줄인다. 보유자가 둘 이상 붙으면 한 마리마다 6%p 더.',
+  'heavy-metal': '몸무게가 2배가 된다.',
+  'light-metal': '몸무게가 절반이 된다.',
+  multiscale: 'HP가 가득일 때 받는 피해가 절반이 된다.',
+  rattled: '벌레·고스트·악 공격에 맞으면 스피드가 1랭크 오른다.',
+  moody: '자기 차례가 끝날 때마다 명중·회피를 뺀 능력 하나가 2랭크 오르고 다른 하나가 1랭크 떨어진다.',
+  'magic-bounce': '자신과 상하좌우로 붙은 아군을 노린 상대 변화기를 시전자에게 한 번 되돌린다. 근처에 깔리는 압정도 시전자 주변으로 되돌린다.',
 };
 
 // 지금 게임에 해당 시스템이 없어 효과가 없는 특성 (스펙 §4-②)
 export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk', 'multitype', 'stall', // 도구 시스템과 함께 할 것 · 지구력
-  'illusion', 'prankster', 'unnerve']; // 5세대: 일루전·짓궂은마음 (코덱스 판정은 있음, 화면·보너스 행동이 필요) · 긴장감 (나무열매 없음)
+  'illusion', 'prankster', 'unnerve', // 5세대: 일루전·짓궂은마음 (코덱스 판정은 있음, 화면·보너스 행동이 필요) · 긴장감 (나무열매 없음)
+  'harvest', 'pickpocket', 'zen-mode', 'imposter']; // 숨겨진 특성: 수확(나무열매)·나쁜손버릇(적 도구)·달마모드(폼)·괴짜(메타몽) — 이 목록의 숨겨진 특성은 해금 "준비 중"
 
 export const ABILITIES = Object.fromEntries(Object.values(POKEDEX.abilities).map((a) => [a.id, {
   ...a,

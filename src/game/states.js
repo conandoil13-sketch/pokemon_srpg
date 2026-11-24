@@ -247,6 +247,7 @@ export function abilityNotices(events = [], get) {
     else if (e.ability === 'cursed-body' && t) text = `${who}의 저주받은바디! ${unitLabel(t)}의 기술이 사슬묶기됐다!`;
     else if (e.ability === 'mummy') text = `${who}의 미라! 상대의 특성이 미라가 됐다!`;
     else if (e.ability === 'healer' && t) { text = `${who}의 치유의마음! ${josa(unitLabel(t), '이/가')} 나았다!`; at = { x: t.x, y: t.y }; }
+    else if (e.ability === 'magic-bounce' && t) text = `${who}의 매직미러! ${unitLabel(t)}에게 기술을 되돌렸다!`;
     else if (e.ability === 'synchronize') text = `${who}의 싱크로! 상태이상이 상대에게도 옮았다!`;
     else if (HEAL_ABILITIES.includes(e.ability) && !e.damage) text = `${josa(who, '은/는')} ${josa(name, '으로/로')} HP를 회복했다!`;
     else text = `${who}의 ${name}!`;
