@@ -14,4 +14,4 @@ export function findCandy(game, id) {
 }
 
 // 다음 레벨까지 필요한 경험치 (결산 화면에 그대로 넘겨 레벨업·기술·진화를 같은 흐름으로)
-export const candyExp = (m) => expForLevel(SPECIES[m.species].growth, m.level + 1) - m.exp;
+export const candyExp = (m, targetLevel = m.level + 1) => expForLevel(SPECIES[m.species].growth, targetLevel) - m.exp;

@@ -185,6 +185,7 @@ export function loadGame(storage) {
         evoStone: clampInt(data.items?.evoStone, 0, 999),
         tenVoucher: clampInt(data.items?.tenVoucher, 0, 99), // 10연속 뽑기 바우처
         ...(clampInt(data.items?.rareCandy, 0, 99) ? { rareCandy: clampInt(data.items?.rareCandy, 0, 99) } : {}), // 이상한사탕
+        ...(clampInt(data.items?.suspiciousCandy, 0, 99) ? { suspiciousCandy: clampInt(data.items.suspiciousCandy, 0, 99) } : {}),
         powders: cleanPowders(data.items?.powders),
         ...nonEmpty('held', cleanHeldBag(data.items?.held)), // 지니는 도구 가방 (비면 칸 없음)
         capsules: (Array.isArray(data.items?.capsules) ? data.items.capsules : []).map(cleanCapsule).filter(Boolean).slice(-CAPSULE_BAG_MAX),

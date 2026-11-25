@@ -20,7 +20,7 @@ export function topUp(game) {
   const up = (n) => Math.max(Number.isFinite(n) ? n : 0, FULL);
   game.coins = up(game.coins);
   game.items ??= {};
-  for (const k of ['evoStone', 'tenVoucher', 'rareCandy']) game.items[k] = up(game.items[k]);
+  for (const k of ['evoStone', 'tenVoucher', 'rareCandy', 'suspiciousCandy']) game.items[k] = up(game.items[k]);
   game.items.powders ??= {};
   for (const k of Object.keys(game.items.powders)) game.items.powders[k] = up(game.items.powders[k]);
   game.shards ??= {};

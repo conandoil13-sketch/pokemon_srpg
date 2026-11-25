@@ -110,3 +110,53 @@ test('a level 100 member never eats a candy even if the cap were higher', () => 
   assert.equal(used.length, 0);
   assert.equal(g.items.rareCandy, 1);
 });
+
+test('suspicious candy raises a reserve to the recruitment level, including after save/load', async () => {
+  const { joinLevel } = await import('../src/core/gacha.js');
+  const { newMember } = await import('../src/core/progress.js');
+  const { topUp } = await import('../src/core/superAccount.js');
+  const { saveGame, loadGame } = await import('../src/core/save.js');
+  const { createResults } = await import('../src/game/results.js');
+  for (const superActive of [false, true]) {
+    const g = newGame();
+    for (const m of g.party) {
+      m.level = 12;
+      m.exp = expForLevel(SPECIES[m.species].growth, 12);
+    }
+    const reserve = newMember('magikarp', 5);
+    const index = g.party.push(reserve) - 1;
+    g.superActive = superActive;
+    g.items.suspiciousCandy = 2;
+    if (superActive) topUp(g);
+    const target = joinLevel(g);
+    assert.equal(target, 10);
+    let uses = 0;
+    const b = createBag({ game: g, onCandy(m, lv, result) {
+      uses++;
+      assert.equal(m, reserve);
+      assert.equal(result, 'suspiciousCandy');
+      createResults({ game: g, result, members: [m], log: { exp: { [m.uid ?? m.species]: candyExp(m, lv) } }, onDone() {} });
+    } });
+    const confirm = () => b.handle({ type: 'confirm' });
+    const down = () => b.handle({ type: 'dir', dy: 1 });
+    b.handle({ type: 'dir', dx: 1 });
+    while (b.rows[b.sel].act !== 'suspiciousCandy') down();
+    function giveReserve() {
+      confirm();
+      for (let page = 0; page < Math.floor(index / 5); page++) {
+        for (let i = 0; i < 5; i++) down();
+        confirm();
+      }
+      for (let i = 0; i < index % 5; i++) down();
+      confirm();
+    }
+    giveReserve();
+    assert.equal(reserve.level, target);
+    giveReserve();
+    assert.equal(uses, 1);
+    const storage = new Map();
+    const store = { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) };
+    saveGame(store, g);
+    assert.equal(loadGame(store).items.suspiciousCandy, superActive ? 99 : 1);
+  }
+});

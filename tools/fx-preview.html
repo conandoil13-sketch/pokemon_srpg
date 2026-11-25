@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <base href="../"><!-- 스프라이트(assets/…)를 게임과 같은 경로로 불러오도록 저장소 루트 기준 -->
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>이펙트 미리보기</title>
+<title>기술 훈련장 · 이펙트 미리보기</title>
 <style>
   :root { --bg: #141a28; --panel: #1f2738; --ink: #e8ecf4; --muted: #8a94a8; --accent: #f8d050; }
   body { margin: 0; padding: 16px; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif; }
@@ -35,31 +35,35 @@
   #moveList { width: 100%; height: 260px; }
   #moveCount { color: var(--muted); font-size: 12px; }
   @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .stage { position: static; } }
+  [hidden] { display:none !important; }
+  .stage { min-width:0; max-width:768px; }
+  #arena { touch-action:manipulation; cursor:crosshair; }
+  #arena:focus-visible { outline:3px solid var(--accent); }
+  #roster { display:flex; flex-wrap:wrap; gap:4px 10px; margin:10px 0; font-size:12px; font-variant-numeric:tabular-nums; }
+  #roster .ally { color:#aad7ff; } #roster .enemy { color:#ffb6ab; }
+  .stage button { cursor:pointer; }
 </style>
 </head>
 <body>
-<h1>이펙트 미리보기</h1>
-<p class="note">개발용 페이지 (게임에서 연결되지 않음). 게임과 같은 <code>fxForMove</code> · <code>fxForAilment</code> · <code>EFFECT_FX</code> 를 그대로 호출한다. 왼쪽부터 아군 · 나 · 적 (칸 24px).</p>
+<h1>기술 훈련장</h1>
+<p class="note">기술을 고르면 전방 1~4칸에 적이, 후방 1~3칸에 아군이 배치됩니다. 전장에서 대상을 고르고 기술을 사용하세요.</p>
 <div class="layout"><div class="side">
 <div class="card"><h3>기술 고르기</h3>
 <div class="row">
-  <input type="text" id="mFind" placeholder="기술 이름" style="flex:1;min-width:120px">
+  <input aria-label="기술 이름 검색" type="text" id="mFind" placeholder="기술 이름" style="flex:1;min-width:120px">
   <select id="mType"><option value="">모든 타입</option></select>
-  <select id="mCat"><option value="">물리·특수</option><option value="physical">물리</option><option value="special">특수</option></select>
+  <select id="mCat"><option value="">모든 분류</option><option value="status">변화</option><option value="physical">물리</option><option value="special">특수</option></select>
 </div>
 <div class="row">
   <select id="mFam"><option value="">모든 계열</option></select>
   <select id="mPow"><option value="">모든 위력</option><option value="0-50">≤50</option><option value="51-89">51–89</option><option value="90-999">≥90</option></select>
   <span id="moveCount"></span>
 </div>
-<select id="moveList" size="12"></select>
+<select aria-label="훈련할 기술" id="moveList" size="12"></select>
 <div class="row" style="margin-top:8px">
-  <label>거리 <select id="dist"><option value="1" selected>1칸 (근접)</option><option value="2">2칸</option><option value="3">3칸</option></select></label>
-  <button class="primary" id="playMove">기술 재생</button>
-  <select id="move" style="display:none"></select>
-</div>
-<p class="note" style="margin:0">목록에서 클릭하면 바로 재생 · ↑↓ 로 넘기며 보기</p>
-</div>
+  <label>적 배치 <select id="formation"><option value="line">직선</option><option value="diagonal">대각선 혼합</option></select></label>
+  <button id="trainingReset">배치 초기화</button><button id="trainingRoll">훈련 포켓몬 바꾸기</button>
+</div></div>
 <div class="card"><h3>타입 · 모양으로 재생</h3>
 <div class="row">
   <label>타입 <select id="type"></select></label>
@@ -83,8 +87,10 @@
   <span id="cast" style="color:var(--muted)"></span>
 </div></div>
 </div><div class="stage">
-<canvas id="cv" width="256" height="192"></canvas>
-<div id="info"></div>
+<section id="trainingView"><canvas id="arena" tabindex="0" aria-label="전투 훈련장. 방향키로 선택, Enter로 확인, Esc로 취소" width="256" height="192"></canvas>
+<div id="trainInfo"></div><div class="row" style="margin-top:8px"><button class="primary" id="use">기술 사용 / 확인</button><button id="cancel">취소</button><button id="end">턴 종료</button></div>
+<div id="roster"></div><p class="note">방향키로 대상 변경 · Enter로 확인 · Esc로 취소</p></section><section id="sampleView" hidden><canvas id="cv" width="256" height="192"></canvas>
+<div id="info"></div><button id="backTraining">훈련장으로</button></section>
 </div></div>
 
 <h2>아직 못 배우는 기술 <span id="leftCount" style="color:var(--muted)"></span></h2>
@@ -104,19 +110,20 @@
 </div>
 <div class="tablewrap"><table id="abTable"></table></div>
 <script type="module">
-import { createFxManager } from '../src/render/fx.js';
-import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx, GYARADOS_FX, LINK_EFFECTS, linkFx, healSignFx } from '../src/data/moveFx.js';
-import { BIND_MOVES } from '../src/core/volatile.js';
-import { drawWeather, drawWeatherBurst, BURST_TIME } from '../src/render/weatherFx.js';
-import { WEATHER_OF } from '../src/core/field.js';
-import { actorFor, bodyAt } from '../src/render/fxActor.js';
-import { requestSprites, drawUnitSprite, drawShadow, idleFrameSource, DIR } from '../src/render/sprites.js';
-import { SPECIES } from '../src/data/species.js';
-import { EFFECT_MOVES } from '../src/data/moveEffects.js';
-import { MOVES } from '../src/data/moves.js';
-import { familyOf } from '../src/data/moveFamilies.js';
-import { ABILITIES, SRPG_ABILITY_TEXT, NO_EFFECT } from '../src/data/abilities.js';
-import POKEDEX from '../src/data/generated/pokedex.js';
+import { mountTraining } from './tools/training-ground.js';
+import { loadFonts } from './src/render/font.js';
+import { createFxManager } from './src/render/fx.js';
+import { fxForMove, fxForAilment, TYPE_PALETTE, fxForEffect, HEAL_FX, drainFx, trapTossFx, TOSS_GAP, pushFx, bindFx, GYARADOS_FX, LINK_EFFECTS, linkFx, healSignFx } from './src/data/moveFx.js';
+import { drawWeather, drawWeatherBurst, BURST_TIME } from './src/render/weatherFx.js';
+import { WEATHER_OF } from './src/core/field.js';
+import { actorFor, bodyAt } from './src/render/fxActor.js';
+import { requestSprites, drawUnitSprite, drawShadow, idleFrameSource, DIR } from './src/render/sprites.js';
+import { SPECIES } from './src/data/species.js';
+import { EFFECT_MOVES } from './src/data/moveEffects.js';
+import { MOVES } from './src/data/moves.js';
+import { familyOf } from './src/data/moveFamilies.js';
+import { ABILITIES, SRPG_ABILITY_TEXT, NO_EFFECT } from './src/data/abilities.js';
+import POKEDEX from './src/data/generated/pokedex.js';
 
 const $ = (id) => document.getElementById(id);
 const TYPES = [...new Set([...Object.keys(TYPE_PALETTE), 'dark'])];
@@ -157,58 +164,61 @@ function play() {
   if (spec.hit) steps.push([0.55, () => fx.spawn(spec.hit, at, { dir: 'right', actor: foeActor() })]);
   if (spec.hit2) steps.push([0.65, () => fx.spawn(spec.hit2, at, { dir: 'right', actor: foeActor() })]);
   if (spec.burst) steps.push([0.55, () => fx.spawn(spec.burst, at, { dir: 'right' })]);
-  for (const [t, fn] of steps) setTimeout(fn, t * 1000);
+  for (const [t, fn] of steps) later(fn, t * 1000);
   $('info').textContent = `${move.type} · ${move.category} · 위력 ${move.power} · ${shapeKey} → ${Object.keys(spec).join(', ')}`;
 }
 function playAil() {
-  fx.clear();
+  reset(); lastPlay = playAil;
   const s = fxForAilment($('ailment').value);
   if (s.inflict) fx.spawn(s.inflict, D, { actor: foeActor() });
-  if (s.loop) setTimeout(() => fx.follow('loop', s.loop, () => D, foeActor()), 300);
+  if (s.loop) later(() => fx.follow('loop', s.loop, () => D, foeActor()), 300);
   $('info').textContent = `${$('ailment').value} → ${Object.keys(s).join(', ')}`;
 }
-// 실제 기술: 게임과 같은 순서 (사용자 쪽 cast → 탄이 0.25초 날아감 → 대상에 hit)
-const attacks = Object.values(MOVES).filter((m) => m.learnable && m.category !== 'status').sort((a, b) => (familyOf(a) ?? 'z').localeCompare(familyOf(b) ?? 'z') || a.name.localeCompare(b.name));
-// 기술 필터: 이름 · 타입 · 분류 · 계열 · 위력 → 목록 (클릭/↑↓ = 바로 재생)
-const catKo = (c) => (c === 'physical' ? '물리' : '특수');
+// 훈련 기술 목록은 전투에서 습득 가능한 기술 데이터와 공유한다.
+const attacks = Object.values(MOVES).filter((m) => m.learnable).sort((a, b) => (familyOf(a) ?? 'z').localeCompare(familyOf(b) ?? 'z') || a.name.localeCompare(b.name));
+// 기술 필터: 이름 · 타입 · 분류 · 계열 · 위력
+const catKo = (c) => ({ physical: '물리', special: '특수', status: '변화' })[c];
 $('mType').innerHTML += [...new Set(attacks.map((m) => m.type))].sort().map((t) => `<option>${t}</option>`).join('');
 $('mFam').innerHTML += [...new Set(attacks.map((m) => familyOf(m)).filter(Boolean))].sort().map((f) => `<option>${f}</option>`).join('');
 function fillMoves() {
   const q = $('mFind').value.trim().toLowerCase(), ty = $('mType').value, ca = $('mCat').value, fa = $('mFam').value, pw = $('mPow').value;
   const [lo, hi] = pw ? pw.split('-').map(Number) : [0, 1e9];
   const list = attacks.filter((m) => (!q || m.name.toLowerCase().includes(q) || m.id.includes(q)) && (!ty || m.type === ty) && (!ca || m.category === ca) && (!fa || familyOf(m) === fa) && (m.power ?? 0) >= lo && (m.power ?? 0) <= hi);
-  const cur = $('move').value;
+  const cur = $('moveList').value || 'bite';
   $('moveList').innerHTML = list.map((m) => `<option value="${m.id}">${m.name} · ${m.type} · ${catKo(m.category)} · ${m.power ?? '-'}${familyOf(m) ? ' · ' + familyOf(m) : ''}</option>`).join('');
-  if (list.some((m) => m.id === cur)) $('moveList').value = cur;
-  $('moveCount').textContent = `${list.length}개`;
+  $('moveList').value = list.some(m => m.id === cur) ? cur : list[0]?.id ?? '';
+  $('moveCount').textContent = list.length + '개';
+  $('trainingReset').disabled = list.length === 0;
+  if (!list.length) $('moveCount').textContent = '검색 결과 없음';
+  if ($('moveList').value && selected !== $('moveList').value) startTraining();
+}
+const training = mountTraining($('arena'), $('trainInfo'), $('roster'));
+let selected;
+function viewTraining(show) {
+  training.setActive(show);
+  $('trainingView').hidden = !show;
+  $('sampleView').hidden = show;
+}
+function startTraining() {
+  selected = $('moveList').value;
+  if (!selected) return;
+  viewTraining(true);
+  training.restart(selected);
 }
 for (const id of ['mFind', 'mType', 'mCat', 'mFam', 'mPow']) $(id).addEventListener('input', fillMoves);
-$('moveList').addEventListener('change', () => { if ($('moveList').value) { $('move').value = $('moveList').value; playMove(); } });
-$('move').innerHTML = attacks.map((m) => `<option value="${m.id}" ${m.id === 'bite' ? 'selected' : ''}>${m.name} · ${m.type} · ${m.category === 'physical' ? '물리' : '특수'}${familyOf(m) ? ' · ' + familyOf(m) : ''}</option>`).join('');
-fillMoves();
-let flying = null, timers = [], lastPlay = null, sky = null; // sky: 날씨 부르기 (펑 → 날씨)
-const later = (fn, ms) => timers.push(setTimeout(fn, ms));
-function reset() { for (const t of timers) clearTimeout(t); timers = []; flying = null; sky = null; fx.clear(); }
-function playMove() {
-  lastPlay = playMove;
-  reset();
-  const mv = MOVES[$('move').value], dist = Number($('dist').value);
-  const T = { x: A.x + TILE * dist, y: A.y };
-  D.x = T.x; // 대상 표시도 옮김
-  const spec = fxForMove(mv, { distance: dist });
-  if (spec.cast) fx.spawn(spec.cast, A, { dir: 'right' });
-  if (spec.travel) later(() => {
-    const e = fx.spawn(spec.travel, { x: A.x, y: A.y - 6 }, { dir: 'right', ...(spec.travel.clip ? { clipTo: T.x - A.x } : {}) });
-    if (e && !spec.travel.clip) flying = { e, t: 0, from: { x: A.x, y: A.y - 6 }, to: { x: T.x, y: T.y - 6 } };
-  }, 300);
-  const hitAt = spec.travel ? 560 : 320;
-  if (spec.hit) later(() => fx.spawn(spec.hit, T, { dir: 'right', actor: foeActor() }), hitAt);
-  if (spec.hit2) later(() => fx.spawn(spec.hit2, T, { dir: 'right', actor: foeActor() }), hitAt + 80);
-  if (spec.burst) later(() => fx.spawn(spec.burst, T, { dir: 'right' }), hitAt);
-  if (BIND_MOVES.has(mv.id)) later(() => fx.spawn(bindFx(mv.id), T, { actor: foeActor() }), hitAt + 400); // 속박: 맞은 뒤 감김
-  $('info').textContent = `${mv.name} (${mv.id}) · ${mv.type} · 위력 ${mv.power ?? '-'} · 계열 ${familyOf(mv) ?? '-'} → ${Object.entries(spec).map(([k, v]) => `${k}: ${v.id}`).join(', ')}`;
+$('moveList').onchange = startTraining;
+$('formation').onchange = startTraining;
+$('trainingReset').onclick = startTraining;
+$('trainingRoll').onclick = () => { viewTraining(true); training.reroll(); };
+$('backTraining').onclick = () => viewTraining(true);
+for (const [id, type] of [['use','confirm'], ['cancel','cancel'], ['end','endTurn']]) {
+  $(id).onclick = () => { training.input({ type }); $('arena').focus(); };
 }
-$('playMove').onclick = playMove;
+await loadFonts();
+fillMoves();
+let timers = [], lastPlay = null, sky = null; // sky: 날씨 부르기 (펑 → 날씨)
+const later = (fn, ms) => timers.push(setTimeout(fn, ms));
+function reset() { viewTraining(false); for (const t of timers) clearTimeout(t); timers = []; sky = null; fx.clear(); }
 $('play').onclick = () => { reset(); lastPlay = () => { reset(); D.x = A.x + TILE * 3; play(); }; lastPlay(); };
 
 // 변화기 효과 (변화기 묶음 1차): 대상 종류대로 나 · 아군 · 적 몸에
@@ -300,8 +310,8 @@ $('playAil').onclick = playAil;
 let last = performance.now(), again = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!$('trainingView').hidden) { training.frame(dt, now / 1000); requestAnimationFrame(frame); return; }
   fx.update(dt);
-  if (flying) { flying.t += dt; const k = Math.min(1, flying.t / 0.25); flying.e.fx.options.x = flying.from.x + (flying.to.x - flying.from.x) * k; flying.e.fx.options.y = flying.from.y + (flying.to.y - flying.from.y) * k; if (k >= 1) flying = null; }
   ctx.fillStyle = '#3a5a3a'; ctx.fillRect(0, 0, 256, 192);
   const clock = now / 1000;
   for (const [sp, at, dir, side] of [[cast.ally, L, DIR.Right, 'ally'], [cast.me, A, DIR.Right, 'ally'], [cast.foe, D, DIR.Left, 'enemy']]) { // 게임처럼 타일 중심 = 발밑 − 8
@@ -312,11 +322,10 @@ function frame(now) {
   fx.draw(ctx, 'back', { x: 0, y: 0 });
   fx.draw(ctx, 'front', { x: 0, y: 0 });
   if (sky) { sky.t += dt; if (sky.t < BURST_TIME) drawWeatherBurst(ctx, sky.w, sky.t / BURST_TIME, A.x, A.y - 8, 256, 192); else drawWeather(ctx, sky.w, clock); }
-  if ($('loop').checked && (again += dt) > 1.6) { again = 0; (lastPlay ?? playMove)(); }
+  if ($('loop').checked && (again += dt) > 1.6) { again = 0; lastPlay?.(); }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-playMove();
 </script>
 </body>
 </html>

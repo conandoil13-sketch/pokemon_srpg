@@ -248,8 +248,8 @@ const go = {
     requestSprites(game.party.map((m) => m.species));
     scene = createBag({
       game, levelCap: levelCapFor(game), onSave: () => save(), onBack: () => go.town(null, spot),
-      onCandy: (m) => { // 이상한사탕: 결산 화면으로 레벨업·기술·진화, 끝나면 가방으로
-        scene = createResults({ game, result: 'candy', log: { exp: { [memberKey(m)]: candyExp(m) } }, firstClear: false, members: [m], cap: levelCapFor(game), onDone: (evos) => evolveChain(evos, () => { save(); go.bag(spot); }) });
+      onCandy: (m, targetLevel, result = 'candy') => { // 이상한사탕: 결산 화면으로 레벨업·기술·진화, 끝나면 가방으로
+        scene = createResults({ game, result, log: { exp: { [memberKey(m)]: candyExp(m, targetLevel) } }, firstClear: false, members: [m], cap: levelCapFor(game), onDone: (evos) => evolveChain(evos, () => { save(); go.bag(spot); }) });
         save();
       },
     });
