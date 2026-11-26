@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { attackMult, defendMult, immunity, speedMult, moveBonus, phaseEndHp, weatherChipImmune } from '../src/core/abilities.js';
-import { createBattle, applyMove } from '../src/core/battle.js';
+import { createBattle, applyMove, endPhase } from '../src/core/battle.js';
 import { extraCandidates } from '../src/core/extraAbility.js';
 import { expectedDamage } from '../src/core/damage.js';
 import { MOVES } from '../src/data/moves.js';
@@ -46,4 +46,29 @@ test('iron eater selects one outcome on absorption, not during damage estimation
     assert.equal(defender.hp, heal ? Math.min(defender.maxHp, 5 + Math.max(1, Math.floor(defender.maxHp / 4))) : 5);
     assert.equal(defender.stages.atk, heal ? 0 : 1);
   }
+});
+
+test('new C-tier abilities apply their smaller bonuses', () => {
+  for (const id of ['thin-fat', 'practice-expert', 'minor-recovery']) assert.ok(extraCandidates('C').includes(id));
+  assert.equal(attackMult({ability2:'practice-expert'}, {}, {type:'normal',category:'physical',power:60}, {weather:null,typeMult:1}), 1.1);
+  assert.equal(attackMult({ability2:'practice-expert'}, {}, {type:'normal',category:'physical',power:61}, {weather:null,typeMult:1}), 1);
+  assert.equal(defendMult({}, {ability2:'thin-fat'}, {type:'ice',category:'special'}, {typeMult:1}), 0.9);
+  assert.equal(defendMult({ability:'mold-breaker'}, {ability2:'thin-fat'}, {type:'fire',category:'special'}, {typeMult:1}), 1);
+});
+
+
+test('minor recovery follows regenerator combat and heal-block conditions', () => {
+  const state = createBattle();
+  const unit = state.units.find(u => u.id === 'ally-chimchar');
+  unit.ability2 = 'minor-recovery';
+  unit.hp = 1;
+  endPhase(state, () => 0.5);
+  assert.equal(unit.hp, 1 + Math.max(1, Math.floor(unit.maxHp / 16)));
+  const previous = unit.hp;
+  unit.ncTouched = true;
+  endPhase(state, () => 0.5);
+  assert.equal(unit.hp, previous);
+  unit.healBlock = 3;
+  endPhase(state, () => 0.5);
+  assert.equal(unit.hp, previous);
 });

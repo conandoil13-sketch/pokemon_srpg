@@ -154,7 +154,10 @@ export const ABILITY_TIERS = {
   'weak-armor': 'B',
   'white-smoke': 'B',
   'wonder-skin': 'B',
-  // C (17)
+  // C (20)
+  'thin-fat': 'C',
+  'practice-expert': 'C',
+  'minor-recovery': 'C',
   'photosynthetic-skin': 'C',
   'dew-absorb': 'C',
   'sand-eater': 'C',

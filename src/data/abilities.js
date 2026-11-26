@@ -83,6 +83,9 @@ export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk
   'harvest', 'pickpocket', 'zen-mode', 'imposter']; // 숨겨진 특성: 수확(나무열매)·나쁜손버릇(적 도구)·달마모드(폼)·괴짜(메타몽) — 이 목록의 숨겨진 특성은 해금 "준비 중"
 
 const customAbilities = [
+  { id: 'thin-fat', name: '옅은지방', desc: '불꽃·얼음 타입 기술로 받는 피해가 10% 감소한다.' },
+  { id: 'practice-expert', name: '연습벌레', desc: '위력 60 이하 기술의 위력이 1.1배가 된다.' },
+  { id: 'minor-recovery', name: '작은회복', desc: '자기 차례 끝에 직전 상대 차례부터 공격하지도 공격받지도 않았으면 최대 HP의 1/16을 회복한다.' },
   { id: 'imperfect-guard', name: '불완전한부적', desc: '효과가 굉장한 공격의 피해는 1.5배, 나머지 공격의 피해는 절반이 된다.' },
   { id: 'innate-strength', name: '타고난힘', desc: '물리 공격 기술의 위력이 1.5배가 된다.' },
   { id: 'iron-eater', name: '불가사리', desc: '강철 타입 기술을 무효화하고 같은 확률로 최대 HP의 1/4을 회복하거나 공격이 1랭크 오른다.' },

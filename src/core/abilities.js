@@ -63,6 +63,7 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   for (const a of abilitiesOf(attacker)) if (PINCH[a] && type === PINCH[a] && attacker.hp <= attacker.maxHp / 3) m *= 1.5;
   if (has(attacker, 'rivalry') && attacker.gender && defender.gender) m *= attacker.gender === defender.gender ? 1.25 : 0.75; // 투쟁심
   if (has(attacker, 'technician') && move.power <= 60) m *= 1.5;
+  if (has(attacker, 'practice-expert') && move.power > 0 && move.power <= 60) m *= 1.1;
   if (has(attacker, 'tinted-lens') && typeMult > 0 && typeMult < 1) m *= 2;
   if ((has(attacker, 'huge-power') || has(attacker, 'pure-power')) && physical) m *= 2;
   if (has(attacker, 'innate-strength') && physical) m *= 1.5;
@@ -92,6 +93,7 @@ export function defendMult(attacker, defender, move, { typeMult }) {
   const physical = move.category === 'physical', type = moveTypeOf(attacker, move);
   let m = 1;
   if (def(attacker, defender, 'thick-fat') && (type === 'fire' || type === 'ice')) m *= 0.5;
+  if (def(attacker, defender, 'thin-fat') && (type === 'fire' || type === 'ice')) m *= 0.9;
   if (move.category !== 'status' && def(attacker, defender, 'imperfect-guard')) m *= typeMult > 1 ? 1.5 : 0.5;
   if (def(attacker, defender, 'mental-barrier') && (type === 'psychic' || type === 'ghost')) m *= 0.5;
   if (def(attacker, defender, 'heatproof') && type === 'fire') m *= 0.5;

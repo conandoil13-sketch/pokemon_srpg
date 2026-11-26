@@ -1231,6 +1231,7 @@ export function endPhase(state, rng = Math.random) {
     tickEnd(state, u, events, rng); // 도발·이동 불가 … 턴 감소, 지속 회복·저주
     if (u.hp > 0 && has(u, 'natural-cure') && u.status && !u.ncTouched) { cure(u); events.push({ unitId: u.id, kind: 'naturalCure' }); } // 자연회복: 조용한 한 바퀴
     if (u.hp > 0 && has(u, 'regenerator') && !u.ncTouched && u.hp < u.maxHp && canHeal(u)) { u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp / 4))); abilityLog.push({ unitId: u.id, ability: 'regenerator' }); } // 재생력
+    if (u.hp > 0 && has(u, 'minor-recovery') && !u.ncTouched && u.hp < u.maxHp && canHeal(u)) { u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp / 16))); abilityLog.push({ unitId: u.id, ability: 'minor-recovery' }); }
     if (u.hp > 0 && has(u, 'healer')) for (const o of state.units) if (o !== u && o.side === u.side && o.status && dist(o, u) === 1 && rng() < 0.3) { cure(o); abilityLog.push({ unitId: u.id, ability: 'healer', target: o.id }); } // 치유의마음
     u.ncTouched = false;
     if (u.hp === 0) { knockOut(state, u, null); events.push({ unitId: u.id, kind: 'fainted' }); continue; }
