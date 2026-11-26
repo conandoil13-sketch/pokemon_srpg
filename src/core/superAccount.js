@@ -1,5 +1,6 @@
 // 테스트용 슈퍼계정 (재화 99 · 소모 0). 키는 코드에 없고 해시만 있다: 주소 ?k=<키> 로 켜고 ?k=off 로 끈다
 import { lineRoot } from './gacha.js';
+import { HELD_IDS } from '../data/heldItems.js';
 
 const KEY_HASH = '25d4d9843bc20d50dc1e13c6e1dc9b86ce49ad013235e61badc1bf32f3943fa9';
 export const FULL = 99;
@@ -26,4 +27,17 @@ export function topUp(game) {
   game.shards ??= {};
   for (const m of game.party ?? []) { const r = lineRoot(m.species); game.shards[r] = up(game.shards[r]); }
   return game;
+}
+
+// 각 저장 데이터에서 도구 종류별로 한 번만 지급한다.
+export function grantSuperItems(game) {
+  game.items ??= {};
+  game.items.held ??= {};
+  const granted = new Set(game.superGrantedItems ?? []);
+  for (const id of HELD_IDS) {
+    if (granted.has(id)) continue;
+    game.items.held[id] = Math.max(game.items.held[id] ?? 0, FULL);
+    granted.add(id);
+  }
+  game.superGrantedItems = [...granted];
 }

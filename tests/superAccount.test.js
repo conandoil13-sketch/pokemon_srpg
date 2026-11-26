@@ -74,3 +74,19 @@ test('save keeps the key but not the live flag', () => {
   g.superKey = 'x'.repeat(500); saveGame(s, g);
   assert.equal(loadGame(s).superKey, undefined);
 });
+
+test('super items are granted once per item and the grant survives save and reload', async () => {
+  const { grantSuperItems } = await import('../src/core/superAccount.js');
+  const { HELD_IDS } = await import('../src/data/heldItems.js');
+  const store = memStore(), game = newGame();
+  grantSuperItems(game);
+  assert.ok(HELD_IDS.every(id => game.items.held[id] === 99));
+  game.items.held.charcoal = 97;
+  delete game.items.held.magnet;
+  saveGame(store, game);
+  const loaded = loadGame(store);
+  grantSuperItems(loaded);
+  assert.equal(loaded.items.held.charcoal, 97);
+  assert.equal(loaded.items.held.magnet, undefined);
+  assert.equal(loaded.superGrantedItems.length, HELD_IDS.length);
+});

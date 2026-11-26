@@ -32,7 +32,7 @@ import { createEvolutionChoice } from './game/evolutionChoice.js';
 import { createBox } from './game/box.js';
 import { createRng } from './core/rng.js';
 import { newGame, loadGame, saveGame } from './core/save.js';
-import { checkKey, topUp } from './core/superAccount.js';
+import { checkKey, topUp, grantSuperItems } from './core/superAccount.js';
 import { free } from './core/freeCost.js';
 import { shakeGiftTree, TREE_SHAKES } from './core/shards.js';
 import { SPECIES, validateData } from './data/species.js';
@@ -54,7 +54,7 @@ const storage = {
 let game = loadGame(storage);
 let verifiedKey = null; // 테스트 계정 키 (확인된 것만)
 const save = () => { if (game?.superActive) topUp(game); saveGame(storage, game); };
-const applySuper = () => { if (!game || !verifiedKey) return; game.superKey = verifiedKey; game.superActive = true; save(); };
+const applySuper = () => { if (!game || !verifiedKey) return; game.superKey = verifiedKey; game.superActive = true; grantSuperItems(game); save(); };
 // 테스트 계정: 주소 ?k=<키> 로 켜고 ?k=off 로 끈다. 주소창의 키는 바로 지우고, 저장된 키는 시작할 때마다 다시 확인
 (async () => {
   let q = null;

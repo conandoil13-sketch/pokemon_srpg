@@ -202,6 +202,7 @@ export function loadGame(storage) {
       eggs: Object.fromEntries(['turtwig', 'water'].filter((k) => data.eggs?.[k] === true).map((k) => [k, true])), // 이스터에그 받은 기록
       nextUid,
       shop: cleanShop(data.shop),
+      superGrantedItems: Array.isArray(data.superGrantedItems) ? [...new Set(data.superGrantedItems.filter(isHeldItem))] : [],
       extraSeq: Number.isInteger(data.extraSeq) && data.extraSeq >= 0 ? data.extraSeq : 0, // 2칸 특성 굴림 카운터 (시드)
       ...(typeof data.superKey === 'string' && data.superKey.length > 0 && data.superKey.length <= 64 ? { superKey: data.superKey } : {}), // 테스트 계정 키 (켜짐 여부는 불러올 때 다시 확인)
     };
