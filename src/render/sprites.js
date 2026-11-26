@@ -28,39 +28,72 @@ function loadImage(src) {
   });
 }
 
-// 반환: { data, sheets, base } | null. 내려받기 실패(네트워크·이미지)는 loadPmd.netFail 로 알려 다시 시도하게 한다
-async function loadPmd(key) {
-  let data, dir, base, netFail = false;
-  for (const b of PMD_BASES) {
-    const d = `${b}/sprite/${pad4(SPECIES[key].dex)}`;
+// 모집소는 정면 대기 시트만 쓴다. 이후 전투에서도 같은 메타데이터와 시트를 재사용한다.
+const idleRequests = new Map();
+const idleSprites = new Map();
+
+async function loadIdle(key) {
+  let retry = false;
+  for (const base of PMD_BASES) {
+    const dir = `${base}/sprite/${pad4(SPECIES[key].dex)}`;
     try {
-      const res = await fetch(`${d}/AnimData.xml`);
-      if (!res.ok) continue;
-      data = parseAnimData(await res.text());
-      dir = d; base = b;
-      break;
-    } catch { netFail = true; /* 다음 위치 */ }
+      const res = await fetch(`${dir}/AnimData.xml`);
+      if (!res.ok) {
+        if (res.status !== 404 && res.status !== 410) retry = true;
+        continue;
+      }
+      const data = parseAnimData(await res.text());
+      const idle = data.anims.Idle;
+      if (!idle) continue;
+      const img = await loadImage(`${dir}/${idle.sheet}-Anim.png`);
+      if (!img) { retry = true; continue; }
+      idleSprites.set(key, { data, base, sheets: { [idle.sheet]: img } });
+      return 'ok';
+    } catch { retry = true; }
   }
-  if (!data) { loadPmd.netFail = netFail; return null; }
-  const sheets = {};
-  const names = new Set(WANT_ANIMS.map((n) => data.anims[n]?.sheet).filter(Boolean));
-  await Promise.all([...names].map(async (s) => { sheets[s] = await loadImage(`${dir}/${s}-Anim.png`); }));
-  if (!data.anims.Idle || !sheets[data.anims.Idle.sheet] || [...names].some((s) => !sheets[s])) { loadPmd.netFail = true; return null; } // 시트 하나라도 못 받으면 다시 시도
-  return { data, sheets, base };
+  return retry ? 'retry' : 'missing';
 }
 
-// 종족 하나의 PMD 시트·초상화 로드 (기본 로더)
+function requestIdle(key) {
+  if (!idleRequests.has(key)) {
+    const pending = loadIdle(key).then(result => {
+      if (result === 'retry') idleRequests.delete(key);
+      return result;
+    });
+    idleRequests.set(key, pending);
+  }
+  return idleRequests.get(key);
+}
+
+export async function requestRevealSprite(key) {
+  for (let attempt = 1; attempt <= SPRITE_TRIES; attempt++) {
+    if (await requestIdle(key) !== 'retry' || attempt === SPRITE_TRIES) return;
+    await new Promise(resolve => setTimeout(resolve, 1500 * attempt));
+  }
+}
+
 async function loadOne(key) {
-  loadPmd.netFail = false;
-  pmd[key] = await loadPmd(key);
-  const retry = !pmd[key] && loadPmd.netFail; // 데이터는 있는데 내려받기 실패 → 다시
+  const status = await requestIdle(key);
+  const idle = idleSprites.get(key);
+  let retry = status === 'retry';
+  if (idle) {
+    const dir = `${idle.base}/sprite/${pad4(SPECIES[key].dex)}`;
+    const sheets = { ...(pmd[key]?.sheets ?? idle.sheets) };
+    const names = new Set(WANT_ANIMS.map(n => idle.data.anims[n]?.sheet).filter(Boolean));
+    await Promise.all([...names].filter(n => !sheets[n]).map(async n => {
+      sheets[n] = await loadImage(`${dir}/${n}-Anim.png`);
+      if (!sheets[n]) retry = true;
+    }));
+    pmd[key] = { ...idle, sheets };
+  }
   const dir = `${pmd[key]?.base ?? PMD_BASES[0]}/portrait/${pad4(SPECIES[key].dex)}`;
   await Promise.all(EMOTIONS.map(async (e) => { portraits[`${key}/${e}`] = await loadImage(`${dir}/${e}.png`); }));
   if (!pmd[key] && !retry && !warned) {
     warned = true;
     console.warn('[sprites] PMD sprite folder not found for some Pokémon — using placeholder pixel art.');
   }
-  return pmd[key] ? 'ok' : retry ? 'retry' : 'missing';
+  if (retry) return 'retry';
+  return pmd[key] ? 'ok' : 'missing';
 }
 
 // 지연 로딩: 필요한 종족만, 종족마다 한 번만 요청. 로드 전·실패 시엔 임시 도트로 그린다
@@ -173,7 +206,7 @@ const creature = (key, N) => (fallback[`${key}/${N}`] ??= makeCreature(key, N));
 // ---------- 그리기 ----------
 // (cx, cy) = 타일 중심(월드 좌표). anim: 'Idle'|'Walk'|'Attack'|'Shoot'|'Hurt', dir: DIR, t: 경과 초
 export function drawUnitSprite(ctx, key, anim, dir, t, cx, cy, loop = true) {
-  const p = pmd[key];
+  const p = pmd[key] ?? (anim === 'Idle' ? idleSprites.get(key) : null);
   if (p) {
     const a = pickAnim(p, anim);
     const img = p.sheets[a.sheet];

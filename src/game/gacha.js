@@ -5,7 +5,7 @@ import { josa } from '../data/text.js';
 import { rollBalls, claimBall, claimBalls, BALL_OF, GACHA_COST, GACHA_TEN_COST } from '../core/gacha.js';
 import * as ui from '../render/ui.js';
 import { drawText, textWidth } from '../render/font.js';
-import { drawUnitSprite, requestSprites, DIR } from '../render/sprites.js';
+import { drawUnitSprite, requestRevealSprite, DIR } from '../render/sprites.js';
 import { drawBall, nextBall } from '../render/balls.js';
 import { createFxManager } from '../render/fx.js';
 import { W, H } from '../render/screen.js';
@@ -42,7 +42,11 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
   let menuLock = CHOICE_LOCK;
   const toMenu = (lock = CHOICE_LOCK) => { mode = 'menu'; t = 0; menuLock = lock; balls = []; chosen = -1; cursor = menuCursor; }; // 메뉴는 마지막 고른 줄로
 
-  const makeBalls = (list) => list.map((b) => ({ ...b, kind: 'poke', target: BALL_OF[b.rarity], opened: false, shake: 0 }));
+  const makeBalls = (list) => list.map(b => {
+    const ball = { ...b, kind: 'poke', target: BALL_OF[b.rarity], opened: false, shake: 0, spriteReady: false };
+    requestRevealSprite(b.species).then(() => { ball.spriteReady = true; });
+    return ball;
+  });
   // 볼 한 단계: 목표 볼보다 낮으면 바뀌고, 같으면 열림
   function step(b, at) {
     if (b.kind !== b.target) {
@@ -57,7 +61,6 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
   function startOne() {
     if ((game.coins ?? 0) < GACHA_COST) { say(['코인이 부족하다.', `(${GACHA_COST}코인 필요)`]); return; }
     balls = makeBalls(rollBalls(rng)); // 결과는 아직 안 보임 (모두 몬스터볼), 코인도 그대로
-    requestSprites(balls.map((b) => b.species));
     cursor = 1; mode = 'choose'; t = 0;
   }
   function choose(i) {
@@ -70,7 +73,6 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
   function startTen() {
     if (!((game.items?.tenVoucher ?? 0) > 0) && (game.coins ?? 0) < GACHA_TEN_COST) { say(['코인이 부족하다.', `(${GACHA_TEN_COST}코인 필요)`]); return; }
     balls = makeBalls(rollBalls(rng, 10));
-    requestSprites(balls.map((b) => b.species));
     const r = claimBalls(game, balls, rng);
     results = r.results;
     onPulled(r);
@@ -155,9 +157,10 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
       drawText(ctx, coins, W - 10 - textWidth(coins), 6, '#f8d050', '#384868');
       const blink = Math.floor(time * 3) % 2 === 0;
       const wobble = (b) => (b.shake > 0 ? Math.sin(b.shake * 40) * 3 : 0);
-      const sprite = (species, x, y, scale) => {
+      const sprite = (ball, x, y, scale) => {
+        if (!ball.spriteReady) { drawBall(ctx, ball.kind, x, y, { r: 8 * scale }); return; }
         ctx.save(); ctx.translate(x, y); ctx.scale(scale, scale);
-        drawUnitSprite(ctx, species, 'Idle', DIR.Down, clock, 0, 0);
+        drawUnitSprite(ctx, ball.species, 'Idle', DIR.Down, clock, 0, 0);
         ctx.restore();
       };
       const label = (text, x, y, color) => drawText(ctx, text, Math.round(x - textWidth(text, 'small') / 2), y, color, '#202838', 'small');
@@ -183,7 +186,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
         } else {
           const rr = RARITY[b.rarity], name = SPECIES[b.species].name;
           drawBall(ctx, b.kind, W / 2, 98, { r: 10, open: 1 });
-          sprite(b.species, W / 2, 70, 2);
+          sprite(b, W / 2, 70, 2);
           drawText(ctx, rr.name, Math.floor((W - textWidth(rr.name)) / 2), 112, rr.color, '#202838');
           ui.drawMessage(ctx, result.duplicate ? duplicateLines(result)
             : [`${josa(name, '이/가')} 동료가 되었다!`, `Lv.${result.member.level}로 합류`], null, blink);
@@ -194,7 +197,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
           if (i === chosen) { ctx.fillStyle = 'rgba(248,208,80,0.18)'; ctx.fillRect(x - 32, 30, 64, 92); label('내 볼', x, 32, '#f8d050'); }
           if (b.opened) {
             drawBall(ctx, b.kind, x, 104, { r: 8, open: 1 });
-            sprite(b.species, x, 80, 1);
+            sprite(b, x, 80, 1);
             label(SPECIES[b.species].name, x, 112, RARITY[b.rarity].color);
           } else drawBall(ctx, b.kind, x, 80, { dx: wobble(b) });
         });
@@ -204,7 +207,7 @@ export function createGachaScene({ game, rng, onBack, onPulled }) {
           const { x, y } = TEN_POS[i];
           if (b.opened) {
             drawBall(ctx, b.kind, x, y + 22, { r: 6, open: 1 });
-            sprite(b.species, x, y + 8, 1);
+            sprite(b, x, y + 8, 1);
             label(SPECIES[b.species].name, x, y + 30, RARITY[b.rarity].color);
           } else drawBall(ctx, b.kind, x, y + 10, { r: 11, dx: wobble(b) });
         });
