@@ -120,7 +120,7 @@ export function applyExp(party, expByKey, rng = Math.random, cap = MAX_LEVEL) {
     m.level = to;
     events.push(...learnEvents(m, movesLearnedBetween(s.learnset, from, to, MOVES)));
     // 진화: 갈래 1개면 그대로, 원작이 무작위면 rng, 그 외는 플레이어가 고름 (UI 가 options 로 선택 창)
-    const pick = pickEvolution(levelEvolutionOptions(s, to, m.gender ?? null), s, rng); // 성별 진화
+    const pick = m.held === 'eviolite' ? null : pickEvolution(levelEvolutionOptions(s, to, m.gender ?? null), s, rng); // 성별 진화
     if (pick) events.push({ type: 'evolve', species: m.species, options: pick.auto ? [pick.auto] : pick.choose, random: !!pick.auto && levelEvolutionOptions(s, to, m.gender ?? null).length > 1 });
     if (cappedEvent) events.push(cappedEvent);
     for (let i = start; i < events.length; i++) events[i].key = m.uid ?? m.species;
@@ -149,4 +149,4 @@ export function evolveMember(member, to) {
   return learnEvents(member, moves);
 }
 
-export const stoneTargets = (party) => party.filter((m) => stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null).length > 0);
+export const stoneTargets = (party) => party.filter((m) => m.held !== 'eviolite' && stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null).length > 0);

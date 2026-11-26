@@ -6,6 +6,9 @@ const TYPE_KO = { fire: '불꽃', water: '물', grass: '풀', electric: '전기'
 const boost = (name, type) => ({ name, desc: `${TYPE_KO[type]} 타입 기술 위력 1.2배`, typeBoost: type });
 
 export const HELD_ITEMS = {
+  eviolite: { name: '진화의휘석', desc: '진화 가능한 포켓몬의 방어·특방 1.5배, 진화 방지', eviolite: true, rare: true },
+  'rocky-helmet': { name: '울퉁불퉁멧', desc: '접촉 공격을 받을 때마다 공격자 최대 HP의 1/6 피해', rockyHelmet: true, rare: true },
+  'relic-vase': { name: '고대의항아리', desc: '효과가 굉장한 기술의 피해 25% 감소', relicVase: true, rare: true },
   charcoal: boost('목탄', 'fire'), 'mystic-water': boost('신비의물방울', 'water'), 'miracle-seed': boost('기적의씨', 'grass'),
   magnet: boost('자석', 'electric'), 'never-melt-ice': boost('녹지않는얼음', 'ice'), 'black-belt': boost('검은띠', 'fighting'),
   'poison-barb': boost('독바늘', 'poison'), 'soft-sand': boost('부드러운모래', 'ground'), 'sharp-beak': boost('예리한부리', 'flying'),

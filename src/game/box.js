@@ -82,7 +82,7 @@ export function createBox({ game, onBack, onEvolve, onSave = () => {} }) {
   function openMenu() {
     const m = current();
     if (!m) return;
-    const canStone = stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null).length > 0 && game.items.evoStone > 0;
+    const canStone = m.held !== 'eviolite' && stoneEvolutionOptions(SPECIES[m.species], m.gender ?? null).length > 0 && game.items.evoStone > 0;
     menu = [
       { label: isOut(m) ? '출전에서 빼기' : '출전에 넣기', enabled: true, act: 'sortie' },
       { label: '자세히 보기', enabled: true, act: 'summary' },

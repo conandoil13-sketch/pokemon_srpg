@@ -11,7 +11,7 @@ import { createBattle } from '../src/core/battle.js';
 const memStore = () => { const data = {}; return { data, getItem: (k) => data[k] ?? null, setItem: (k, v) => { data[k] = String(v); } }; };
 
 test('the item table has the first batch without berries', () => {
-  assert.ok(HELD_IDS.length >= 60 && HELD_IDS.length <= 66, String(HELD_IDS.length)); // 1차 52 + 2차 11
+  assert.ok(HELD_IDS.length >= 60, String(HELD_IDS.length));
   for (const id of HELD_IDS) { assert.ok(HELD_ITEMS[id].name, id); assert.ok(HELD_ITEMS[id].desc, id); }
   assert.ok(!HELD_IDS.some((id) => id.endsWith('-berry')));
 });

@@ -103,7 +103,7 @@ export function defendMult(attacker, defender, move, { typeMult }) {
   if (defender.flowerActive && !physical) m /= 1.5;
   if (def(attacker, defender, 'multiscale') && defender.hp >= defender.maxHp) m *= 0.5; // 멀티스케일
   if (defender.friendGuards > 0 && !breaks(attacker)) m *= 1 - (0.3 + 0.06 * (defender.friendGuards - 1)); // 프렌드가드
-  return m * itemDefMult(defender, move); // 심해의비늘·메탈파우더
+  return m * itemDefMult(defender, move, typeMult); // 심해의비늘·메탈파우더
 }
 
 // 무효·흡수: null 또는 { ability, heal?(최대 HP 비율), boost?(랭크), flashFire? }

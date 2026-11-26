@@ -27,10 +27,14 @@ export function itemAttackMult(a, d, move, typeMult, moveType = null) {
   return m;
 }
 // 방어 쪽 배수 (심해의비늘·메탈파우더)
-export function itemDefMult(d, move) {
-  const it = itemOf(d); if (!it?.statMult) return 1;
+export function itemDefMult(d, move, typeMult = 1) {
+  const it = itemOf(d); if (!it) return 1;
+  let multiplier = 1;
+  if (it.eviolite && SPECIES[d.species]?.evolutions?.length) multiplier /= 1.5;
+  if (it.relicVase && typeMult > 1) multiplier *= 0.75;
+  if (!it.statMult) return multiplier;
   const k = move.category === 'physical' ? 'def' : 'spd';
-  return it.statMult[k] ? 1 / it.statMult[k] : 1;
+  return multiplier * (it.statMult[k] ? 1 / it.statMult[k] : 1);
 }
 export const itemSpeedMult = (u) => itemOf(u)?.speedMult ?? 1; // 구애스카프·검은철구
 export const itemMove = (u) => itemOf(u)?.move ?? 0;

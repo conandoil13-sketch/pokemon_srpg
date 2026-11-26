@@ -855,6 +855,11 @@ function runMove(state, userId, moveId, aim, rng) {
         }
         if (has(a, 'poison-touch') && !fainted && !d.status && rng() * 100 < 30) { const res = inflict(d, 'poison', rng, null, W); statusChanges.push({ unitId: d.id, ailment: 'poison', ...res }); if (res.ok) abilityEvents.push({ unitId: a.id, ability: 'poison-touch' }); } // 독수
         if (has(d, 'mummy') && a.ability !== 'mummy' && !a.boss) { a.mummyFrom ??= a.ability; a.ability = 'mummy'; abilityEvents.push({ unitId: d.id, ability: 'mummy' }); } // 미라: 메인 특성만
+        if (itemOf(d)?.rockyHelmet && !magicGuard(a)) {
+          a.hp = Math.max(0, a.hp - Math.max(1, Math.floor(a.maxHp / 6)));
+          abilityEvents.push({ unitId: d.id, item: d.held, damage: true });
+          if (a.hp === 0) { knockOut(state, a, null); return; }
+        }
         const recoilAb = ['rough-skin', 'iron-barbs'].find((x) => has(d, x)) ?? (fainted && has(d, 'aftermath') && !state.units.some((u) => has(u, 'damp')) ? 'aftermath' : null);
         const recoil = recoilAb === 'aftermath' ? 1 / 4 : recoilAb ? 1 / 8 : 0;
         if (recoil && !magicGuard(a)) {
