@@ -6,6 +6,15 @@ import { abilitiesOf, has } from './abilitySlots.js';
 
 export const PUNCH = ['ice-punch', 'fire-punch', 'thunder-punch', 'mach-punch', 'mega-punch', 'comet-punch', 'dizzy-punch', 'dynamic-punch', 'focus-punch', 'hammer-arm', 'meteor-mash', 'drain-punch', 'bullet-punch', 'shadow-punch', 'sky-uppercut'];
 export const SOUND = ['growl', 'roar', 'sing', 'supersonic', 'screech', 'snore', 'uproar', 'metal-sound', 'grass-whistle', 'hyper-voice', 'bug-buzz', 'chatter', 'perish-song', 'heal-bell', 'echoed-voice', 'round', 'relic-song', 'snarl'];
+const VEIL_BY_WEATHER = { sand: 'sand-veil', hail: 'snow-cloak', rain: 'rain-veil', sun: 'heat-haze-veil' };
+const FORCE_BY_WEATHER = {
+  sand: { ability: 'sand-force', types: ['rock', 'ground', 'steel'] },
+  sun: { ability: 'sun-force', types: ['fire', 'grass', 'bug'] },
+  rain: { ability: 'rain-force', types: ['water', 'electric', 'flying'] },
+  hail: { ability: 'blizzard-force', types: ['ice', 'rock', 'steel'] },
+  fog: { ability: 'fog-force', types: ['ghost', 'psychic', 'fairy'] },
+};
+
 const PINCH = { overgrow: 'grass', blaze: 'fire', torrent: 'water', swarm: 'bug' };
 
 // 켜진 특성 목록(1칸 + 2칸, 위액이면 없음)과 has 는 abilitySlots.js (스펙 2026-11-24 2칸 특성)
@@ -56,6 +65,7 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   if (has(attacker, 'technician') && move.power <= 60) m *= 1.5;
   if (has(attacker, 'tinted-lens') && typeMult > 0 && typeMult < 1) m *= 2;
   if ((has(attacker, 'huge-power') || has(attacker, 'pure-power')) && physical) m *= 2;
+  if (has(attacker, 'innate-strength') && physical) m *= 1.5;
   if (has(attacker, 'guts') && attacker.status && physical) m *= 1.5;
   if (has(attacker, 'hustle') && physical) m *= 1.5;
   if (has(attacker, 'iron-fist') && PUNCH.includes(move.id)) m *= 1.2;
@@ -65,7 +75,9 @@ export function attackMult(attacker, defender, move, { typeMult, weather }) {
   if (attacker.plusActive && !physical) m *= 1.5;               // 플러스·마이너스 (전투가 옆 동료를 보고 켬)
   if (attacker.flowerActive && physical) m *= 1.5;              // 플라워기프트 (쾌청 + 본인/옆)
   if (has(attacker, 'defeatist') && attacker.hp <= attacker.maxHp / 2) m *= 0.5; // 무기력
-  if (has(attacker, 'sand-force') && weather === 'sand' && ['rock', 'ground', 'steel'].includes(type)) m *= 1.3; // 모래의힘
+  const force = FORCE_BY_WEATHER[weather];
+  if (force && has(attacker, force.ability) && force.types.includes(type)) m *= 1.3;
+  if (move.category !== 'status' && ((type === 'fire' && has(attacker, 'turboblaze')) || (type === 'electric' && has(attacker, 'teravolt')))) m *= 1.3;
   if (sheerForce(attacker, move)) m *= 1.3; // 우격다짐
   if (attacker.analyticActive) m *= 1.3; // 애널라이즈: 전장에서 가장 느릴 때
   if (has(attacker, 'flare-boost') && attacker.status === 'burn' && !physical) m *= 1.5; // 열폭주
@@ -80,6 +92,8 @@ export function defendMult(attacker, defender, move, { typeMult }) {
   const physical = move.category === 'physical', type = moveTypeOf(attacker, move);
   let m = 1;
   if (def(attacker, defender, 'thick-fat') && (type === 'fire' || type === 'ice')) m *= 0.5;
+  if (move.category !== 'status' && def(attacker, defender, 'imperfect-guard')) m *= typeMult > 1 ? 1.5 : 0.5;
+  if (def(attacker, defender, 'mental-barrier') && (type === 'psychic' || type === 'ghost')) m *= 0.5;
   if (def(attacker, defender, 'heatproof') && type === 'fire') m *= 0.5;
   if ((def(attacker, defender, 'filter') || def(attacker, defender, 'solid-rock')) && typeMult > 1) m *= 0.75;
   if (def(attacker, defender, 'marvel-scale') && defender.status && physical) m /= 1.5;
@@ -109,6 +123,8 @@ function immunityBy(a, attacker, defender, move, typeMult) {
   if (a === 'lightning-rod' && type === 'electric') return { ability: a, boost: { spa: 1 } };
   if (a === 'storm-drain' && type === 'water') return { ability: a, boost: { spa: 1 } };
   if (a === 'sap-sipper' && type === 'grass') return { ability: a, boost: { atk: 1 } }; // 초식
+  if (a === 'poison-siphon' && type === 'poison') return { ability: a, boost: { spa: 1 } };
+  if (a === 'iron-eater' && type === 'steel') return { ability: a, ironEater: true };
   if (a === 'telepathy' && attacker.side && attacker.side === defender.side && move.category !== 'status') return { ability: a }; // 텔레파시: 우리 편 공격
   if (a === 'overcoat' && POWDER.includes(move.id)) return { ability: a }; // 방진
   return null;
@@ -120,7 +136,8 @@ export function accuracyFor(attacker, defender, move, base, weather = null) {
   let v = base;
   if (has(attacker, 'compound-eyes')) v *= 1.3;
   if (has(attacker, 'hustle') && move.category === 'physical') v *= 0.8;
-  if ((def(attacker, defender, 'sand-veil') && weather === 'sand') || (def(attacker, defender, 'snow-cloak') && weather === 'hail')) v -= 20;
+  const veil = VEIL_BY_WEATHER[weather];
+  if (veil && def(attacker, defender, veil)) v -= 20;
   if (def(attacker, defender, 'tangled-feet') && defender.confusion > 0) v -= 20;
   v *= itemAcc(attacker, defender); // 광각렌즈·빛의가루
   if (move.category === 'status' && attacker !== defender && def(attacker, defender, 'wonder-skin')) v = Math.min(v, 50); // 미라클스킨
@@ -162,20 +179,21 @@ export function stageGuard(unit, key, change, fromOther) {
 }
 
 // ---- 스피드·이동력 (unit.fieldWeather = 지금 유효한 날씨, 전투가 넣어 줌) ----
+const SPEED_ABILITY_BY_WEATHER = { rain: 'swift-swim', sun: 'chlorophyll', sand: 'sand-rush', fog: 'fog-stride' };
+function weatherSpeedActive(unit) {
+  const ability = SPEED_ABILITY_BY_WEATHER[unit.fieldWeather];
+  return !!ability && has(unit, ability);
+}
 export function speedMult(unit) {
-  const w = unit.fieldWeather;
   if (unit.slowTurns > 0) return 0.5;
-  if (has(unit, 'swift-swim') && w === 'rain') return 2;
-  if (has(unit, 'chlorophyll') && w === 'sun') return 2;
-  if (has(unit, 'sand-rush') && w === 'sand') return 2; // 모래헤치기
+  if (weatherSpeedActive(unit)) return 2;
   if (has(unit, 'quick-feet') && unit.status) return 1.5;
   return 1;
 }
 export const ignoresParalysisSlow = (unit) => has(unit, 'quick-feet');
 export function moveBonus(unit) {
-  const w = unit.fieldWeather;
   if (unit.slowTurns > 0) return -1;
-  if ((has(unit, 'swift-swim') && w === 'rain') || (has(unit, 'chlorophyll') && w === 'sun') || (has(unit, 'sand-rush') && w === 'sand') || (has(unit, 'quick-feet') && unit.status)) return 1;
+  if (weatherSpeedActive(unit) || (has(unit, 'quick-feet') && unit.status)) return 1;
   return 0;
 }
 
@@ -184,7 +202,7 @@ export const magicGuard = (unit) => has(unit, 'magic-guard');
 export function weatherChipImmune(unit, weather) {
   if (magicGuard(unit) || has(unit, 'overcoat')) return true; // 방진
   if (weather === 'sand' && (has(unit, 'sand-force') || has(unit, 'sand-rush'))) return true;
-  if (weather === 'sand' && has(unit, 'sand-veil')) return true;
+  if (weather === 'sand' && (has(unit, 'sand-veil') || has(unit, 'sand-eater'))) return true;
   if (weather === 'hail' && (has(unit, 'snow-cloak') || has(unit, 'ice-body'))) return true;
   return false;
 }
@@ -197,6 +215,9 @@ export const phaseEndAbility = (unit, weather) => abilitiesOf(unit).find((a) => 
 function phaseEndHpBy(a, weather) {
   if (a === 'rain-dish' && weather === 'rain') return 1 / 16;
   if (a === 'ice-body' && weather === 'hail') return 1 / 16;
+  if (a === 'photosynthetic-skin' && weather === 'sun') return 1 / 16;
+  if (a === 'dew-absorb' && weather === 'fog') return 1 / 16;
+  if (a === 'sand-eater' && weather === 'sand') return 1 / 16;
   if (a === 'dry-skin' && weather === 'rain') return 1 / 8;
   if (a === 'dry-skin' && weather === 'sun') return -1 / 8;
   if (a === 'solar-power' && weather === 'sun') return -1 / 8;

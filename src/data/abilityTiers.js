@@ -10,7 +10,11 @@ export const ABILITY_TIERS = {
   'slow-start': 'SS',
   truant: 'SS',
   'wonder-guard': 'SS',
-  // S (13)
+  // S (17)
+  'imperfect-guard': 'S',
+  'innate-strength': 'S',
+  teravolt: 'S',
+  turboblaze: 'S',
   adaptability: 'S',
   guts: 'S',
   'magic-guard': 'S',
@@ -24,7 +28,13 @@ export const ABILITY_TIERS = {
   technician: 'S',
   'tinted-lens': 'S',
   unaware: 'S',
-  // A (43)
+  // A (47)
+  'iron-eater': 'A',
+  'poison-siphon': 'A',
+  'mental-barrier': 'A',
+  'fog-stride': 'A',
+  'sun-force': 'A',
+  'rain-force': 'A',
   'arena-trap': 'A',
   chlorophyll: 'A',
   'compound-eyes': 'A',
@@ -61,14 +71,16 @@ export const ABILITY_TIERS = {
   'solid-rock': 'A',
   'super-luck': 'A',
   'swift-swim': 'A',
-  teravolt: 'A',
   'thick-fat': 'A',
   trace: 'A',
-  turboblaze: 'A',
   'victory-star': 'A',
   'volt-absorb': 'A',
   'water-absorb': 'A',
-  // B (73)
+  // B (77)
+  'rain-veil': 'B',
+  'heat-haze-veil': 'B',
+  'blizzard-force': 'B',
+  'fog-force': 'B',
   aftermath: 'B',
   analytic: 'B',
   'anger-point': 'B',
@@ -142,7 +154,10 @@ export const ABILITY_TIERS = {
   'weak-armor': 'B',
   'white-smoke': 'B',
   'wonder-skin': 'B',
-  // C (14)
+  // C (17)
+  'photosynthetic-skin': 'C',
+  'dew-absorb': 'C',
+  'sand-eater': 'C',
   'air-lock': 'C',
   anticipation: 'C',
   'big-pecks': 'C',

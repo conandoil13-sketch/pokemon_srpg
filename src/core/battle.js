@@ -622,6 +622,7 @@ function runMove(state, userId, moveId, aim, rng) {
   const breaker = moldBreaker(a); // 틀깨기·테라볼티지·터보블레이즈: 상대의 방어 특성(클리어바디·유연·습기 …) 무시
   // 특성 흡수 결과 적용: 회복·랭크·타오르는불꽃
   const absorb = (u, ab) => {
+    if (ab.ironEater) ab = rng() < 0.5 ? { ...ab, heal: 1 / 4 } : { ...ab, boost: { atk: 1 } };
     if (ab.heal && canHeal(u)) u.hp = Math.min(u.maxHp, u.hp + Math.max(1, Math.floor(u.maxHp * ab.heal)));
     if (ab.boost) for (const [k, v] of Object.entries(ab.boost)) changeStats(u, [{ stat: Object.keys(API_STAT).find((s) => API_STAT[s] === k), change: v }], stageChanges);
     if (ab.flashFire) u.flashFire = true;

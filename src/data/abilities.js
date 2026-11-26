@@ -3,6 +3,8 @@ import POKEDEX from './generated/pokedex.js';
 
 // SRPG 로 다시 해석한 특성 (스펙 §4-③) — 설명은 게임 규칙 그대로
 export const SRPG_ABILITY_TEXT = {
+  turboblaze: '공격할 때 상대의 방어 특성을 무시하고, 자신의 불꽃 타입 공격 기술 위력이 1.3배가 된다.',
+  teravolt: '공격할 때 상대의 방어 특성을 무시하고, 자신의 전기 타입 공격 기술 위력이 1.3배가 된다.',
   'rock-head': '반동 기술을 써도 반동 피해를 받지 않는다.',
   'skill-link': '연속 기술이 항상 최대 횟수로 맞는다.',
   'liquid-ooze': '이 포켓몬의 HP 를 흡수하는 기술은 오히려 상대가 피해를 입는다.',
@@ -80,7 +82,25 @@ export const NO_EFFECT = ['gluttony', 'klutz', 'sticky-hold', 'unburden', 'frisk
   'illusion', 'prankster', 'unnerve', // 5세대: 일루전·짓궂은마음 (코덱스 판정은 있음, 화면·보너스 행동이 필요) · 긴장감 (나무열매 없음)
   'harvest', 'pickpocket', 'zen-mode', 'imposter']; // 숨겨진 특성: 수확(나무열매)·나쁜손버릇(적 도구)·달마모드(폼)·괴짜(메타몽) — 이 목록의 숨겨진 특성은 해금 "준비 중"
 
-export const ABILITIES = Object.fromEntries(Object.values(POKEDEX.abilities).map((a) => [a.id, {
+const customAbilities = [
+  { id: 'imperfect-guard', name: '불완전한부적', desc: '효과가 굉장한 공격의 피해는 1.5배, 나머지 공격의 피해는 절반이 된다.' },
+  { id: 'innate-strength', name: '타고난힘', desc: '물리 공격 기술의 위력이 1.5배가 된다.' },
+  { id: 'iron-eater', name: '불가사리', desc: '강철 타입 기술을 무효화하고 같은 확률로 최대 HP의 1/4을 회복하거나 공격이 1랭크 오른다.' },
+  { id: 'poison-siphon', name: '자포탈취', desc: '독 타입 기술을 무효화하고 특공이 1랭크 오른다.' },
+  { id: 'mental-barrier', name: '정신방벽', desc: '에스퍼·고스트 타입 기술로 받는 피해가 절반이 된다.' },
+  { id: 'fog-stride', name: '안개걸음', desc: '안개가 끼면 스피드가 2배, 이동력이 1 늘어난다.' },
+  { id: 'rain-veil', name: '빗속숨기', desc: '비가 오면 자신을 노리는 기술의 명중률이 20%p 낮아진다.' },
+  { id: 'heat-haze-veil', name: '아지랑이숨기', desc: '쾌청일 때 자신을 노리는 기술의 명중률이 20%p 낮아진다.' },
+  { id: 'sun-force', name: '햇살의힘', desc: '강한 햇살에서 불꽃·풀·벌레 타입 기술의 위력이 1.3배가 된다.' },
+  { id: 'rain-force', name: '빗줄기의힘', desc: '비가 오면 물·전기·비행 타입 기술의 위력이 1.3배가 된다.' },
+  { id: 'blizzard-force', name: '눈보라의힘', desc: '눈이 내리면 얼음·바위·강철 타입 기술의 위력이 1.3배가 된다.' },
+  { id: 'fog-force', name: '안개의힘', desc: '안개가 끼면 고스트·에스퍼·페어리 타입 기술의 위력이 1.3배가 된다.' },
+  { id: 'photosynthetic-skin', name: '광합성피부', desc: '강한 햇살에서 자기 차례 끝에 최대 HP의 1/16을 회복한다.' },
+  { id: 'dew-absorb', name: '이슬흡수', desc: '안개 속에서 자기 차례 끝에 최대 HP의 1/16을 회복한다.' },
+  { id: 'sand-eater', name: '모래먹기', desc: '모래바람 피해를 받지 않고, 모래바람 속에서 자기 차례 끝에 최대 HP의 1/16을 회복한다.' },
+];
+
+export const ABILITIES = Object.fromEntries([...Object.values(POKEDEX.abilities), ...customAbilities].map((a) => [a.id, {
   ...a,
   desc: SRPG_ABILITY_TEXT[a.id] ?? (NO_EFFECT.includes(a.id) ? `${a.desc} (이 게임에서는 아직 효과가 없다)` : a.desc),
   inactive: NO_EFFECT.includes(a.id),
